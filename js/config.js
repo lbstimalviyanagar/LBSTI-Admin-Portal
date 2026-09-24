@@ -1,0 +1,68 @@
+/* =====================================================================
+   CONFIG: the only file you need to edit to connect the portal to your
+   existing backend. Leave API_BASE empty to run with built-in demo data.
+   ===================================================================== */
+const CONFIG = {
+  // Base URL of your existing API, e.g. "https://db.lbstimn.com/api"
+  API_BASE: "",
+
+  // "token"  = Authorization: Bearer <token> (login screen is shown)
+  // "cookie" = your existing session cookie is used
+  // "none"   = no authentication
+  AUTH_MODE: "token",
+
+  // Request body keys: "camel" (followUpDate) or "snake" (follow_up_date)
+  PAYLOAD_STYLE: "camel",
+
+  ENDPOINTS: {
+    login: "/auth/login",                    // POST {username, password} -> {token, user?}
+    enquiries: "/enquiries",                 // GET list, POST create, PATCH /:id update, DELETE /:id
+    remarks: "/enquiries/{id}/remarks",      // GET list, POST {remark}   (NEW: needed for the remarks timeline)
+    confirm: ""                              // Leave empty to confirm admission with PATCH {status: CONFIRM_STATUS}.
+                                             // If your backend already has a confirm route, set it, e.g. "/enquiries/{id}/confirm"
+  },
+
+  // The status value your backend stores for each status label shown in the UI.
+  // These six match the real lbstimn.com Enquiries system.
+  STATUS_VALUES: {
+    "New": "New",
+    "No Response": "No Response",
+    "Counseling Scheduled": "Counseling Scheduled",
+    "Counseling done": "Counseling done",
+    "Confirmed": "Confirmed",
+    "Dropped": "Dropped"
+  },
+  CONFIRM_STATUS: "Confirmed",               // status sent when an admission is confirmed
+  REMARK_FIELD: "remark",                    // body key used when posting a remark
+
+  // Baseline counselor names for the "Counselor" dropdown. Any counselor
+  // already used in your enquiry data is added automatically as well, so
+  // this list only needs names that haven't been assigned to a lead yet.
+  COUNSELORS: ["Sahil", "Harjot"],
+
+  // Preferred batch / class timing options for the New Enquiry form.
+  BATCHES: ["Morning (7 AM - 10 AM)", "Late Morning (10 AM - 1 PM)", "Afternoon (1 PM - 4 PM)", "Evening (4 PM - 7 PM)", "Weekend"],
+
+  // Speech-to-text translation for remarks/notes. Translates the dictated
+  // text (e.g. Hindi) into English in a preview box WITHOUT overwriting
+  // what was typed -- the person chooses whether to insert it.
+  // provider: "mymemory" (free, no key, mymemory.translated.net) |
+  //           "google"   (Google Cloud Translation API, needs apiKey) |
+  //           "none"     (hides the Translate button)
+  TRANSLATE: {
+    provider: "mymemory",
+    apiKey: "",
+    targetLang: "en"
+  },
+
+  ORG: {
+    name: "LBSTIMN",
+    fullName: "Lal Bahadur Shastri Training Institute",
+    tagline: "Admissions CRM",
+    domain: "lbstimn.com",
+    initials: "LB",
+    logoUrl: ""                              // e.g. "img/logo.png"
+  },
+
+  PAGE_SIZE: 10
+};
