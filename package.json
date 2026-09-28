@@ -1,0 +1,23 @@
+{
+  "name": "lbsti-crm",
+  "version": "1.0.0",
+  "description": "LBSTIMN admissions CRM with a local backend and SQLite database",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": [
+    "crm",
+    "express",
+    "sqlite",
+    "admissions"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "sqlite3": "^5.1.7"
+  }
+}
