@@ -6,16 +6,16 @@ const CONFIG = {
   // "supabase" = live Supabase database + auth (needs js/supabase.js filled in)
   // "rest"     = your own REST API (API_BASE below)
   // "demo"     = in-memory sample data, no backend needed
-  BACKEND: "supabase",
+  BACKEND: "rest",
 
   // ---- REST mode only (ignored when BACKEND is "supabase") ----
-  // Base URL of your existing API, e.g. "https://db.lbstimn.com/api"
-  API_BASE: "",
+  // Base URL of your local Express API, e.g. "http://localhost:3001/api"
+  API_BASE: "http://localhost:3001/api",
 
   // "token"  = Authorization: Bearer <token> (login screen is shown)
   // "cookie" = your existing session cookie is used
   // "none"   = no authentication
-  AUTH_MODE: "token",
+  AUTH_MODE: "none",
 
   // Request body keys: "camel" (followUpDate) or "snake" (follow_up_date)
   PAYLOAD_STYLE: "camel",
@@ -24,8 +24,7 @@ const CONFIG = {
     login: "/auth/login",                    // POST {username, password} -> {token, user?}
     enquiries: "/enquiries",                 // GET list, POST create, PATCH /:id update, DELETE /:id
     remarks: "/enquiries/{id}/remarks",      // GET list, POST {remark}   (NEW: needed for the remarks timeline)
-    confirm: ""                              // Leave empty to confirm admission with PATCH {status: CONFIRM_STATUS}.
-                                             // If your backend already has a confirm route, set it, e.g. "/enquiries/{id}/confirm"
+    confirm: "/enquiries/{id}/confirm"       // Confirm route for admission updates
   },
 
   // The status value your backend stores for each status label shown in the UI.
