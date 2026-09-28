@@ -3,6 +3,12 @@
    existing backend. Leave API_BASE empty to run with built-in demo data.
    ===================================================================== */
 const CONFIG = {
+  // "supabase" = live Supabase database + auth (needs js/supabase.js filled in)
+  // "rest"     = your own REST API (API_BASE below)
+  // "demo"     = in-memory sample data, no backend needed
+  BACKEND: "supabase",
+
+  // ---- REST mode only (ignored when BACKEND is "supabase") ----
   // Base URL of your existing API, e.g. "https://db.lbstimn.com/api"
   API_BASE: "",
 
