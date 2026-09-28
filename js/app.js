@@ -13,6 +13,7 @@ const PALETTE = ["#2563eb", "#0d9488", "#f59e0b", "#7c3aed", "#e11d48", "#0891b2
 const state = {
   user: { name: "user", role: "counselor" },
   enquiries: [],
+  fees: [],
   loading: true,
   tab: "dashboard",
   dash: { kind: "all", from: "", to: "" },
@@ -49,6 +50,7 @@ const ICONS = {
   mic: '<rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v4"/>',
   chart: '<path d="M3 3v18h18"/><path d="m7 15 4-5 3 3 5-7"/>',
   alert: '<circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/>',
+  fee: '<path d="M2 8h20v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3"/><path d="M2 8V6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2"/>',
   lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
   translate: '<path d="m5 8 6 6"/><path d="m4 14 6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="m22 22-5-10-5 10"/><path d="M14 18h6"/>'
 };
@@ -183,6 +185,18 @@ function renderRecent() {
   host.innerHTML = "<table><thead><tr>" + COLS.map(c => "<th scope=\"col\">" + c.l + "</th>").join("") + "</tr></thead><tbody>" + rows.map(rowHtml).join("") + "</tbody></table>";
 }
 
+/** Clicking a chart bar/segment jumps to the table pre-filtered to that value. */
+function drillIntoTable(patch) {
+  const t = state.table;
+  Object.assign(t, { q: "", course: "All", source: "All", counselor: "All", status: "All", page: 1 }, patch);
+  t.dateKind = state.dash.kind; t.from = state.dash.from; t.to = state.dash.to;
+  $("#tq").value = "";
+  $("#tDate").value = t.dateKind; $("#tCustom").hidden = t.dateKind !== "custom";
+  $("#tFrom").value = t.from; $("#tTo").value = t.to;
+  renderFilterOptions(); renderTable();
+  setTab("table");
+  toast("Filtered by " + Object.values(patch)[0]);
+}
 function renderCharts() {
   const l = $("#lineChart"), b = $("#barChart"), wl = $("#workloadChart"), st = $("#statusChart"), src = $("#sourceChart");
   const all = [l, b, wl, st, src];
@@ -194,18 +208,18 @@ function renderCharts() {
   Charts.line(l, buckets(list, r, state.dash.kind), { aria: "Inquiry trends" });
 
   const byCourse = {}; list.forEach(e => { const c = e.course || "Other"; byCourse[c] = (byCourse[c] || 0) + 1; });
-  Charts.bar(b, Object.keys(byCourse).map(k => ({ name: k, v: byCourse[k] })).sort((a, c) => c.v - a.v), { aria: "Enquiries by course", emptyTitle: "No enquiries in this period", scrollable: true });
+  Charts.bar(b, Object.keys(byCourse).map(k => ({ name: k, v: byCourse[k] })).sort((a, c) => c.v - a.v), { aria: "Enquiries by course", emptyTitle: "No enquiries in this period", scrollable: true, onClick: name => drillIntoTable({ course: name }) });
 
   const byStaff = {}; list.forEach(e => { if (e.assignedTo) byStaff[e.assignedTo] = (byStaff[e.assignedTo] || 0) + 1; });
   const wlItems = Object.keys(byStaff).map(k => ({ name: k, v: byStaff[k] })).sort((a, c) => c.v - a.v);
-  Charts.bar(wl, wlItems, { aria: "Counselor workload", emptyTitle: "No leads assigned yet", emptyMsg: "Assign a counselor to a lead to see workload.", rotateLabels: false, unit: " leads" });
+  Charts.bar(wl, wlItems, { aria: "Counselor workload", emptyTitle: "No leads assigned yet", emptyMsg: "Assign a counselor to a lead to see workload.", rotateLabels: false, unit: " leads", onClick: name => drillIntoTable({ counselor: name }) });
 
   const byStatus = {}; STATUSES.forEach(s2 => byStatus[s2] = 0); list.forEach(e => { byStatus[e.status] = (byStatus[e.status] || 0) + 1; });
-  Charts.bar(st, STATUSES.map(s2 => ({ name: s2, v: byStatus[s2], color: SCOL[s2] })), { aria: "Lead status overview", emptyTitle: "No enquiries in this period" });
+  Charts.bar(st, STATUSES.map(s2 => ({ name: s2, v: byStatus[s2], color: SCOL[s2] })), { aria: "Lead status overview", emptyTitle: "No enquiries in this period", onClick: name => drillIntoTable({ status: name }) });
 
   const bySource = {}; list.forEach(e => { const s2 = e.source || "Other"; bySource[s2] = (bySource[s2] || 0) + 1; });
   const srcItems = Object.keys(bySource).map((k, i) => ({ name: k, v: bySource[k], color: PALETTE[i % PALETTE.length] })).sort((a, c) => c.v - a.v);
-  Charts.donut(src, srcItems, { aria: "Leads by source", centerLabel: "leads", emptyTitle: "No enquiries in this period" });
+  Charts.donut(src, srcItems, { aria: "Leads by source", centerLabel: "leads", emptyTitle: "No enquiries in this period", onClick: name => drillIntoTable({ source: name }) });
 
   all.forEach(hydrateIcons);
 }
@@ -284,6 +298,95 @@ function clearFilters() {
 }
 
 /* =====================================================================
+   Fees
+   ===================================================================== */
+function fillFeeForm() {
+  fillSelect($("#fee-mode"), Model.FEE_MODES, $("#fee-mode").value || Model.FEE_MODES[0]);
+  if (!$("#fee-date").value) $("#fee-date").value = isoDay(new Date());
+  populateFeeEnquiryOptions("");
+}
+function populateFeeEnquiryOptions(q) {
+  const sel = $("#fee-enquiry"), cur = sel.value;
+  const needle = q.trim().toLowerCase();
+  const rows = state.enquiries
+    .filter(e => !needle || (e.name + " " + e.phone).toLowerCase().indexOf(needle) > -1)
+    .sort((a, b) => (+parse(b.createdAt) || 0) - (+parse(a.createdAt) || 0))
+    .slice(0, 50);
+  sel.innerHTML = rows.length
+    ? rows.map(e => '<option value="' + esc(e.id) + '">' + esc(e.name) + " — " + esc(e.phone) + (e.course ? " — " + esc(e.course) : "") + "</option>").join("")
+    : '<option value="">No matching leads</option>';
+  if (rows.some(e => String(e.id) === String(cur))) sel.value = cur;
+}
+function feeStudentName(fee) {
+  if (fee.studentName) return fee.studentName;
+  const e = state.enquiries.find(x => String(x.id) === String(fee.enquiryId));
+  return e ? e.name : "Unknown lead";
+}
+function renderFeeStats() {
+  const host = $("#feeStats");
+  if (state.loading) { host.innerHTML = '<div class="card skel" style="height:118px"></div>'.repeat(3); return; }
+  const fees = state.fees, today = sod(new Date());
+  const total = fees.reduce((s, f) => s + (f.amount || 0), 0);
+  const monthFees = fees.filter(f => { const d = parse(f.paymentDate); return d && d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth(); });
+  const monthTotal = monthFees.reduce((s, f) => s + (f.amount || 0), 0);
+  const cards = [
+    { k: "Total collected", v: "₹" + total.toLocaleString("en-IN"), ico: "award", sub: fees.length + (fees.length === 1 ? " payment recorded" : " payments recorded") },
+    { k: "Collected this month", v: "₹" + monthTotal.toLocaleString("en-IN"), ico: "clock", sub: monthFees.length + (monthFees.length === 1 ? " payment" : " payments") + " this month" },
+    { k: "Average payment", v: "₹" + (fees.length ? Math.round(total / fees.length).toLocaleString("en-IN") : "0"), ico: "users", sub: "Across all recorded payments" }
+  ];
+  host.innerHTML = cards.map(c => '<div class="card stat"><div class="stat-top"><span class="stat-ico">' + icon(c.ico, 20) + '</span><span class="stat-label">' + c.k + '</span></div><div class="stat-val">' + c.v + '</div><div class="stat-sub">' + c.sub + "</div></div>").join("");
+  hydrateIcons(host);
+}
+function renderFeeTable() {
+  const body = $("#feeBody");
+  if (state.loading) { body.innerHTML = '<tr><td colspan="7"><div class="skel" style="height:160px"></div></td></tr>'; return; }
+  const rows = state.fees.slice().sort((a, b) => (+parse(b.paymentDate) || 0) - (+parse(a.paymentDate) || 0));
+  body.innerHTML = rows.length ? rows.map(f => (
+    "<tr><td>" + esc(feeStudentName(f)) + "</td><td>₹" + (f.amount || 0).toLocaleString("en-IN") + "</td><td>" + esc(f.mode) + "</td><td>" + fmtDate(f.paymentDate) + "</td><td>" +
+    (f.receivedBy ? esc(f.receivedBy) : '<span class="muted">–</span>') + "</td><td>" + (f.notes ? esc(f.notes) : '<span class="muted">–</span>') +
+    '</td><td><button class="btn sm danger" type="button" data-fee-delete="' + esc(f.id) + '">' + icon("trash", 14) + "Delete</button></td></tr>"
+  )).join("") : '<tr><td colspan="7">' + emptyBox("fee", "No payments recorded yet", "Record your first fee payment above.") + "</td></tr>";
+  hydrateIcons(body);
+}
+async function submitFee(ev) {
+  ev.preventDefault();
+  const form = ev.target;
+  const enquiryId = $("#fee-enquiry").value, amount = parseFloat($("#fee-amount").value);
+  let ok = true;
+  const setErr = (fieldId, msg) => { const f = $(fieldId).closest(".fld"); f.classList.toggle("bad", !!msg); const er = $(".err", f); if (er) er.textContent = msg || ""; if (msg) ok = false; };
+  setErr("#fee-enquiry-search", !enquiryId ? "Search and pick a student." : "");
+  setErr("#fee-amount", !(amount > 0) ? "Enter a valid amount." : "");
+  if (!ok) return;
+  const payload = { enquiryId, amount, paymentDate: $("#fee-date").value, mode: $("#fee-mode").value, notes: $("#fee-notes").value.trim() };
+  const btn = $("#feeSubmit"); btn.disabled = true; btn.textContent = "Saving…";
+  try {
+    const created = await Api.fees.create(payload);
+    if (created && created.id != null) state.fees.push(Object.assign({ createdAt: new Date().toISOString() }, payload, created));
+    else state.fees = await Api.fees.list();
+    form.reset(); $$("#feeForm .fld.bad").forEach(f => { f.classList.remove("bad"); const er = $(".err", f); if (er) er.textContent = ""; });
+    $("#fee-enquiry-search").value = "";
+    fillFeeForm();
+    toast("Payment recorded successfully.");
+    renderFeeStats(); renderFeeTable();
+  } catch (err) {
+    if (err.code === 401) return showLogin(err.message);
+    toast(err.message, true);
+  } finally { btn.disabled = false; btn.textContent = "Save payment"; }
+}
+async function deleteFee(id) {
+  const ok = await confirmDialog({ title: "Delete this payment?", message: "This removes the payment record permanently.", confirmText: "Delete payment", danger: true });
+  if (!ok) return;
+  try {
+    await Api.fees.remove(id);
+    state.fees = state.fees.filter(f => String(f.id) !== String(id));
+    toast("Payment deleted"); renderFeeStats(); renderFeeTable();
+  } catch (err) {
+    if (err.code === 401) return showLogin(err.message);
+    toast(err.message, true);
+  }
+}
+
+/* =====================================================================
    Reminders (bell)
    ===================================================================== */
 function dueList() {
@@ -324,7 +427,7 @@ function toggleBell(force) {
   p.hidden = !open; $("#bellBtn").setAttribute("aria-expanded", String(open));
 }
 
-function renderAll() { renderStats(); renderRecent(); renderCharts(); renderFilterOptions(); renderTable(); renderReminders(); renderDailyReminder(); $("#tableCount").textContent = " (" + state.enquiries.length + ")"; hydrateIcons(document); }
+function renderAll() { renderStats(); renderRecent(); renderCharts(); renderFilterOptions(); renderTable(); renderFeeStats(); renderFeeTable(); renderReminders(); renderDailyReminder(); $("#tableCount").textContent = " (" + state.enquiries.length + ")"; hydrateIcons(document); }
 
 /* =====================================================================
    Data loading (with instant paint from cache)
@@ -340,7 +443,8 @@ async function load(silent) {
   if (!silent) { state.loading = true; renderAll(); }
   spinRefresh(true);
   try {
-    state.enquiries = await Api.list();
+    const [enquiries, fees] = await Promise.all([Api.list(), Api.fees.list().catch(() => state.fees)]);
+    state.enquiries = enquiries; state.fees = fees;
     state.loading = false;
     if (!Api.demo) writeCache(state.enquiries);
   } catch (err) {
@@ -675,9 +779,10 @@ async function submitNew(ev) {
 function setTab(name) {
   state.tab = name;
   $$(".tab").forEach(t => t.setAttribute("aria-selected", String(t.dataset.tab === name)));
-  ["dashboard", "new", "table"].forEach(n => { $("#tab-" + n).hidden = n !== name; });
+  ["dashboard", "new", "table", "fees"].forEach(n => { $("#tab-" + n).hidden = n !== name; });
   $("#dashControls").hidden = name !== "dashboard";
   if (name === "new") { fillNewFormOptions(); setTimeout(() => $("#f-name").focus(), 30); }
+  if (name === "fees") { fillFeeForm(); renderFeeStats(); renderFeeTable(); }
   window.scrollTo({ top: 0 });
 }
 function setUser(u) {
@@ -686,21 +791,32 @@ function setUser(u) {
   $("#sbAvatar").textContent = initials(n); $("#topAvatar").textContent = n.charAt(0).toUpperCase(); $("#topName").textContent = n;
   try { localStorage.setItem("lbstimn_user", JSON.stringify(u)); } catch (e) {}
 }
+function hideSplash() { const sp = $("#bootSplash"); if (sp) sp.hidden = true; }
 function showLogin(msg) {
+  hideSplash();
   Api.logout(); clearCache(); state.enquiries = [];
   if (state.edit) closeEdit();
   $("#app").hidden = true; $("#login").hidden = false; $("#loginErr").textContent = msg || "";
   setTimeout(() => $("#lu").focus(), 30);
 }
 function showApp() {
+  hideSplash();
   $("#login").hidden = true; $("#app").hidden = false;
   $("#modeChip").hidden = !Api.demo;
   const cached = !Api.demo ? readCache() : null;
   if (cached) { state.enquiries = cached; state.loading = false; renderAll(); load(true); } else load(false);
+  startRealtime();
+}
+let realtimeChannel = null;
+function startRealtime() {
+  if (realtimeChannel || Api.demo) return; // demo mode has nothing to subscribe to
+  realtimeChannel = Api.subscribe(() => load(true)); // silent background refresh on any DB change
 }
 function navOpen(on) { $("#app").classList.toggle("nav-open", on); $("#navBackdrop").hidden = !on; }
 
-function boot() {
+async function boot() {
+  try { await Api.init(); } catch (e) { console.error(e); }
+  if (Api.sdkError) toast(Api.sdkError + " Showing demo data.", true);
   const org = CONFIG.ORG;
   $$("[data-org-name]").forEach(el => { el.textContent = org.name; });
   $$("[data-org-tag]").forEach(el => { el.textContent = org.tagline; });
@@ -712,10 +828,16 @@ function boot() {
   setupVoice();
   setupTranslate();
   if (!CONFIG.TRANSLATE || CONFIG.TRANSLATE.provider === "none") { ["#fTranslateBtn", "#notesTranslateBtn", "#remTranslateBtn"].forEach(s => { const el = $(s); if (el) el.hidden = true; }); }
-  let saved = null; try { saved = JSON.parse(localStorage.getItem("lbstimn_user") || "null"); } catch (e) {}
-  setUser(saved || { name: "user", role: "counselor" });
   fillNewFormOptions();
   renderFilterOptions(); renderTable();
+
+  if (Api.mode === "supabase") {
+    const u = await Auth.init();
+    if (u) { setUser({ name: u.fullName, role: u.role }); showApp(); } else showLogin("");
+    return;
+  }
+  let saved = null; try { saved = JSON.parse(localStorage.getItem("lbstimn_user") || "null"); } catch (e) {}
+  setUser(saved || { name: "user", role: "counselor" });
   const needsLogin = !Api.demo && CONFIG.AUTH_MODE === "token" && !Api.hasToken();
   if (needsLogin) showLogin(""); else showApp();
 }
@@ -729,7 +851,7 @@ $("#loginForm").addEventListener("submit", async ev => {
   if (!u || !p) { $("#loginErr").textContent = "Enter your username and password."; return; }
   const b = $("#loginBtn"); b.disabled = true; b.textContent = "Signing in…"; $("#loginErr").textContent = "";
   try { const r = await Api.login(u, p); setUser(r.user); $("#lp").value = ""; showApp(); }
-  catch (err) { $("#loginErr").textContent = isNet(err) ? "Can't reach the server. Try again shortly." : (err.code === 401 ? "Incorrect username or password." : err.message); }
+  catch (err) { $("#loginErr").textContent = isNet(err) ? "Can't reach the server. Try again shortly." : (err.code === 401 ? "Incorrect email or password." : err.message); }
   finally { b.disabled = false; b.textContent = "Sign in"; }
 });
 $("#logout").addEventListener("click", () => { if (Api.demo) { toast("Signed out of demo"); return; } showLogin(""); });
@@ -739,7 +861,7 @@ $("#navBackdrop").addEventListener("click", () => navOpen(false));
 $("#refresh").addEventListener("click", () => load(false));
 $("#tRefresh").addEventListener("click", () => load(false));
 $("#retry").addEventListener("click", () => load(false));
-$("#useDemo").addEventListener("click", () => { Api.demo = true; $("#modeChip").hidden = false; load(false); });
+$("#useDemo").addEventListener("click", () => { Api.forceDemo(); $("#modeChip").hidden = false; load(false); });
 $("#viewAll").addEventListener("click", () => setTab("table"));
 $$(".tab").forEach(t => t.addEventListener("click", () => setTab(t.dataset.tab)));
 
@@ -775,6 +897,22 @@ $("#exportBtn").addEventListener("click", () => {
 /* new enquiry form */
 $("#enqForm").addEventListener("submit", submitNew);
 $("#enqForm").addEventListener("reset", () => setTimeout(() => { $$("#enqForm .fld.bad").forEach(f => { f.classList.remove("bad"); const er = $(".err", f); if (er) er.textContent = ""; }); fillNewFormOptions(); }, 0));
+
+/* fees */
+$("#feeForm").addEventListener("submit", submitFee);
+$("#feeForm").addEventListener("reset", () => setTimeout(() => { $$("#feeForm .fld.bad").forEach(f => { f.classList.remove("bad"); const er = $(".err", f); if (er) er.textContent = ""; }); fillFeeForm(); }, 0));
+let feeQTimer; $("#fee-enquiry-search").addEventListener("input", e => { clearTimeout(feeQTimer); feeQTimer = setTimeout(() => populateFeeEnquiryOptions(e.target.value), 150); });
+document.addEventListener("click", ev => { const el = ev.target.closest("[data-fee-delete]"); if (el) deleteFee(el.getAttribute("data-fee-delete")); });
+$("#feeExportBtn").addEventListener("click", () => {
+  const rows = state.fees.slice().sort((a, b) => (+parse(b.paymentDate) || 0) - (+parse(a.paymentDate) || 0));
+  if (!rows.length) { toast("Nothing to export", true); return; }
+  const head = ["Student", "Amount", "Mode", "Date", "Received by", "Notes"];
+  const q = v => '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"';
+  const csv = [head.map(q).join(",")].concat(rows.map(f => [feeStudentName(f), f.amount, f.mode, f.paymentDate ? isoDay(parse(f.paymentDate)) : "", f.receivedBy, f.notes].map(q).join(","))).join("\r\n");
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" }));
+  a.download = "fee-payments-" + isoDay(new Date()) + ".csv"; document.body.appendChild(a); a.click(); a.remove();
+  toast("Exported " + rows.length + " payments");
+});
 
 /* edit modal */
 $("#mClose").addEventListener("click", requestClose);
@@ -843,5 +981,11 @@ document.addEventListener("keydown", e => {
   }
 });
 
-boot();
+boot().catch(err => {
+  // never leave the person on a blank/endless loading screen
+  console.error(err);
+  const sp = $("#bootSplash"); if (sp) { sp.hidden = false; sp.classList.add("err"); }
+  $("#bootMsg").textContent = "Something went wrong while starting the portal. Please reload; if it keeps happening, check js/supabase.js and js/config.js.";
+  const b = $("#bootRetry"); b.hidden = false; b.onclick = () => location.reload();
+});
 })();
