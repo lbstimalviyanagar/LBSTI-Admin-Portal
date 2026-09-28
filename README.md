@@ -1,8 +1,23 @@
-# LBSTIMN Admissions CRM — Supabase edition
+# LBSTIMN Admissions CRM
 
-Navy-themed Enquiries + Fees admin portal, backed by a real Supabase
-(PostgreSQL) database: live CRUD, auth, row-level security by role, and
-realtime updates. Plain HTML/CSS/JS on the frontend — no build step.
+Navy-themed Enquiries + Fees admin portal with persistent storage. It runs
+with a local Express + SQLite backend by default so every form submission,
+edit, and payment is saved to a real database and still appears after page
+reload. The original Supabase-ready frontend code remains available in the
+project as an option, but the local backend is the easiest way to make it
+work immediately without extra credentials.
+
+## Quick start
+1. Install dependencies:
+   npm install
+2. Start the server:
+   npm start
+3. Open the app in the browser:
+   http://localhost:3001
+
+The app saves enquiries, remarks, and fee records in the SQLite file at
+[data/lbstimn.db](data/lbstimn.db). Refreshing the browser reloads live data
+from the database and recalculates the charts automatically.
 
 ## Files
 - index.html          Page structure (login, dashboard, forms, tables, modal)
