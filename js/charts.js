@@ -99,6 +99,15 @@ const Charts = (function () {
       host.classList.add("on");
     };
     host.onmouseleave = () => { host.classList.remove("on"); bars.forEach(el => el.classList.remove("hi")); };
+    host.onclick = ev => {
+      if (typeof opts.onClick !== "function") return;
+      const rc = svg.getBoundingClientRect();
+      const px = (ev.clientX - rc.left) / rc.width * W;
+      let i = Math.round((px - l) / iw * n - 0.5);
+      i = Math.max(0, Math.min(n - 1, i));
+      opts.onClick(items[i].name, items[i]);
+    };
+    if (typeof opts.onClick === "function") host.style.cursor = "pointer";
   }
 
   function donut(host, items, opts) {
@@ -136,9 +145,24 @@ const Charts = (function () {
       highlight(idx); showTip(idx, px, py, rc);
     };
     wrap.onmouseleave = () => { wrap.classList.remove("on"); highlight(-1); };
+    if (typeof opts.onClick === "function") {
+      wrap.style.cursor = "pointer";
+      wrap.onclick = ev => {
+        const rc = svg.getBoundingClientRect();
+        const px = (ev.clientX - rc.left) / rc.width * 180, py = (ev.clientY - rc.top) / rc.height * 180;
+        const dx = px - CX, dy = py - CY, dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < R - SW / 2 - 2 || dist > R + SW / 2 + 2) return;
+        const ang = (Math.atan2(dy, dx) * 180 / Math.PI + 90 + 360) % 360;
+        const frac = ang / 360 * C;
+        let idx = segs.findIndex(s => frac >= s.off && frac < s.off + s.len);
+        if (idx === -1) idx = segs.length - 1;
+        opts.onClick(items[idx].name, items[idx]);
+      };
+    }
     legEls.forEach((li, i) => {
       li.addEventListener("mouseenter", () => { const rc = svg.getBoundingClientRect(); highlight(i); showTip(i, 90, 90, rc); });
       li.addEventListener("mouseleave", () => { wrap.classList.remove("on"); highlight(-1); });
+      if (typeof opts.onClick === "function") { li.style.cursor = "pointer"; li.addEventListener("click", () => opts.onClick(items[i].name, items[i])); }
     });
   }
 
