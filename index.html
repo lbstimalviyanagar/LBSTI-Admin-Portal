@@ -25,8 +25,8 @@
     <h1>Sign in</h1>
     <p>Use your counsellor account to manage enquiries.</p>
     <div class="fld" style="margin-bottom:14px">
-      <label for="lu">Email</label>
-      <input class="input" id="lu" type="email" autocomplete="username" placeholder="you@lbstimn.com" required>
+      <label for="lu">Username</label>
+      <input class="input" id="lu" type="text" autocomplete="username" placeholder="Enter your username" required>
     </div>
     <div class="fld">
       <label for="lp">Password</label>
@@ -51,7 +51,8 @@
     </div>
     <div class="nav-label">Menu</div>
     <nav aria-label="Main">
-      <button class="nav-item" type="button" aria-current="page"><span class="ic" data-icon="inbox" data-size="20"></span><span class="label">Enquiries</span></button>
+      <button class="nav-item" id="navEnquiries" type="button" aria-current="page"><span class="ic" data-icon="inbox" data-size="20"></span><span class="label">Enquiries</span></button>
+      <button class="nav-item" id="navFees" type="button" hidden><span class="ic" data-icon="fee" data-size="20"></span><span class="label">Fees</span></button>
     </nav>
     <div class="spacer"></div>
     <button class="logout" id="logout" type="button"><span class="ic" data-icon="logout" data-size="20"></span><span class="label">Logout</span></button>
@@ -82,7 +83,7 @@
     </header>
 
     <div class="content">
-      <div class="page-head">
+      <div class="page-head" id="enquiryHead">
         <div>
           <h2>Enquiries Management</h2>
           <p>Track and manage student leads and view analytics.</p>
@@ -107,11 +108,10 @@
         </div>
       </div>
 
-      <div class="tabs" role="tablist" aria-label="Enquiries sections">
+      <div class="tabs" id="enquiryTabs" role="tablist" aria-label="Enquiries sections">
         <button class="tab" role="tab" id="t-dashboard" data-tab="dashboard" aria-selected="true"><span class="ic" data-icon="dashboard"></span>Dashboard</button>
         <button class="tab" role="tab" id="t-new" data-tab="new" aria-selected="false"><span class="ic" data-icon="plus"></span>New Enquiry</button>
         <button class="tab" role="tab" id="t-table" data-tab="table" aria-selected="false"><span class="ic" data-icon="table"></span>Enquiries Table<span class="count" id="tableCount">0</span></button>
-        <button class="tab" role="tab" id="t-fees" data-tab="fees" aria-selected="false"><span class="ic" data-icon="fee"></span>Fees</button>
       </div>
 
       <div class="banner" id="errBanner" hidden role="alert">
@@ -230,9 +230,20 @@
       </section>
 
       <!-- Fees -->
-      <section id="tab-fees" role="tabpanel" aria-labelledby="t-fees" hidden>
-        <div class="stats" id="feeStats"></div>
+      <section id="tab-fees" hidden>
+        <div class="page-head"><div><h2>Fees</h2><p>Manage fee payments and receipts.</p></div></div>
+        <div class="tabs fees-tabs" role="tablist" aria-label="Fees sections">
+          <button class="fee-tab" type="button" role="tab" id="feeTab-dashboard" data-fee-tab="dashboard" aria-selected="true">Dashboard</button>
+          <button class="fee-tab" type="button" role="tab" id="feeTab-payment" data-fee-tab="payment" aria-selected="false">Record Payment</button>
+          <button class="fee-tab" type="button" role="tab" id="feeTab-history" data-fee-tab="history" aria-selected="false">Payment History</button>
+          <button class="fee-tab" type="button" role="tab" id="feeTab-receipt" data-fee-tab="receipt" aria-selected="false">Issue Receipt</button>
+        </div>
 
+        <section id="feePanel-dashboard" role="tabpanel" aria-labelledby="feeTab-dashboard">
+          <div class="stats" id="feeStats"></div>
+        </section>
+
+        <section id="feePanel-payment" role="tabpanel" aria-labelledby="feeTab-payment" hidden>
         <form class="card form-card" id="feeForm" novalidate>
           <div class="form-body">
             <h3>Record a payment</h3>
@@ -255,7 +266,9 @@
             <button class="btn primary" type="submit" id="feeSubmit">Save payment</button>
           </div>
         </form>
+        </section>
 
+        <section id="feePanel-history" role="tabpanel" aria-labelledby="feeTab-history" hidden>
         <div class="card section">
           <div class="card-head">
             <div><h3>Payment history</h3><p>All fee payments recorded, newest first.</p></div>
@@ -265,6 +278,14 @@
             <th scope="col">Student</th><th scope="col">Amount</th><th scope="col">Mode</th><th scope="col">Date</th><th scope="col">Received by</th><th scope="col">Notes</th><th scope="col">Action</th>
           </tr></thead><tbody id="feeBody"></tbody></table></div>
         </div>
+        </section>
+
+        <section id="feePanel-receipt" role="tabpanel" aria-labelledby="feeTab-receipt" hidden>
+          <div class="card section fee-receipt-tool">
+            <div class="card-head"><div><h3>Issue a fee receipt</h3><p>Select a payment to print or save its receipt.</p></div></div>
+            <div class="fee-receipt-actions"><div class="fld"><label for="receiptPayment">Payment</label><select class="select" id="receiptPayment"></select></div><button class="btn primary" id="issueReceiptBtn" type="button">Issue Receipt</button></div>
+          </div>
+        </section>
       </section>
     </div>
 
