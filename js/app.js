@@ -347,6 +347,37 @@ function renderFeeTable() {
     '</td><td><button class="btn sm danger" type="button" data-fee-delete="' + esc(f.id) + '">' + icon("trash", 14) + "Delete</button></td></tr>"
   )).join("") : '<tr><td colspan="7">' + emptyBox("fee", "No payments recorded yet", "Record your first fee payment above.") + "</td></tr>";
   hydrateIcons(body);
+  renderReceiptOptions();
+}
+function setFeeTab(name) {
+  ["dashboard", "payment", "history", "receipt"].forEach(tab => {
+    $("#feePanel-" + tab).hidden = tab !== name;
+    $("#feeTab-" + tab).setAttribute("aria-selected", String(tab === name));
+  });
+  if (name === "receipt") renderReceiptOptions();
+}
+function renderReceiptOptions() {
+  const select = $("#receiptPayment"), current = select.value;
+  const rows = state.fees.slice().sort((a, b) => (+parse(b.paymentDate) || 0) - (+parse(a.paymentDate) || 0));
+  select.innerHTML = rows.length
+    ? rows.map(fee => '<option value="' + esc(fee.id) + '">' + esc(feeStudentName(fee) + " — ₹" + Number(fee.amount || 0).toLocaleString("en-IN") + " — " + fmtDate(fee.paymentDate)) + "</option>").join("")
+    : '<option value="">No payments available</option>';
+  if (rows.some(fee => String(fee.id) === String(current))) select.value = current;
+}
+function issueReceipt() {
+  const fee = state.fees.find(row => String(row.id) === String($("#receiptPayment").value));
+  if (!fee) { toast("Select a recorded payment first.", true); return; }
+  const enquiry = state.enquiries.find(row => String(row.id) === String(fee.enquiryId)) || {};
+  const receiptNo = "LBSTI-" + new Date().getFullYear() + "-" + String(fee.id).padStart(6, "0");
+  const fields = [
+    ["Receipt number", receiptNo], ["Student name", feeStudentName(fee)], ["Course", enquiry.course || "–"],
+    ["Payment date", fmtDate(fee.paymentDate)], ["Amount paid", "₹" + Number(fee.amount || 0).toLocaleString("en-IN")],
+    ["Payment mode", fee.mode || "–"], ["Counselor", fee.receivedBy || enquiry.assignedTo || "–"], ["Remarks", fee.notes || "–"]
+  ];
+  const receipt = window.open("", "_blank", "width=800,height=700");
+  if (!receipt) { toast("Allow pop-ups to print the receipt.", true); return; }
+  receipt.document.write('<!doctype html><html><head><meta charset="utf-8"><title>' + esc(receiptNo) + '</title><style>body{font:15px Arial,sans-serif;color:#182238;margin:40px auto;max-width:720px;padding:24px}header{border-bottom:2px solid #173a80;padding-bottom:18px;margin-bottom:22px}h1{font-size:22px;color:#173a80}dl{display:grid;grid-template-columns:1fr 1fr;gap:0 24px}dl div{padding:13px 0;border-bottom:1px solid #e4e7ec}dt{font-size:12px;color:#667085;margin-bottom:5px}dd{margin:0;font-weight:700}button{margin-top:24px;padding:10px 16px;border:0;background:#173a80;color:#fff;border-radius:6px;cursor:pointer}@media print{button{display:none}}</style></head><body><header><h1>' + esc(CONFIG.ORG.fullName) + '</h1><p>Fee payment receipt</p></header><dl>' + fields.map(field => '<div><dt>' + esc(field[0]) + '</dt><dd>' + esc(field[1]) + '</dd></div>').join("") + '</dl><button onclick="window.print()">Print / Save as PDF</button></body></html>');
+  receipt.document.close();
 }
 async function submitFee(ev) {
   ev.preventDefault();
@@ -777,19 +808,35 @@ async function submitNew(ev) {
    Tabs, shell, auth
    ===================================================================== */
 function setTab(name) {
+  const feesOpen = name === "fees";
+  if (feesOpen && !canAccessFees()) { toast("Fees access is limited to admins and counsellors.", true); return; }
   state.tab = name;
-  $$(".tab").forEach(t => t.setAttribute("aria-selected", String(t.dataset.tab === name)));
-  ["dashboard", "new", "table", "fees"].forEach(n => { $("#tab-" + n).hidden = n !== name; });
-  $("#dashControls").hidden = name !== "dashboard";
+  $$(".tab").forEach(t => t.setAttribute("aria-selected", String(!feesOpen && t.dataset.tab === name)));
+  ["dashboard", "new", "table"].forEach(tab => { $("#tab-" + tab).hidden = feesOpen || tab !== name; });
+  $("#tab-fees").hidden = !feesOpen;
+  $("#enquiryHead").hidden = feesOpen;
+  $("#enquiryTabs").hidden = feesOpen;
+  $("#errBanner").hidden = feesOpen || $("#errMsg").textContent === "";
+  $("#dashControls").hidden = feesOpen || name !== "dashboard";
+  $("#navEnquiries").toggleAttribute("aria-current", !feesOpen);
+  if (feesOpen) $("#navFees").setAttribute("aria-current", "page");
+  else $("#navFees").removeAttribute("aria-current");
   if (name === "new") { fillNewFormOptions(); setTimeout(() => $("#f-name").focus(), 30); }
-  if (name === "fees") { fillFeeForm(); renderFeeStats(); renderFeeTable(); }
+  if (feesOpen) { fillFeeForm(); renderFeeStats(); renderFeeTable(); setFeeTab("dashboard"); }
+  navOpen(false);
   window.scrollTo({ top: 0 });
+}
+function canAccessFees() {
+  const role = String(state.user && state.user.role || "").trim().toLowerCase();
+  return role === "admin" || role === "counselor" || role === "counsellor";
 }
 function setUser(u) {
   state.user = u; const n = (u && u.name) || "user";
   $("#sbName").textContent = n; $("#sbRole").textContent = (u && u.role) || "counselor";
   $("#sbAvatar").textContent = initials(n); $("#topAvatar").textContent = n.charAt(0).toUpperCase(); $("#topName").textContent = n;
   try { localStorage.setItem("lbstimn_user", JSON.stringify(u)); } catch (e) {}
+  $("#navFees").hidden = !canAccessFees();
+  if (!canAccessFees() && state.tab === "fees") setTab("dashboard");
 }
 function hideSplash() { const sp = $("#bootSplash"); if (sp) sp.hidden = true; }
 function showLogin(msg) {
@@ -863,6 +910,8 @@ $("#tRefresh").addEventListener("click", () => load(false));
 $("#retry").addEventListener("click", () => load(false));
 $("#useDemo").addEventListener("click", () => { Api.forceDemo(); $("#modeChip").hidden = false; load(false); });
 $("#viewAll").addEventListener("click", () => setTab("table"));
+$("#navEnquiries").addEventListener("click", () => setTab(state.tab === "fees" ? "dashboard" : state.tab));
+$("#navFees").addEventListener("click", () => setTab("fees"));
 $$(".tab").forEach(t => t.addEventListener("click", () => setTab(t.dataset.tab)));
 
 /* dashboard range */
@@ -903,6 +952,8 @@ $("#feeForm").addEventListener("submit", submitFee);
 $("#feeForm").addEventListener("reset", () => setTimeout(() => { $$("#feeForm .fld.bad").forEach(f => { f.classList.remove("bad"); const er = $(".err", f); if (er) er.textContent = ""; }); fillFeeForm(); }, 0));
 let feeQTimer; $("#fee-enquiry-search").addEventListener("input", e => { clearTimeout(feeQTimer); feeQTimer = setTimeout(() => populateFeeEnquiryOptions(e.target.value), 150); });
 document.addEventListener("click", ev => { const el = ev.target.closest("[data-fee-delete]"); if (el) deleteFee(el.getAttribute("data-fee-delete")); });
+$$('[data-fee-tab]').forEach(button => button.addEventListener("click", () => setFeeTab(button.dataset.feeTab)));
+$("#issueReceiptBtn").addEventListener("click", issueReceipt);
 $("#feeExportBtn").addEventListener("click", () => {
   const rows = state.fees.slice().sort((a, b) => (+parse(b.paymentDate) || 0) - (+parse(a.paymentDate) || 0));
   if (!rows.length) { toast("Nothing to export", true); return; }
