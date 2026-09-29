@@ -1,239 +1,394 @@
--- =====================================================================
--- LBSTIMN Admissions CRM — Supabase schema
--- Run this once in Supabase: Project -> SQL Editor -> New query -> Run.
--- Safe to re-run: uses IF NOT EXISTS / CREATE OR REPLACE throughout.
---
--- Design note: `enquiries.assigned_to` stores the counselor's NAME (text),
--- matching `profiles.full_name` -- not a uuid foreign key. This matches
--- how the existing frontend already works (a plain Counselor dropdown of
--- names). Keep each counselor's `full_name` here identical to what you
--- put in js/config.js -> COUNSELORS, and to what they're assigned as in
--- the app, so the "counselors only see their own leads" rule below
--- actually matches rows correctly (it's a case-sensitive text compare).
--- =====================================================================
+const express = require('express');
+const cors = require('cors');
+const fs = require('fs');
+const path = require('path');
+const sqlite3 = require('sqlite3').verbose();
 
--- ---------------------------------------------------------------------
--- 1. PROFILES  (one row per Supabase Auth user; holds role + display name)
--- ---------------------------------------------------------------------
-create table if not exists public.profiles (
-  id          uuid primary key references auth.users (id) on delete cascade,
-  full_name   text not null default '',
-  role        text not null default 'counselor' check (role in ('admin', 'counselor')),
-  created_at  timestamptz not null default now()
-);
+const app = express();
+const port = process.env.PORT || 3001;
+const dataDir = path.join(__dirname, 'data');
+const dbPath = path.join(dataDir, 'lbstimn.db');
 
--- Auto-create a profile row whenever a new user signs up in Supabase Auth.
--- New users default to 'counselor' — promote someone to 'admin' manually:
---   update public.profiles set role = 'admin' where id = '<their-user-uuid>';
-create or replace function public.handle_new_user()
-returns trigger
-language plpgsql
-security definer set search_path = public
-as $$
-begin
-  insert into public.profiles (id, full_name)
-  values (new.id, coalesce(new.raw_user_meta_data ->> 'full_name', split_part(new.email, '@', 1)));
-  return new;
-end;
-$$;
+fs.mkdirSync(dataDir, { recursive: true });
 
-drop trigger if exists on_auth_user_created on auth.users;
-create trigger on_auth_user_created
-  after insert on auth.users
-  for each row execute procedure public.handle_new_user();
+const db = new sqlite3.Database(dbPath, (err) => {
+  if (err) {
+    console.error('Database connection failed:', err.message);
+    process.exit(1);
+  }
+  console.log('Connected to SQLite database at', dbPath);
+});
 
--- ---------------------------------------------------------------------
--- 2. ENQUIRIES  (the leads table — this is Model.normalize()'s source)
--- ---------------------------------------------------------------------
-create table if not exists public.enquiries (
-  id               bigint generated always as identity primary key,
-  name             text not null,
-  phone            text not null,
-  city             text default '',
-  course           text default '',
-  batch            text default '',
-  source           text default '',
-  status           text not null default 'New'
-                     check (status in ('New', 'No Response', 'Counseling Scheduled', 'Counseling done', 'Confirmed', 'Dropped')),
-  assigned_to      text default '',   -- counselor's full_name (matches profiles.full_name)
-  follow_up_date   date,
-  notes            text default '',
-  created_at       timestamptz not null default now(),
-  updated_at       timestamptz not null default now()
-);
+function runSql(sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.run(sql, params, function onRun(err) {
+      if (err) return reject(err);
+      resolve({ id: this.lastID, changes: this.changes });
+    });
+  });
+}
 
-create index if not exists enquiries_status_idx        on public.enquiries (status);
-create index if not exists enquiries_assigned_to_idx    on public.enquiries (assigned_to);
-create index if not exists enquiries_follow_up_date_idx on public.enquiries (follow_up_date);
-create index if not exists enquiries_created_at_idx     on public.enquiries (created_at desc);
-create index if not exists enquiries_course_idx         on public.enquiries (course);
+function getSql(sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.all(sql, params, (err, rows) => {
+      if (err) return reject(err);
+      resolve(rows);
+    });
+  });
+}
 
--- keep updated_at current on every edit
-create or replace function public.set_updated_at()
-returns trigger language plpgsql as $$
-begin
-  new.updated_at = now();
-  return new;
-end;
-$$;
+function normalizeEnquiry(row) {
+  return {
+    id: row.id,
+    name: row.name || '',
+    phone: row.phone || '',
+    city: row.city || '',
+    course: row.course || '',
+    batch: row.batch || '',
+    source: row.source || '',
+    status: row.status || 'New',
+    assignedTo: row.assigned_to || '',
+    followUpDate: row.follow_up_date || '',
+    notes: row.notes || '',
+    createdAt: row.created_at || new Date().toISOString(),
+    updatedAt: row.updated_at || row.created_at || new Date().toISOString()
+  };
+}
 
-drop trigger if exists enquiries_set_updated_at on public.enquiries;
-create trigger enquiries_set_updated_at
-  before update on public.enquiries
-  for each row execute procedure public.set_updated_at();
+function normalizeRemark(row) {
+  return {
+    id: row.id,
+    text: row.text || '',
+    author: row.author || 'Admin',
+    createdAt: row.created_at || new Date().toISOString()
+  };
+}
 
--- ---------------------------------------------------------------------
--- 3. REMARKS  (the activity timeline on each lead — one row per entry)
--- ---------------------------------------------------------------------
-create table if not exists public.remarks (
-  id           bigint generated always as identity primary key,
-  enquiry_id   bigint not null references public.enquiries (id) on delete cascade,
-  author_id    uuid references public.profiles (id) on delete set null,
-  text         text not null,
-  created_at   timestamptz not null default now()
-);
+function normalizeFee(row) {
+  return {
+    id: row.id,
+    enquiryId: row.enquiry_id,
+    studentName: row.student_name || row.name || '',
+    amount: Number(row.amount || 0),
+    paymentDate: row.payment_date || '',
+    mode: row.mode || 'Cash',
+    notes: row.notes || '',
+    receivedBy: row.received_by || 'Admin',
+    createdAt: row.created_at || new Date().toISOString()
+  };
+}
 
-create index if not exists remarks_enquiry_id_idx on public.remarks (enquiry_id);
+function snakeCase(obj = {}) {
+  const output = {};
+  for (const key of Object.keys(obj)) {
+    const snake = key.replace(/[A-Z]/g, (ch) => `_${ch.toLowerCase()}`);
+    output[snake] = obj[key];
+  }
+  return output;
+}
 
--- ---------------------------------------------------------------------
--- 4. Helper: the current user's own counselor name, for RLS comparisons
--- ---------------------------------------------------------------------
-create or replace function public.my_full_name()
-returns text
-language sql stable security definer set search_path = public
-as $$
-  select full_name from public.profiles where id = auth.uid();
-$$;
+function camelCase(obj = {}) {
+  const output = {};
+  for (const key of Object.keys(obj)) {
+    const camel = key.replace(/_([a-z])/g, (_, ch) => ch.toUpperCase());
+    output[camel] = obj[key];
+  }
+  return output;
+}
 
--- ---------------------------------------------------------------------
--- 5. ROW LEVEL SECURITY
---    Admins: full access to every enquiry/remark.
---    Counselors: only enquiries assigned to them (and remarks on those).
---    Everyone: can read their own profile; admins can read all profiles.
--- ---------------------------------------------------------------------
-alter table public.profiles  enable row level security;
-alter table public.enquiries enable row level security;
-alter table public.remarks   enable row level security;
+function toDateString(date) {
+  return date ? new Date(date).toISOString().slice(0, 10) : '';
+}
 
--- helper: is the current user an admin?
-create or replace function public.is_admin()
-returns boolean
-language sql stable security definer set search_path = public
-as $$
-  select exists (
-    select 1 from public.profiles where id = auth.uid() and role = 'admin'
-  );
-$$;
+function withDefaults(body = {}) {
+  const payload = { ...body };
+  if (!payload.status) payload.status = 'New';
+  if (!payload.createdAt) payload.createdAt = new Date().toISOString();
+  if (!payload.updatedAt) payload.updatedAt = new Date().toISOString();
+  return payload;
+}
 
--- profiles ------------------------------------------------------------
-drop policy if exists "profiles_select_own_or_admin" on public.profiles;
-create policy "profiles_select_own_or_admin"
-  on public.profiles for select
-  using (id = auth.uid() or public.is_admin());
-
-drop policy if exists "profiles_update_own" on public.profiles;
-create policy "profiles_update_own"
-  on public.profiles for update
-  using (id = auth.uid());
-
--- enquiries -------------------------------------------------------------
-drop policy if exists "enquiries_select" on public.enquiries;
-create policy "enquiries_select"
-  on public.enquiries for select
-  using (public.is_admin() or assigned_to = public.my_full_name());
-
-drop policy if exists "enquiries_insert" on public.enquiries;
-create policy "enquiries_insert"
-  on public.enquiries for insert
-  with check (auth.uid() is not null);
-
-drop policy if exists "enquiries_update" on public.enquiries;
-create policy "enquiries_update"
-  on public.enquiries for update
-  using (public.is_admin() or assigned_to = public.my_full_name());
-
-drop policy if exists "enquiries_delete" on public.enquiries;
-create policy "enquiries_delete"
-  on public.enquiries for delete
-  using (public.is_admin());
-
--- remarks ---------------------------------------------------------------
-drop policy if exists "remarks_select" on public.remarks;
-create policy "remarks_select"
-  on public.remarks for select
-  using (
-    public.is_admin()
-    or exists (select 1 from public.enquiries e where e.id = enquiry_id and e.assigned_to = public.my_full_name())
-  );
-
-drop policy if exists "remarks_insert" on public.remarks;
-create policy "remarks_insert"
-  on public.remarks for insert
-  with check (
-    auth.uid() is not null
-    and (
-      public.is_admin()
-      or exists (select 1 from public.enquiries e where e.id = enquiry_id and e.assigned_to = public.my_full_name())
+db.serialize(() => {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS enquiries (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      phone TEXT NOT NULL,
+      city TEXT,
+      course TEXT,
+      batch TEXT,
+      source TEXT,
+      status TEXT DEFAULT 'New',
+      assigned_to TEXT,
+      follow_up_date TEXT,
+      notes TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
     )
-  );
+  `);
 
--- ---------------------------------------------------------------------
--- 6. REALTIME — let the frontend subscribe to live inserts/updates/deletes
--- ---------------------------------------------------------------------
-alter publication supabase_realtime add table public.enquiries;
-alter publication supabase_realtime add table public.remarks;
-
--- ---------------------------------------------------------------------
--- 7. FEES  (payments recorded against a lead — a separate section in the UI)
--- ---------------------------------------------------------------------
-create table if not exists public.fees (
-  id             bigint generated always as identity primary key,
-  enquiry_id     bigint not null references public.enquiries (id) on delete cascade,
-  amount         numeric(10, 2) not null check (amount > 0),
-  payment_date   date not null default current_date,
-  mode           text not null default 'Cash' check (mode in ('Cash', 'Online', 'Card', 'Cheque', 'UPI')),
-  notes          text default '',
-  received_by    uuid references public.profiles (id) on delete set null,
-  created_at     timestamptz not null default now()
-);
-
-create index if not exists fees_enquiry_id_idx    on public.fees (enquiry_id);
-create index if not exists fees_payment_date_idx  on public.fees (payment_date);
-
-alter table public.fees enable row level security;
-
-drop policy if exists "fees_select" on public.fees;
-create policy "fees_select"
-  on public.fees for select
-  using (
-    public.is_admin()
-    or exists (select 1 from public.enquiries e where e.id = enquiry_id and e.assigned_to = public.my_full_name())
-  );
-
-drop policy if exists "fees_insert" on public.fees;
-create policy "fees_insert"
-  on public.fees for insert
-  with check (
-    auth.uid() is not null
-    and (
-      public.is_admin()
-      or exists (select 1 from public.enquiries e where e.id = enquiry_id and e.assigned_to = public.my_full_name())
+  db.run(`
+    CREATE TABLE IF NOT EXISTS remarks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      enquiry_id INTEGER NOT NULL,
+      text TEXT NOT NULL,
+      author TEXT DEFAULT 'Admin',
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (enquiry_id) REFERENCES enquiries(id) ON DELETE CASCADE
     )
-  );
+  `);
 
-drop policy if exists "fees_delete" on public.fees;
-create policy "fees_delete"
-  on public.fees for delete
-  using (public.is_admin());
+  db.run(`
+    CREATE TABLE IF NOT EXISTS fees (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      enquiry_id INTEGER NOT NULL,
+      amount REAL NOT NULL,
+      payment_date TEXT,
+      mode TEXT DEFAULT 'Cash',
+      notes TEXT,
+      received_by TEXT DEFAULT 'Admin',
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (enquiry_id) REFERENCES enquiries(id) ON DELETE CASCADE
+    )
+  `);
+});
 
-alter publication supabase_realtime add table public.fees;
+app.use(cors());
+app.use(express.json({ limit: '2mb' }));
+app.use(express.urlencoded({ extended: true }));
 
--- ---------------------------------------------------------------------
--- 8. Optional demo rows so the dashboard isn't empty on first load. 
--- ---------------------------------------------------------------------
-insert into public.enquiries (name, phone, city, course, source, status, follow_up_date, notes)
-select * from (values
-  ('Aarav Sharma', '9811111111', 'Lucknow', 'ADCA (12 Months)', 'Website', 'New', current_date + 1, ''),
-  ('Riya Verma',   '9822222222', 'Kanpur',  'Full Stack Developer (8 Months)', 'Meta Ads', 'Counseling Scheduled', current_date, '')
-) as v(name, phone, city, course, source, status, follow_up_date, notes)
-where not exists (select 1 from public.enquiries);
+app.get('/api/health', (req, res) => {
+  res.json({ ok: true, message: 'LBSTIMN backend is running' });
+});
+
+app.post('/api/auth/login', (req, res) => {
+  const { username, password, email } = req.body || {};
+  const userValue = username || email || 'user';
+  if (!userValue || !password) {
+    return res.status(400).json({ message: 'Email and password are required.' });
+  }
+
+  return res.json({
+    token: 'local-demo-token',
+    user: {
+      name: userValue,
+      role: 'counselor'
+    }
+  });
+});
+
+app.get('/api/enquiries', async (req, res) => {
+  try {
+    const rows = await getSql('SELECT * FROM enquiries ORDER BY created_at DESC');
+    res.json(rows.map(normalizeEnquiry));
+  } catch (error) {
+    res.status(500).json({ message: 'Unable to fetch enquiries.', error: error.message });
+  }
+});
+
+app.post('/api/enquiries', async (req, res) => {
+  try {
+    const body = withDefaults(camelCase(req.body || {}));
+    const now = new Date().toISOString();
+
+    const sql = `
+      INSERT INTO enquiries (
+        name, phone, city, course, batch, source, status, assigned_to, follow_up_date, notes, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `;
+
+    const params = [
+      body.name || '',
+      body.phone || '',
+      body.city || '',
+      body.course || '',
+      body.batch || '',
+      body.source || '',
+      body.status || 'New',
+      body.assignedTo || '',
+      body.followUpDate || '',
+      body.notes || '',
+      now,
+      now
+    ];
+
+    const result = await runSql(sql, params);
+    const rows = await getSql('SELECT * FROM enquiries WHERE id = ?', [result.id]);
+    const created = rows[0] ? normalizeEnquiry(rows[0]) : null;
+    res.status(201).json(created);
+  } catch (error) {
+    res.status(500).json({ message: 'Unable to create enquiry.', error: error.message });
+  }
+});
+
+app.patch('/api/enquiries/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const incoming = camelCase(req.body || {});
+    const current = await getSql('SELECT * FROM enquiries WHERE id = ?', [id]);
+
+    if (!current.length) {
+      return res.status(404).json({ message: 'Enquiry not found.' });
+    }
+
+    const existing = normalizeEnquiry(current[0]);
+    const updates = { ...existing, ...incoming, updatedAt: new Date().toISOString() };
+    const fields = [
+      'name', 'phone', 'city', 'course', 'batch', 'source', 'status', 'assignedTo', 'followUpDate', 'notes'
+    ];
+
+    const values = [];
+    const setClauses = [];
+
+    for (const key of fields) {
+      const dbKey = key === 'assignedTo' ? 'assigned_to' : key === 'followUpDate' ? 'follow_up_date' : key;
+      const val = key === 'assignedTo' ? (updates.assignedTo ?? existing.assignedTo ?? '') :
+                 key === 'followUpDate' ? (updates.followUpDate ?? existing.followUpDate ?? '') :
+                 (updates[key] ?? existing[key] ?? '');
+      setClauses.push(`${dbKey} = ?`);
+      values.push(val);
+    }
+
+    setClauses.push('updated_at = ?');
+    values.push(updates.updatedAt);
+    values.push(id);
+
+    await runSql(`UPDATE enquiries SET ${setClauses.join(', ')} WHERE id = ?`, values);
+    const updatedRow = await getSql('SELECT * FROM enquiries WHERE id = ?', [id]);
+    res.json(normalizeEnquiry(updatedRow[0]));
+  } catch (error) {
+    res.status(500).json({ message: 'Unable to update enquiry.', error: error.message });
+  }
+});
+
+app.delete('/api/enquiries/:id', async (req, res) => {
+  try {
+    await runSql('DELETE FROM remarks WHERE enquiry_id = ?', [Number(req.params.id)]);
+    await runSql('DELETE FROM fees WHERE enquiry_id = ?', [Number(req.params.id)]);
+    await runSql('DELETE FROM enquiries WHERE id = ?', [Number(req.params.id)]);
+    res.status(204).send();
+  } catch (error) {
+    res.status(500).json({ message: 'Unable to delete enquiry.', error: error.message });
+  }
+});
+
+app.post('/api/enquiries/:id/confirm', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    await runSql('UPDATE enquiries SET status = ?, updated_at = ? WHERE id = ?', ['Confirmed', new Date().toISOString(), id]);
+    const rows = await getSql('SELECT * FROM enquiries WHERE id = ?', [id]);
+    if (!rows.length) {
+      return res.status(404).json({ message: 'Enquiry not found.' });
+    }
+    return res.json(normalizeEnquiry(rows[0]));
+  } catch (error) {
+    return res.status(500).json({ message: 'Unable to confirm enquiry.', error: error.message });
+  }
+});
+
+app.get('/api/enquiries/:id/remarks', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const rows = await getSql('SELECT * FROM remarks WHERE enquiry_id = ? ORDER BY created_at ASC', [id]);
+    res.json(rows.map(normalizeRemark));
+  } catch (error) {
+    res.status(500).json({ message: 'Unable to load remarks.', error: error.message });
+  }
+});
+
+app.post('/api/enquiries/:id/remarks', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const text = String((req.body && (req.body.remark || req.body.text || req.body.message || req.body.body)) || '').trim();
+    const author = req.body && req.body.author ? String(req.body.author) : 'Admin';
+
+    if (!text) {
+      return res.status(400).json({ message: 'Remark text is required.' });
+    }
+
+    const result = await runSql(
+      'INSERT INTO remarks (enquiry_id, text, author, created_at) VALUES (?, ?, ?, ?)',
+      [id, text, author, new Date().toISOString()]
+    );
+
+    const row = await getSql('SELECT * FROM remarks WHERE id = ?', [result.id]);
+    return res.status(201).json(normalizeRemark(row[0]));
+  } catch (error) {
+    return res.status(500).json({ message: 'Unable to add remark.', error: error.message });
+  }
+});
+
+app.get('/api/fees', async (req, res) => {
+  try {
+    const rows = await getSql(`
+      SELECT f.*, e.name as student_name
+      FROM fees f
+      LEFT JOIN enquiries e ON e.id = f.enquiry_id
+      ORDER BY f.payment_date DESC, f.created_at DESC
+    `);
+    res.json(rows.map(normalizeFee));
+  } catch (error) {
+    res.status(500).json({ message: 'Unable to fetch fees.', error: error.message });
+  }
+});
+
+app.post('/api/fees', async (req, res) => {
+  try {
+    const body = camelCase(req.body || {});
+    const enquiryId = Number(body.enquiryId || body.enquiry_id);
+    const amount = Number(body.amount || body.fee_amount || 0);
+    const mode = body.mode || 'Cash';
+    const notes = body.notes || '';
+    const paymentDate = body.paymentDate || body.payment_date || new Date().toISOString().slice(0, 10);
+    const receivedBy = body.receivedBy || body.received_by || 'Admin';
+
+    if (!enquiryId || !amount || amount <= 0) {
+      return res.status(400).json({ message: 'Valid enquiry and amount are required.' });
+    }
+
+    const enquiry = await getSql('SELECT * FROM enquiries WHERE id = ?', [enquiryId]);
+    if (!enquiry.length) {
+      return res.status(404).json({ message: 'Enquiry not found.' });
+    }
+
+    const result = await runSql(
+      'INSERT INTO fees (enquiry_id, amount, payment_date, mode, notes, received_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [enquiryId, amount, paymentDate, mode, notes, receivedBy, new Date().toISOString()]
+    );
+
+    const rows = await getSql(`
+      SELECT f.*, e.name as student_name
+      FROM fees f
+      LEFT JOIN enquiries e ON e.id = f.enquiry_id
+      WHERE f.id = ?
+    `, [result.id]);
+
+    return res.status(201).json(normalizeFee(rows[0]));
+  } catch (error) {
+    return res.status(500).json({ message: 'Unable to save payment.', error: error.message });
+  }
+});
+
+app.delete('/api/fees/:id', async (req, res) => {
+  try {
+    await runSql('DELETE FROM fees WHERE id = ?', [Number(req.params.id)]);
+    res.status(204).send();
+  } catch (error) {
+    res.status(500).json({ message: 'Unable to delete payment.', error: error.message });
+  }
+});
+
+app.use(express.static(__dirname));
+app.get('*', (req, res) => {
+  if (req.path.startsWith('/api/')) return res.status(404).json({ message: 'API endpoint not found.' });
+  res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+app.listen(port, () => {
+  console.log(`LBSTIMN CRM backend running at http://localhost:${port}`);
+});
+
+process.on('SIGINT', () => {
+  db.close();
+  process.exit(0);
+});
