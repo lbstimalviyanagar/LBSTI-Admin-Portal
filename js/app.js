@@ -364,18 +364,27 @@ function renderReceiptOptions() {
     : '<option value="">No payments available</option>';
   if (rows.some(fee => String(fee.id) === String(current))) select.value = current;
 }
-function issueReceipt() {
+async function issueReceipt() {
   const fee = state.fees.find(row => String(row.id) === String($("#receiptPayment").value));
   if (!fee) { toast("Select a recorded payment first.", true); return; }
+  const receipt = window.open("", "_blank", "width=800,height=700");
+  if (!receipt) { toast("Allow pop-ups to print the receipt.", true); return; }
+  let receiptNo = "LBSTI-" + new Date().getFullYear() + "-" + String(fee.id).padStart(6, "0");
+  try {
+    const issued = await Api.receipts.issue(fee.id);
+    if (issued && issued.receiptNumber) receiptNo = issued.receiptNumber;
+  } catch (err) {
+    receipt.close();
+    if (err.code === 401) return showLogin(err.message);
+    toast(err.message, true);
+    return;
+  }
   const enquiry = state.enquiries.find(row => String(row.id) === String(fee.enquiryId)) || {};
-  const receiptNo = "LBSTI-" + new Date().getFullYear() + "-" + String(fee.id).padStart(6, "0");
   const fields = [
     ["Receipt number", receiptNo], ["Student name", feeStudentName(fee)], ["Course", enquiry.course || "–"],
     ["Payment date", fmtDate(fee.paymentDate)], ["Amount paid", "₹" + Number(fee.amount || 0).toLocaleString("en-IN")],
     ["Payment mode", fee.mode || "–"], ["Counselor", fee.receivedBy || enquiry.assignedTo || "–"], ["Remarks", fee.notes || "–"]
   ];
-  const receipt = window.open("", "_blank", "width=800,height=700");
-  if (!receipt) { toast("Allow pop-ups to print the receipt.", true); return; }
   receipt.document.write('<!doctype html><html><head><meta charset="utf-8"><title>' + esc(receiptNo) + '</title><style>body{font:15px Arial,sans-serif;color:#182238;margin:40px auto;max-width:720px;padding:24px}header{border-bottom:2px solid #173a80;padding-bottom:18px;margin-bottom:22px}h1{font-size:22px;color:#173a80}dl{display:grid;grid-template-columns:1fr 1fr;gap:0 24px}dl div{padding:13px 0;border-bottom:1px solid #e4e7ec}dt{font-size:12px;color:#667085;margin-bottom:5px}dd{margin:0;font-weight:700}button{margin-top:24px;padding:10px 16px;border:0;background:#173a80;color:#fff;border-radius:6px;cursor:pointer}@media print{button{display:none}}</style></head><body><header><h1>' + esc(CONFIG.ORG.fullName) + '</h1><p>Fee payment receipt</p></header><dl>' + fields.map(field => '<div><dt>' + esc(field[0]) + '</dt><dd>' + esc(field[1]) + '</dd></div>').join("") + '</dl><button onclick="window.print()">Print / Save as PDF</button></body></html>');
   receipt.document.close();
 }
