@@ -306,7 +306,7 @@ const Api = (function () {
   };
   const unwrapList = r => Array.isArray(r) ? r : (r && (r.data || r.results || r.enquiries || r.items || r.rows || r.remarks)) || [];
   const unwrapOne = r => (r && typeof r === "object" && !Array.isArray(r)) ? (r.data || r.enquiry || r.remark || r) : null;
-  const url = (tpl, id) => tpl.replace("{id}", encodeURIComponent(id));
+  const withQuery = (path, params) => path + "?" + Object.keys(params).map(key => encodeURIComponent(key) + "=" + encodeURIComponent(params[key])).join("&");
   const E = CONFIG.ENDPOINTS;
 
   api.login = async function (username, password) {
@@ -335,19 +335,19 @@ const Api = (function () {
   api.update = async function (id, patch) {
     if (mode === "supabase") return SupabaseBackend.update(id, patch);
     if (mode === "demo") return DemoStore.update(id, patch);
-    const o = unwrapOne(await Http.request("PATCH", E.enquiries + "/" + encodeURIComponent(id), Model.toPayload(patch)));
+    const o = unwrapOne(await Http.request("PATCH", withQuery(E.enquiries, { id }), Model.toPayload(patch)));
     return o ? Model.normalize(o) : null;
   };
   api.remove = async function (id) {
     if (mode === "supabase") return SupabaseBackend.remove(id);
     if (mode === "demo") return DemoStore.remove(id);
-    return Http.request("DELETE", E.enquiries + "/" + encodeURIComponent(id));
+    return Http.request("DELETE", withQuery(E.enquiries, { id }));
   };
   api.confirm = async function (id) {
     if (mode === "supabase") return SupabaseBackend.confirm(id);
     if (mode === "demo") return DemoStore.confirm(id);
     if (E.confirm) {
-      const o = unwrapOne(await Http.request("POST", url(E.confirm, id)));
+      const o = unwrapOne(await Http.request("POST", withQuery(E.confirm, { id, action: "confirm" })));
       return o ? Model.normalize(o) : null;
     }
     return api.update(id, { status: CONFIG.CONFIRM_STATUS });
@@ -355,13 +355,13 @@ const Api = (function () {
   api.remarks = async function (id) {
     if (mode === "supabase") return SupabaseBackend.remarks(id);
     if (mode === "demo") return DemoStore.remarks(id);
-    return unwrapList(await Http.request("GET", url(E.remarks, id))).map(Model.normRemark);
+    return unwrapList(await Http.request("GET", withQuery(E.remarks, { id, resource: "remarks" }))).map(Model.normRemark);
   };
   api.addRemark = async function (id, text, author) {
     if (mode === "supabase") return SupabaseBackend.addRemark(id, text);
     if (mode === "demo") return DemoStore.addRemark(id, text, author);
     const body = {}; body[CONFIG.REMARK_FIELD] = text;
-    const o = unwrapOne(await Http.request("POST", url(E.remarks, id), body));
+    const o = unwrapOne(await Http.request("POST", withQuery(E.remarks, { id, resource: "remarks" }), body));
     return o ? Model.normRemark(o) : null;
   };
   /** No-op outside Supabase mode; app.js can call this unconditionally. */
@@ -374,18 +374,24 @@ const Api = (function () {
     async list() {
       if (mode === "supabase") return SupabaseBackend.listFees();
       if (mode === "demo") return DemoStore.listFees();
-      return unwrapList(await Http.request("GET", "/fees")).map(Model.normFee);
+      return unwrapList(await Http.request("GET", E.fees)).map(Model.normFee);
     },
     async create(payload) {
       if (mode === "supabase") return SupabaseBackend.addFee(payload);
       if (mode === "demo") return DemoStore.addFee(payload);
-      const o = unwrapOne(await Http.request("POST", "/fees", Model.toPayload(payload)));
+      const o = unwrapOne(await Http.request("POST", E.fees, Model.toPayload(payload)));
       return o ? Model.normFee(o) : null;
     },
     async remove(id) {
       if (mode === "supabase") return SupabaseBackend.removeFee(id);
       if (mode === "demo") return DemoStore.removeFee(id);
-      return Http.request("DELETE", "/fees/" + encodeURIComponent(id));
+      return Http.request("DELETE", withQuery(E.fees, { id }));
+    }
+  };
+  api.receipts = {
+    async issue(paymentId) {
+      if (mode === "demo") return null;
+      return Http.request("POST", E.receipts, { paymentId });
     }
   };
   return api;
