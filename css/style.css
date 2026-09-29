@@ -101,6 +101,7 @@ svg{flex:none}
 .nav-item{position:relative;display:flex;align-items:center;gap:12px;width:100%;padding:11px 14px;border-radius:10px;border:0;background:transparent;color:var(--side-text);font-weight:600;font-size:.96rem;text-align:left;transition:background .15s,color .15s}
 .nav-item:hover{background:var(--side-active);color:#fff}
 .nav-item[aria-current="page"]{background:var(--navy-700);color:#fff}
+.nav-item[hidden]{display:none}
 .nav-item[aria-current="page"]::before{content:"";position:absolute;left:-16px;top:9px;bottom:9px;width:4px;border-radius:0 4px 4px 0;background:#7fa8ff}
 .spacer{flex:1}
 .logout{display:flex;align-items:center;gap:12px;width:100%;padding:11px 14px;border-radius:10px;border:1px solid var(--side-line);background:transparent;color:var(--side-text);font-weight:600;transition:background .15s,color .15s}
@@ -141,6 +142,10 @@ svg{flex:none}
 .tab:hover{color:var(--text)}
 .tab[aria-selected="true"]{color:var(--navy-800);border-bottom-color:var(--navy-800)}
 .tab .count{font-size:.85rem;color:var(--muted);font-weight:700}
+.fees-tabs{margin-bottom:24px}
+.fee-tab{display:flex;align-items:center;padding:12px 18px;border:0;border-bottom:2px solid transparent;margin-bottom:-1px;background:transparent;color:var(--muted);font:inherit;font-size:.95rem;font-weight:700;white-space:nowrap;transition:color .15s}
+.fee-tab:hover{color:var(--text)}
+.fee-tab[aria-selected="true"]{color:var(--navy-800);border-bottom-color:var(--navy-800)}
 
 .banner{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;padding:14px 18px;border-radius:12px;border:1px solid #efc5c0;background:#fdf0ee;margin-bottom:20px}
 .banner b{display:block;color:var(--danger)}
@@ -152,6 +157,8 @@ svg{flex:none}
 .card-head h3{margin:0;font-size:1.05rem;font-weight:800}
 .card-head p{margin:0;color:var(--muted);font-size:.88rem}
 .section{margin-bottom:22px}
+.fee-receipt-actions{display:flex;align-items:end;gap:14px;padding:20px 22px}
+.fee-receipt-actions .fld{flex:1}
 
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(178px,1fr));gap:16px;margin-bottom:22px}
 .stat{padding:20px 22px}
@@ -332,6 +339,7 @@ tbody tr:last-child td{border-bottom:0}
   .modal>footer .spacer{display:none}
   .modal>footer .btn{flex:1}
   .stats{grid-template-columns:1fr}
+  .fee-receipt-actions{align-items:stretch;flex-direction:column}
 }
 @media (prefers-reduced-motion:reduce){*{animation:none !important;transition:none !important}}
 

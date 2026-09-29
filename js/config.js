@@ -2,6 +2,11 @@
    CONFIG: the only file you need to edit to connect the portal to your
    existing backend. Leave API_BASE empty to run with built-in demo data.
    ===================================================================== */
+const hostname = typeof window !== "undefined" ? window.location.hostname : "";
+const isLocal = /localhost|127\.0\.0\.1/.test(hostname);
+const isGitHubPages = /github\.io$/i.test(hostname);
+const isProdDomain = /(^|\.)lbstimn\.com$/i.test(hostname);
+
 const CONFIG = {
   // "supabase" = live Supabase database + auth (needs js/supabase.js filled in)
   // "rest"     = your own REST API (API_BASE below)
@@ -9,22 +14,25 @@ const CONFIG = {
   BACKEND: "rest",
 
   // ---- REST mode only (ignored when BACKEND is "supabase") ----
-  // Base URL of your local Express API, e.g. "http://localhost:3001/api"
-  API_BASE: "http://localhost:3001/api",
+  // Use the local Node backend while testing in the browser on localhost,
+  // and the public Render API when the site is deployed live.
+  API_BASE: isLocal ? "http://localhost:3001/api" : (isGitHubPages || isProdDomain ? "https://admin-portal.onrender.com/api" : "http://localhost:3001/api"),
 
   // "token"  = Authorization: Bearer <token> (login screen is shown)
   // "cookie" = your existing session cookie is used
   // "none"   = no authentication
-  AUTH_MODE: "none",
+  AUTH_MODE: "token",
 
   // Request body keys: "camel" (followUpDate) or "snake" (follow_up_date)
   PAYLOAD_STYLE: "camel",
 
   ENDPOINTS: {
     login: "/auth/login",                    // POST {username, password} -> {token, user?}
-    enquiries: "/enquiries",                 // GET list, POST create, PATCH /:id update, DELETE /:id
-    remarks: "/enquiries/{id}/remarks",      // GET list, POST {remark}   (NEW: needed for the remarks timeline)
-    confirm: "/enquiries/{id}/confirm"       // Confirm route for admission updates
+    enquiries: "/enquiries",                 // GET/POST/PATCH/DELETE on enquiry records
+    remarks: "/enquiries",                   // Existing enquiry remarks operations
+    confirm: "/enquiries",                   // Confirm an existing enquiry
+    fees: "/fees",                           // Existing fee records
+    receipts: "/receipts"                    // POST {paymentId} to issue a saved receipt
   },
 
   // The status value your backend stores for each status label shown in the UI.
