@@ -5,7 +5,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "create-users": "node scripts/create-users.js"
   },
   "keywords": [
     "crm",
