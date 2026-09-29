@@ -182,9 +182,51 @@ db.serialize(() => {
       created_at TEXT NOT NULL
     )
   `);
+
+  const defaults = [
+    { username: process.env.DEFAULT_ADMIN_USERNAME || 'admin', password: process.env.DEFAULT_ADMIN_PASSWORD || 'admin123', fullName: process.env.DEFAULT_ADMIN_NAME || 'Admin', role: 'admin' },
+    { username: process.env.DEFAULT_COUNSELLOR_USERNAME || 'counsellor', password: process.env.DEFAULT_COUNSELLOR_PASSWORD || 'counsellor123', fullName: process.env.DEFAULT_COUNSELLOR_NAME || 'Counsellor', role: 'counselor' },
+    { username: process.env.DEFAULT_USER_USERNAME || 'user', password: process.env.DEFAULT_USER_PASSWORD || 'user123', fullName: process.env.DEFAULT_USER_NAME || 'User', role: 'user' }
+  ];
+
+  db.run('DELETE FROM portal_users WHERE username IN (?, ?, ?)', ['admin', 'counsellor', 'user'], async (deleteErr) => {
+    if (deleteErr) {
+      console.error('Unable to clear seeded users:', deleteErr.message);
+      return;
+    }
+
+    const createdAt = new Date().toISOString();
+    for (const user of defaults) {
+      const salt = crypto.randomBytes(16).toString('hex');
+      const hash = crypto.scryptSync(user.password, salt, 64).toString('hex');
+      await new Promise((resolve, reject) => {
+        db.run(
+          'INSERT INTO portal_users (username, full_name, password_salt, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+          [user.username, user.fullName, salt, hash, user.role, createdAt],
+          (insertErr) => insertErr ? reject(insertErr) : resolve()
+        );
+      }).catch((insertErr) => console.error('Unable to seed default user:', insertErr.message));
+    }
+  });
 });
 
-app.use(cors());
+const corsConfig = {
+  origin: (origin, callback) => {
+    if (!origin) {
+      callback(null, true);
+      return;
+    }
+
+    const safe = /localhost|127\.0\.0\.1|github\.io|lbstimn\.com|render\.com/i.test(origin);
+    callback(null, safe ? origin : '*');
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+};
+
+app.use(cors(corsConfig));
+app.options('*', cors(corsConfig));
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true }));
 
@@ -461,14 +503,46 @@ app.delete('/api/fees/:id', requireFeesRole, async (req, res) => {
   }
 });
 
+app.post('/api/receipts', requireFeesRole, async (req, res) => {
+  try {
+    const paymentId = Number(req.body && (req.body.paymentId ?? req.body.payment_id));
+    if (!paymentId) {
+      return res.status(400).json({ message: 'A valid payment ID is required.' });
+    }
+
+    const rows = await getSql(`
+      SELECT f.*, e.name as student_name, e.course
+      FROM fees f
+      LEFT JOIN enquiries e ON e.id = f.enquiry_id
+      WHERE f.id = ?
+    `, [paymentId]);
+
+    if (!rows.length) {
+      return res.status(404).json({ message: 'Payment record not found.' });
+    }
+
+    const receiptNumber = `LBSTI-${new Date().getFullYear()}-${String(paymentId).padStart(6, '0')}`;
+    return res.json({
+      receiptNumber,
+      paymentId,
+      studentName: rows[0].student_name || 'Student',
+      amount: Number(rows[0].amount || 0),
+      course: rows[0].course || '',
+      issuedAt: new Date().toISOString()
+    });
+  } catch (error) {
+    return res.status(500).json({ message: 'Unable to generate receipt.', error: error.message });
+  }
+});
+
 app.use(express.static(__dirname));
 app.get('*', (req, res) => {
   if (req.path.startsWith('/api/')) return res.status(404).json({ message: 'API endpoint not found.' });
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-app.listen(port, () => {
-  console.log(`LBSTIMN CRM backend running at http://localhost:${port}`);
+app.listen(port, '0.0.0.0', () => {
+  console.log(`LBSTIMN CRM backend listening on 0.0.0.0:${port}`);
 });
 
 process.on('SIGINT', () => {
