@@ -15,7 +15,7 @@ const CONFIG = {
   // "token"  = Authorization: Bearer <token> (login screen is shown)
   // "cookie" = your existing session cookie is used
   // "none"   = no authentication
-  AUTH_MODE: "none",
+  AUTH_MODE: "token",
 
   // Request body keys: "camel" (followUpDate) or "snake" (follow_up_date)
   PAYLOAD_STYLE: "camel",
