@@ -83,6 +83,7 @@ function normalizeFee(row) {
     paymentDate: row.payment_date || '',
     mode: row.mode || 'Cash',
     notes: row.notes || '',
+    receiptDetails: (() => { try { return JSON.parse(row.receipt_details || '{}'); } catch (error) { return {}; } })(),
     receivedBy: row.received_by || 'Admin',
     totalFee: Number(row.total_fee || 0),
     phone: row.phone || '',
@@ -169,6 +170,9 @@ db.serialize(() => {
 
   db.run('ALTER TABLE fees ADD COLUMN total_fee REAL NOT NULL DEFAULT 0', (err) => {
     if (err && !/duplicate column name/i.test(err.message)) console.error('Unable to add fees.total_fee:', err.message);
+  });
+  db.run('ALTER TABLE fees ADD COLUMN receipt_details TEXT', (err) => {
+    if (err && !/duplicate column name/i.test(err.message)) console.error('Unable to add fees.receipt_details:', err.message);
   });
 
   db.run(`
@@ -466,6 +470,7 @@ app.post('/api/fees', requireFeesRole, async (req, res) => {
     const paymentDate = body.paymentDate || body.payment_date || new Date().toISOString().slice(0, 10);
     const receivedBy = req.user.name;
     const totalFee = Number(body.totalFee || body.total_fee || 0);
+    const receiptDetails = JSON.stringify(body.receiptDetails || body.receipt_details || {});
 
     if (!enquiryId || !amount || amount <= 0) {
       return res.status(400).json({ message: 'Valid enquiry and amount are required.' });
@@ -477,8 +482,8 @@ app.post('/api/fees', requireFeesRole, async (req, res) => {
     }
 
     const result = await runSql(
-      'INSERT INTO fees (enquiry_id, amount, payment_date, mode, notes, total_fee, received_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [enquiryId, amount, paymentDate, mode, notes, totalFee, receivedBy, new Date().toISOString()]
+      'INSERT INTO fees (enquiry_id, amount, payment_date, mode, notes, total_fee, receipt_details, received_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [enquiryId, amount, paymentDate, mode, notes, totalFee, receiptDetails, receivedBy, new Date().toISOString()]
     );
 
     const rows = await getSql(`

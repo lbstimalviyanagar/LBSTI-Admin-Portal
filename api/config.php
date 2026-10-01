@@ -2,12 +2,18 @@
 
 declare(strict_types=1);
 
-$apiPrivateSettings = [];
+$apiPrivateSettings = [
+    'db_host' => 'auth-db878.hstgr.io',
+    'db_name' => 'u807619393_lbstiadmin',
+    'db_user' => '',
+    'db_password' => '',
+    'api_secret' => '',
+];
 $apiPrivateSettingsPath = dirname(__DIR__, 2) . '/lbsti-private-config.php';
 if (is_file($apiPrivateSettingsPath)) {
     $loadedSettings = require $apiPrivateSettingsPath;
     if (is_array($loadedSettings)) {
-        $apiPrivateSettings = $loadedSettings;
+        $apiPrivateSettings = array_merge($apiPrivateSettings, $loadedSettings);
     }
 }
 
@@ -39,7 +45,7 @@ function api_db(): PDO
         return $connection;
     }
 
-    $host = api_env('LBSTI_DB_HOST', 'localhost');
+    $host = api_env('LBSTI_DB_HOST', 'auth-db878.hstgr.io');
     $database = api_env('LBSTI_DB_NAME', 'u807619393_lbstiadmin');
     $username = api_env('LBSTI_DB_USER');
     $password = api_env('LBSTI_DB_PASSWORD');
@@ -192,6 +198,10 @@ function api_enquiry_row(array $row): array
 
 function api_fee_row(array $row): array
 {
+    $receiptDetails = $row['receipt_details'] ?? '';
+    if (is_string($receiptDetails)) {
+        $receiptDetails = json_decode($receiptDetails, true) ?: [];
+    }
     return [
         'id' => $row['id'] ?? null,
         'enquiryId' => $row['enquiry_id'] ?? null,
@@ -201,6 +211,7 @@ function api_fee_row(array $row): array
         'paymentDate' => $row['payment_date'] ?? '',
         'mode' => $row['mode'] ?? 'Cash',
         'notes' => $row['notes'] ?? '',
+        'receiptDetails' => is_array($receiptDetails) ? $receiptDetails : [],
         'receivedBy' => $row['received_by'] ?? '',
         'createdAt' => $row['created_at'] ?? '',
     ];

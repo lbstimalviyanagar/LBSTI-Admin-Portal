@@ -14,9 +14,8 @@ const CONFIG = {
   BACKEND: "rest",
 
   // ---- REST mode only (ignored when BACKEND is "supabase") ----
-  // Use the local Node backend while testing in the browser on localhost,
-  // and the public Render API when the site is deployed live.
-  API_BASE: isLocal ? "http://localhost:3001/api" : (isGitHubPages || isProdDomain ? "https://admin-portal.onrender.com/api" : "http://localhost:3001/api"),
+  // Use the local Node backend while testing on localhost and Hostinger PHP when deployed.
+  API_BASE: isLocal ? "http://localhost:3001/api" : "https://db.lbstimn.com/",
 
   // "token"  = Authorization: Bearer <token> (login screen is shown)
   // "cookie" = your existing session cookie is used
@@ -27,12 +26,12 @@ const CONFIG = {
   PAYLOAD_STYLE: "camel",
 
   ENDPOINTS: {
-    login: "/auth/login",                    // POST {username, password} -> {token, user?}
-    enquiries: "/enquiries",                 // GET/POST/PATCH/DELETE on enquiry records
-    remarks: "/enquiries",                   // Existing enquiry remarks operations
-    confirm: "/enquiries",                   // Confirm an existing enquiry
-    fees: "/fees",                           // Existing fee records
-    receipts: "/receipts"                    // POST {paymentId} to issue a saved receipt
+    login: isLocal ? "/auth/login" : "/auth.php",          // POST {username, password} -> {token, user?}
+    enquiries: isLocal ? "/enquiries" : "/enquiries.php", // GET/POST/PATCH/DELETE on enquiry records
+    remarks: isLocal ? "/enquiries" : "/enquiries.php",   // Existing enquiry remarks operations
+    confirm: isLocal ? "/enquiries" : "/enquiries.php",   // Confirm an existing enquiry
+    fees: isLocal ? "/fees" : "/fees.php",               // Existing fee records
+    receipts: isLocal ? "/receipts" : "/receipts.php"    // POST {paymentId} to issue a saved receipt
   },
 
   // The status value your backend stores for each status label shown in the UI.
@@ -76,6 +75,9 @@ const CONFIG = {
     initials: "LB",
     logoUrl: ""                              // e.g. "img/logo.png"
   },
+
+  // WhatsApp number in international format without +, spaces, or punctuation.
+  WHATSAPP_NUMBER: "",
 
   PAGE_SIZE: 10
 };

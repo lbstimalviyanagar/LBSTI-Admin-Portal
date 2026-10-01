@@ -35,6 +35,7 @@ try {
             'payment_date' => ($body['paymentDate'] ?? $body['payment_date'] ?? '') ?: date('Y-m-d'),
             'mode' => $body['mode'] ?? $body['payment_mode'] ?? 'Cash',
             'notes' => $body['notes'] ?? '',
+            'receipt_details' => json_encode($body['receiptDetails'] ?? $body['receipt_details'] ?? [], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
             'received_by' => $user['name'] ?? 'Admin',
             'created_at' => date('Y-m-d H:i:s'),
         ];

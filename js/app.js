@@ -301,9 +301,10 @@ function clearFilters() {
    Fees
    ===================================================================== */
 function fillFeeForm() {
-  fillSelect($("#fee-mode"), Model.FEE_MODES, $("#fee-mode").value || Model.FEE_MODES[0]);
   if (!$("#fee-date").value) $("#fee-date").value = isoDay(new Date());
+  if (!$("#fee-month").value) $("#fee-month").value = isoDay(new Date()).slice(0, 7);
   populateFeeEnquiryOptions("");
+  updateFeeBreakdown();
 }
 function populateFeeEnquiryOptions(q) {
   const sel = $("#fee-enquiry"), cur = sel.value;
@@ -316,6 +317,28 @@ function populateFeeEnquiryOptions(q) {
     ? rows.map(e => '<option value="' + esc(e.id) + '">' + esc(e.name) + " — " + esc(e.phone) + (e.course ? " — " + esc(e.course) : "") + "</option>").join("")
     : '<option value="">No matching leads</option>';
   if (rows.some(e => String(e.id) === String(cur))) sel.value = cur;
+}
+const FEE_ITEMS = [
+  ["registrationFee", "Registration Fee"], ["maintenanceCharge", "Maintenance Charge"],
+  ["enrollmentFee", "Enrollment Fee"], ["reinstatementFee", "Re-instatement Fee"],
+  ["lateFee", "Late Fee"], ["extraCourseware", "Extra Courseware"], ["others", "Others"]
+];
+function readFeeBreakdown() {
+  const items = {};
+  FEE_ITEMS.forEach(([key]) => {
+    items[key] = { cash: 0, cheque: 0 };
+    $$('[data-fee-item="' + key + '"]').forEach(input => { items[key][input.dataset.feeMode] = Math.max(0, Number(input.value) || 0); });
+  });
+  return items;
+}
+function feeBreakdownTotals(items) {
+  return Object.values(items).reduce((totals, item) => ({ cash: totals.cash + item.cash, cheque: totals.cheque + item.cheque }), { cash: 0, cheque: 0 });
+}
+function updateFeeBreakdown() {
+  const totals = feeBreakdownTotals(readFeeBreakdown());
+  $("#feeCashTotal").textContent = "₹" + totals.cash.toLocaleString("en-IN");
+  $("#feeChequeTotal").textContent = "₹" + totals.cheque.toLocaleString("en-IN");
+  $("#fee-amount").value = (totals.cash + totals.cheque).toFixed(2);
 }
 function feeStudentName(fee) {
   if (fee.studentName) return fee.studentName;
@@ -380,24 +403,53 @@ async function issueReceipt() {
     return;
   }
   const enquiry = state.enquiries.find(row => String(row.id) === String(fee.enquiryId)) || {};
-  const fields = [
-    ["Receipt number", receiptNo], ["Student name", feeStudentName(fee)], ["Course", enquiry.course || "–"],
-    ["Payment date", fmtDate(fee.paymentDate)], ["Amount paid", "₹" + Number(fee.amount || 0).toLocaleString("en-IN")],
-    ["Payment mode", fee.mode || "–"], ["Counselor", fee.receivedBy || enquiry.assignedTo || "–"], ["Remarks", fee.notes || "–"]
-  ];
-  receipt.document.write('<!doctype html><html><head><meta charset="utf-8"><title>' + esc(receiptNo) + '</title><style>body{font:15px Arial,sans-serif;color:#182238;margin:40px auto;max-width:720px;padding:24px}header{border-bottom:2px solid #173a80;padding-bottom:18px;margin-bottom:22px}h1{font-size:22px;color:#173a80}dl{display:grid;grid-template-columns:1fr 1fr;gap:0 24px}dl div{padding:13px 0;border-bottom:1px solid #e4e7ec}dt{font-size:12px;color:#667085;margin-bottom:5px}dd{margin:0;font-weight:700}button{margin-top:24px;padding:10px 16px;border:0;background:#173a80;color:#fff;border-radius:6px;cursor:pointer}@media print{button{display:none}}</style></head><body><header><h1>' + esc(CONFIG.ORG.fullName) + '</h1><p>Fee payment receipt</p></header><dl>' + fields.map(field => '<div><dt>' + esc(field[0]) + '</dt><dd>' + esc(field[1]) + '</dd></div>').join("") + '</dl><button onclick="window.print()">Print / Save as PDF</button></body></html>');
+  const details = fee.receiptDetails || {};
+  const items = details.items && typeof details.items === "object" ? details.items : { others: { cash: fee.mode === "Cheque" ? 0 : Number(fee.amount || 0), cheque: fee.mode === "Cheque" ? Number(fee.amount || 0) : 0 } };
+  const totals = feeBreakdownTotals(Object.assign(Object.fromEntries(FEE_ITEMS.map(([key]) => [key, { cash: 0, cheque: 0 }])), items));
+  const total = totals.cash + totals.cheque || Number(fee.amount || 0);
+  const monthValue = details.month || "";
+  const monthLabel = monthValue ? new Date(monthValue + "-01T00:00:00").toLocaleDateString("en-IN", { month: "long", year: "numeric" }) : "–";
+  const amountWords = numberToIndianWords(total);
+  const rows = FEE_ITEMS.map(([key, label], index) => {
+    const item = items[key] || {};
+    const cash = Number(item.cash) || 0, cheque = Number(item.cheque) || 0;
+    return '<tr><td>' + (index + 1) + '.</td><th>' + esc(label) + '</th><td>' + (cash ? '₹' + cash.toLocaleString("en-IN") : '') + '</td><td>' + (cheque ? '₹' + cheque.toLocaleString("en-IN") : '') + '</td><td>' + (cash + cheque ? '₹' + (cash + cheque).toLocaleString("en-IN") : '') + '</td></tr>';
+  }).join("");
+  const mode = totals.cash && totals.cheque ? "Cash and Cheque" : totals.cheque ? "Cheque" : "Cash";
+  receipt.document.write('<!doctype html><html><head><meta charset="utf-8"><title>' + esc(receiptNo) + '</title><style>*{box-sizing:border-box}body{font:14px Arial,sans-serif;color:#273044;margin:24px auto;max-width:760px;padding:24px}header{text-align:center;border-bottom:2px solid #c95f58;padding-bottom:14px;margin-bottom:16px}h1{font-size:22px;color:#a84e49;margin:0 0 5px}header p{margin:0;color:#596275}.topline,.studentline{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:8px 0;border-bottom:1px solid #cbd0d8}.topline div:last-child{text-align:right}.studentline{grid-template-columns:1fr 1fr}.studentline div{padding:4px 0}.receipt-title{text-align:center;font-weight:700;margin:16px 0 8px}table{width:100%;border-collapse:collapse;margin:12px 0}th,td{border:1px solid #aeb6c2;padding:8px 9px;text-align:left}thead th{color:#b2544e;background:#fff7f5}tbody td:first-child{width:38px}tbody td:nth-child(n+3),tfoot td{text-align:right}.total-row th,.total-row td{font-weight:700}.words{padding:8px 0;border-bottom:1px dotted #8b929e}.note{font-size:12px;margin-top:22px}.signatures{display:flex;justify-content:space-between;margin-top:44px}.signatures span{min-width:150px;border-top:1px solid #717987;text-align:center;padding-top:6px}.receipt-meta{font-size:12px;color:#5f6877;margin-top:12px}button{margin-top:24px;padding:10px 16px;border:0;background:#173a80;color:#fff;border-radius:5px;cursor:pointer}@media print{body{margin:0 auto;padding:12px}button{display:none}}</style></head><body><header><h1>' + esc(CONFIG.ORG.fullName) + '</h1><p>' + esc(CONFIG.ORG.domain || "") + '</p></header><div class="topline"><div><b>Form No.:</b> ' + esc(receiptNo) + '</div><div><b>Date:</b> ' + esc(fmtDate(fee.paymentDate)) + '</div></div><div class="studentline"><div><b>Course:</b> ' + esc(enquiry.course || fee.course || "–") + '</div><div><b>Batch:</b> ' + esc(details.batch || enquiry.batch || "–") + '</div><div><b>To Month:</b> ' + esc(monthLabel) + '</div><div><b>Received with thanks from:</b> ' + esc(feeStudentName(fee)) + '</div><div class="full"><b>Son/Daughter/Wife of:</b> ' + esc(details.relation || "–") + '</div></div><div class="receipt-title">FEE RECEIPT</div><table><thead><tr><th>S.No.</th><th>Particulars</th><th>Cash</th><th>Cheque</th><th>Total</th></tr></thead><tbody>' + rows + '</tbody><tfoot><tr><th colspan="2">TOTAL</th><td>₹' + totals.cash.toLocaleString("en-IN") + '</td><td>₹' + totals.cheque.toLocaleString("en-IN") + '</td><td class="total-row">₹' + total.toLocaleString("en-IN") + '</td></tr></tfoot></table><div class="words"><b>Amount in words:</b> ' + esc(amountWords) + '</div><div class="receipt-meta"><b>Payment mode:</b> ' + esc(mode) + (fee.notes ? ' &nbsp; <b>Remarks:</b> ' + esc(fee.notes) : '') + '</div><p class="note"><b>Note:</b> Fee once deposited will not be refundable in any condition.</p><div class="signatures"><span>Student / Payer</span><span>Authorized Signature</span></div><button onclick="window.print()">Print / Save as PDF</button></body></html>');
   receipt.document.close();
+}
+function numberToIndianWords(amount) {
+  const value = Math.round(Number(amount) || 0);
+  if (!value) return "Rupees Zero Only";
+  const ones = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
+  const tens = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
+  const underThousand = number => {
+    let words = "";
+    if (number >= 100) { words += ones[Math.floor(number / 100)] + " Hundred "; number %= 100; }
+    if (number >= 20) { words += tens[Math.floor(number / 10)] + " "; number %= 10; }
+    if (number) words += ones[number] + " ";
+    return words.trim();
+  };
+  let remaining = value, words = "";
+  [[10000000, "Crore"], [100000, "Lakh"], [1000, "Thousand"], [1, ""]].forEach(([unit, label]) => {
+    const part = Math.floor(remaining / unit);
+    if (part) { words += underThousand(part) + (label ? " " + label : "") + " "; remaining %= unit; }
+  });
+  return "Rupees " + words.trim() + " Only";
 }
 async function submitFee(ev) {
   ev.preventDefault();
   const form = ev.target;
-  const enquiryId = $("#fee-enquiry").value, amount = parseFloat($("#fee-amount").value);
+  const enquiryId = $("#fee-enquiry").value, amount = parseFloat($("#fee-amount").value), items = readFeeBreakdown();
   let ok = true;
   const setErr = (fieldId, msg) => { const f = $(fieldId).closest(".fld"); f.classList.toggle("bad", !!msg); const er = $(".err", f); if (er) er.textContent = msg || ""; if (msg) ok = false; };
   setErr("#fee-enquiry-search", !enquiryId ? "Search and pick a student." : "");
-  setErr("#fee-amount", !(amount > 0) ? "Enter a valid amount." : "");
+  setErr("#fee-amount", !(amount > 0) ? "Enter at least one fee amount." : "");
   if (!ok) return;
-  const payload = { enquiryId, amount, paymentDate: $("#fee-date").value, mode: $("#fee-mode").value, notes: $("#fee-notes").value.trim() };
+  const totals = feeBreakdownTotals(items), mode = totals.cash && totals.cheque ? "Cash + Cheque" : totals.cheque ? "Cheque" : "Cash";
+  const selected = state.enquiries.find(row => String(row.id) === String(enquiryId)) || {};
+  const payload = { enquiryId, amount, paymentDate: $("#fee-date").value, mode, notes: $("#fee-notes").value.trim(), receiptDetails: { batch: $("#fee-batch").value.trim() || selected.batch || "", month: $("#fee-month").value, relation: $("#fee-relation").value.trim(), items } };
   const btn = $("#feeSubmit"); btn.disabled = true; btn.textContent = "Saving…";
   try {
     const created = await Api.fees.create(payload);
@@ -483,14 +535,14 @@ async function load(silent) {
   if (!silent) { state.loading = true; renderAll(); }
   spinRefresh(true);
   try {
-    const [enquiries, fees] = await Promise.all([Api.list(), Api.fees.list().catch(() => state.fees)]);
+    const [enquiries, fees] = await Promise.all([Api.list(), Api.fees.list()]);
     state.enquiries = enquiries; state.fees = fees;
     state.loading = false;
     if (!Api.demo) writeCache(state.enquiries);
   } catch (err) {
     state.loading = false;
     if (err.code === 401) { showLogin(err.message); return; }
-    $("#errMsg").textContent = isNet(err) ? " The server couldn't be reached. Check API_BASE in js/config.js and that your backend allows requests from this page (CORS)." : " " + err.message;
+    $("#errMsg").textContent = " " + err.message;
     $("#errBanner").hidden = false;
   } finally { spinRefresh(false); }
   renderAll();
@@ -907,7 +959,7 @@ $("#loginForm").addEventListener("submit", async ev => {
   if (!u || !p) { $("#loginErr").textContent = "Enter your username and password."; return; }
   const b = $("#loginBtn"); b.disabled = true; b.textContent = "Signing in…"; $("#loginErr").textContent = "";
   try { const r = await Api.login(u, p); setUser(r.user); $("#lp").value = ""; showApp(); }
-  catch (err) { $("#loginErr").textContent = isNet(err) ? "Can't reach the server. Try again shortly." : (err.code === 401 ? "Incorrect email or password." : err.message); }
+  catch (err) { $("#loginErr").textContent = err.message; }
   finally { b.disabled = false; b.textContent = "Sign in"; }
 });
 $("#logout").addEventListener("click", () => { if (Api.demo) { toast("Signed out of demo"); return; } showLogin(""); });
@@ -959,6 +1011,11 @@ $("#enqForm").addEventListener("reset", () => setTimeout(() => { $$("#enqForm .f
 /* fees */
 $("#feeForm").addEventListener("submit", submitFee);
 $("#feeForm").addEventListener("reset", () => setTimeout(() => { $$("#feeForm .fld.bad").forEach(f => { f.classList.remove("bad"); const er = $(".err", f); if (er) er.textContent = ""; }); fillFeeForm(); }, 0));
+$$('.fee-item').forEach(input => input.addEventListener("input", updateFeeBreakdown));
+$("#fee-enquiry").addEventListener("change", () => {
+  const enquiry = state.enquiries.find(row => String(row.id) === String($("#fee-enquiry").value));
+  if (enquiry && !$("#fee-batch").value) $("#fee-batch").value = enquiry.batch || "";
+});
 let feeQTimer; $("#fee-enquiry-search").addEventListener("input", e => { clearTimeout(feeQTimer); feeQTimer = setTimeout(() => populateFeeEnquiryOptions(e.target.value), 150); });
 document.addEventListener("click", ev => { const el = ev.target.closest("[data-fee-delete]"); if (el) deleteFee(el.getAttribute("data-fee-delete")); });
 $$('[data-fee-tab]').forEach(button => button.addEventListener("click", () => setFeeTab(button.dataset.feeTab)));
@@ -966,13 +1023,23 @@ $("#issueReceiptBtn").addEventListener("click", issueReceipt);
 $("#feeExportBtn").addEventListener("click", () => {
   const rows = state.fees.slice().sort((a, b) => (+parse(b.paymentDate) || 0) - (+parse(a.paymentDate) || 0));
   if (!rows.length) { toast("Nothing to export", true); return; }
-  const head = ["Student", "Amount", "Mode", "Date", "Received by", "Notes"];
+  const itemColumns = FEE_ITEMS.flatMap(([key, label]) => [[key, label + " Cash"], [key, label + " Cheque"]]);
+  const head = ["Form No.", "Student", "Course", "Batch", "Fee month", "Relation", ...itemColumns.map(([, label]) => label), "Total", "Mode", "Date", "Received by", "Notes"];
   const q = v => '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"';
-  const csv = [head.map(q).join(",")].concat(rows.map(f => [feeStudentName(f), f.amount, f.mode, f.paymentDate ? isoDay(parse(f.paymentDate)) : "", f.receivedBy, f.notes].map(q).join(","))).join("\r\n");
+  const csv = [head.map(q).join(",")].concat(rows.map(f => {
+    const enquiry = state.enquiries.find(row => String(row.id) === String(f.enquiryId)) || {};
+    const details = f.receiptDetails || {};
+    const items = details.items || { others: { cash: f.mode === "Cheque" ? 0 : Number(f.amount || 0), cheque: f.mode === "Cheque" ? Number(f.amount || 0) : 0 } };
+    const breakdown = itemColumns.map(([key, mode]) => Number((items[key] || {})[mode.toLowerCase().split(" ").pop()]) || 0);
+    return ["LBSTI-" + new Date(f.paymentDate || Date.now()).getFullYear() + "-" + String(f.id).padStart(6, "0"), feeStudentName(f), enquiry.course || f.course, details.batch || enquiry.batch, details.month, details.relation, ...breakdown, f.amount, f.mode, f.paymentDate ? isoDay(parse(f.paymentDate)) : "", f.receivedBy, f.notes].map(q).join(",");
+  })).join("\r\n");
   const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" }));
   a.download = "fee-payments-" + isoDay(new Date()) + ".csv"; document.body.appendChild(a); a.click(); a.remove();
   toast("Exported " + rows.length + " payments");
 });
+
+const whatsapp = $("#whatsappChat"), whatsappNumber = String(CONFIG.WHATSAPP_NUMBER || "").replace(/\D/g, "");
+whatsapp.href = "https://wa.me/" + whatsappNumber + "?text=Hello%2C%20I%20would%20like%20to%20know%20more%20about%20your%20courses.";
 
 /* edit modal */
 $("#mClose").addEventListener("click", requestClose);

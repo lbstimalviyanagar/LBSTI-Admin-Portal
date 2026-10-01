@@ -82,6 +82,7 @@ const Model = (function () {
       paymentDate: pick("paymentDate", "payment_date", "date"),
       mode: String(pick("mode", "payment_mode") || "Cash"),
       notes: String(pick("notes", "note", "remark") || ""),
+      receiptDetails: (() => { const value = pick("receiptDetails", "receipt_details"); if (!value) return {}; try { return typeof value === "string" ? JSON.parse(value) : value; } catch (e) { return {}; } })(),
       receivedBy: nameOf(pick("receivedBy", "received_by")),
       createdAt: pick("createdAt", "created_at")
     };
@@ -109,19 +110,32 @@ const Http = (function () {
     if (body) headers["Content-Type"] = "application/json";
     const t = getToken();
     if (CONFIG.AUTH_MODE === "token" && t) headers["Authorization"] = "Bearer " + t;
-    const res = await fetch(CONFIG.API_BASE + path, {
-      method, headers,
-      body: body ? JSON.stringify(body) : undefined,
-      credentials: CONFIG.AUTH_MODE === "cookie" ? "include" : "same-origin"
-    });
-    if (res.status === 401) { const e = new Error("Your session has expired. Please sign in again."); e.code = 401; throw e; }
-    if (!res.ok) {
-      let m = ""; try { const j = await res.json(); m = j.message || j.error || ""; } catch (e) {}
-      const err = new Error(m || "Request failed (" + res.status + ")"); err.code = res.status; throw err;
+    const url = CONFIG.API_BASE.replace(/\/+$/, "") + "/" + path.replace(/^\/+/, "");
+    let res;
+    try {
+      res = await fetch(url, {
+        method, headers,
+        body: body ? JSON.stringify(body) : undefined,
+        credentials: CONFIG.AUTH_MODE === "cookie" ? "include" : "same-origin"
+      });
+    } catch (cause) {
+      const err = new Error("Unable to reach the API at " + url + ". Check that the server is available and allows this site's origin (CORS).", { cause });
+      err.code = 0;
+      throw err;
     }
-    if (res.status === 204) return null;
     const txt = await res.text();
-    return txt ? JSON.parse(txt) : null;
+    let data = null;
+    if (txt) {
+      try { data = JSON.parse(txt); }
+      catch (cause) {
+        if (res.ok) throw new Error("The API returned an invalid response (HTTP " + res.status + ").");
+      }
+    }
+    if (!res.ok) {
+      const message = data && (data.message || data.error) || (txt && !/^\s*</.test(txt) ? txt.trim() : "") || "Request failed (HTTP " + res.status + ")";
+      const err = new Error(message); err.code = res.status; throw err;
+    }
+    return data;
   }
   return { request, getToken, setToken };
 })();
@@ -259,18 +273,19 @@ function buildSupabaseBackend() {
       return Model.normRemark({ id: data.id, text: data.text, created_at: data.created_at, author: data.author && data.author.full_name });
     },
     async listFees() {
-      const { data, error } = await sb.from("fees").select("id, enquiry_id, amount, payment_date, mode, notes, created_at, enquiries(name), received:profiles(full_name)").order("payment_date", { ascending: false });
+      const { data, error } = await sb.from("fees").select("id, enquiry_id, amount, payment_date, mode, notes, receipt_details, created_at, enquiries(name, course, batch), received:profiles(full_name)").order("payment_date", { ascending: false });
       must(error);
       return (data || []).map(r => Model.normFee({
         id: r.id, enquiry_id: r.enquiry_id, amount: r.amount, payment_date: r.payment_date, mode: r.mode, notes: r.notes, created_at: r.created_at,
-        student_name: r.enquiries && r.enquiries.name, receivedBy: r.received && r.received.full_name
+        student_name: r.enquiries && r.enquiries.name, course: r.enquiries && r.enquiries.course, batch: r.enquiries && r.enquiries.batch,
+        receipt_details: r.receipt_details, receivedBy: r.received && r.received.full_name
       }));
     },
     async addFee(payload) {
-      const body = { enquiry_id: payload.enquiryId, amount: payload.amount, payment_date: payload.paymentDate || null, mode: payload.mode, notes: payload.notes, received_by: Auth.user() && Auth.user().id };
-      const { data, error } = await sb.from("fees").insert(body).select("id, enquiry_id, amount, payment_date, mode, notes, created_at, enquiries(name)").single();
+      const body = { enquiry_id: payload.enquiryId, amount: payload.amount, payment_date: payload.paymentDate || null, mode: payload.mode, notes: payload.notes, receipt_details: payload.receiptDetails || {}, received_by: Auth.user() && Auth.user().id };
+      const { data, error } = await sb.from("fees").insert(body).select("id, enquiry_id, amount, payment_date, mode, notes, receipt_details, created_at, enquiries(name, course, batch)").single();
       must(error);
-      return Model.normFee({ id: data.id, enquiry_id: data.enquiry_id, amount: data.amount, payment_date: data.payment_date, mode: data.mode, notes: data.notes, created_at: data.created_at, student_name: data.enquiries && data.enquiries.name });
+      return Model.normFee({ id: data.id, enquiry_id: data.enquiry_id, amount: data.amount, payment_date: data.payment_date, mode: data.mode, notes: data.notes, receipt_details: data.receipt_details, created_at: data.created_at, student_name: data.enquiries && data.enquiries.name, course: data.enquiries && data.enquiries.course, batch: data.enquiries && data.enquiries.batch });
     },
     async removeFee(id) {
       const { error } = await sb.from("fees").delete().eq("id", id);

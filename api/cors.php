@@ -1,6 +1,7 @@
 <?php
 
 $allowedOrigins = [
+    'https://shireen-workspace.github.io',
     'https://lbstimn.com',
     'https://www.lbstimn.com',
     'http://127.0.0.1:5500',
