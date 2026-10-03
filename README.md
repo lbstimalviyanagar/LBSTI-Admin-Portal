@@ -1,132 +1,149 @@
 # LBSTIMN Admissions CRM
 
-Navy-themed Enquiries + Fees admin portal with persistent storage. It runs
-with a local Express + SQLite backend by default so every form submission,
-edit, and payment is saved to a real database and still appears after page
-reload. The original Supabase-ready frontend code remains available in the
-project as an option, but the local backend is the easiest way to make it
-work immediately without extra credentials.
+A React/Vite admissions CRM with a separate Express API and a PostgreSQL or MySQL database. The React screens retain the existing dashboard, enquiry workflow, analytics, reminders, speech/translation helpers, fees, receipts, and responsive navigation.
 
-## Quick start
-1. Install dependencies:
-   npm install
-2. Start the server:
-   npm start
-3. Open the app in the browser:
-   http://localhost:3001
+## Project layout
 
-The app saves enquiries, remarks, and fee records in the SQLite file at
-[data/lbstimn.db](data/lbstimn.db). Refreshing the browser reloads live data
-from the database and recalculates the charts automatically.
+```text
+frontend/
+  src/components/   React UI and chart components
+  src/services/     API client
+  src/utils/        Shared formatting, date, and browser helpers
+  public/           Logo and static assets
+  .env.example
+backend/
+  config/           Environment and database configuration
+  controllers/      Authentication, enquiry, fee, and receipt handlers
+  middleware/       Auth, CORS, and error handling
+  models/           Database connection and schema setup
+  routes/           REST endpoints
+  schema/           Hostinger MySQL schema reference
+  scripts/          Database and operator commands
+  .env.example
+  server.js
+.gitignore
+```
 
-## Files
-- index.html          Page structure (login, dashboard, forms, tables, modal)
-- css/style.css        Navy design system, responsive layout, sticky footer
-- schema.sql            Run this in Supabase SQL Editor once (tables, RLS, realtime)
-- js/config.js          Settings: BACKEND mode, statuses, courses, counselors...
-- js/supabase.js        Supabase client init — put your Project URL + anon key here
-- js/auth.js            Sign in/out, session restore, role lookup
-- js/utils.js           Date/formatting helpers
-- js/api.js             Data model + the Api facade (Supabase / REST / demo)
-- js/charts.js          Dependency-free SVG charts, hover tooltips, click-to-filter
-- js/app.js             UI logic
+The root `package.json` provides convenience commands. Dependency folders and build output are ignored by Git.
 
-## 1. Set up Supabase (5 minutes)
-1. Create a free project at supabase.com.
-2. Project -> SQL Editor -> New query -> paste all of `schema.sql` -> Run.
-3. Project -> Authentication -> Providers -> make sure Email is enabled.
-4. Project -> Authentication -> Users -> Add user (email + password) for
-   each counselor/admin who should log in.
-5. In the SQL Editor, promote whoever should be an admin:
-   `update public.profiles set role = 'admin' where id = '<their-user-uuid>';`
-   (find the uuid on the Authentication -> Users page). Everyone else
-   defaults to 'counselor'.
-6. Project -> Settings -> API -> copy the **Project URL** and **anon public
-   key** into `js/supabase.js`:
-       const SUPABASE_URL = "https://xxxx.supabase.co";
-       const SUPABASE_ANON_KEY = "eyJ...";
-   The anon key is safe to ship in frontend code — Row Level Security
-   (already set up by schema.sql) is what actually protects the data.
-7. Open index.html (or push to GitHub Pages). You'll get a real login
-   screen; sign in with one of the accounts from step 4.
+## Local development
 
-Leave `js/supabase.js` at its placeholder values and the app runs on
-built-in demo data instead (useful for previewing the UI without a
-database) — see `CONFIG.BACKEND` in js/config.js.
+Requires Node.js 20.19 or newer.
 
-**Loading behaviour:** the Supabase SDK is loaded asynchronously (jsDelivr,
-then unpkg as backup, 8s timeout each) and only when `js/supabase.js` is
-filled in. A slow or blocked CDN can never freeze the page — you'll see a
-"Loading…" screen, then either the app or a clear error message.
+```powershell
+npm run install:all
+```
 
-## 2. What's dynamic (nothing hardcoded)
-- **All CRUD** (new leads, edits, remarks, admission confirmation, fee
-  payments) writes straight to Supabase via `js/api.js`'s Supabase
-  backend, and reads back from it.
-- **Realtime**: `Api.subscribe()` opens a Supabase Realtime channel on
-  `enquiries`, `remarks` and `fees`. Any insert/update/delete — from this
-  browser tab, a teammate's tab, or the Supabase dashboard — triggers a
-  silent background refresh, so dashboard numbers and charts update
-  live without a manual reload.
-- **Follow-up reminders**: the bell and the "Daily Follow-up Reminder"
-  card are computed from real rows (`follow_up_date` vs today), not a
-  fixed number.
-- **Charts**: Inquiry Trends, Enquiries by Course, Counselor Workload,
-  Lead Status Overview, Leads by Source — all computed from live data,
-  with hover tooltips (14px value labels, 12px axis ticks) and now
-  **click-to-filter**: click any bar/segment/legend item and it jumps to
-  the Enquiries Table pre-filtered to that course/counselor/status/source.
+Run the API and frontend in separate terminals:
 
-## 3. Auth & roles
-- Login uses Supabase Auth (`signInWithPassword`) with email + password.
-- `profiles.role` is `'admin'` or `'counselor'`.
-- Row Level Security enforces the split at the database level (not just
-  hidden in the UI): counselors only ever receive rows where
-  `enquiries.assigned_to` matches their own `full_name`; admins receive
-  everything. This applies to enquiries, remarks and fees alike.
-- **Important**: keep each counselor's Supabase `profiles.full_name`
-  identical to how they're assigned in the app (the Counselor dropdown,
-  `js/config.js` -> `COUNSELORS`) — the match is a plain text compare.
+```powershell
+npm run dev:backend
+npm run dev:frontend
+```
 
-## 4. Fees (new, separate section)
-A dedicated "Fees" tab, independent of the Enquiries table:
-- Record a payment against any existing lead (search by name/phone,
-  amount, date, mode, notes).
-- Payment history table with delete, and CSV export.
-- Stats: total collected, collected this month, average payment.
-- Table: `public.fees` (schema.sql), RLS mirrors enquiries (a counselor
-  only sees/adds payments for leads assigned to them; admins see all).
+The frontend is at `http://localhost:5173`; Vite proxies `/api` to the development API on port 5000. Development may use SQLite. Production startup explicitly rejects SQLite and localhost database hosts.
 
-## 5. Course list, statuses, counselors, batches
-All defined once in `js/config.js` / `Model` (js/api.js) and used
-everywhere (forms, filters, charts) automatically:
-- Statuses: New, No Response, Counseling Scheduled, Counseling done,
-  Confirmed, Dropped — matches the `enquiries.status` check constraint
-  in schema.sql. Change both together if you rename any.
-- Courses: `Model.COURSES` in js/api.js — the full ADCA/DIT/CTT/... list
-  plus MERN/Full Stack/React JS/... technology tracks.
-- Counselors: `CONFIG.COUNSELORS` seeds the dropdown; any name already
-  used in the data is picked up automatically too.
+There are no default login credentials. To create a local account, provide a password through a temporary environment variable, then remove it:
 
-## 6. Speech-to-text + translation
-Each remarks/notes field has a mic button (Chrome/Edge, HTTPS or
-localhost, needs mic permission) and a Translate button. Translate calls
-a free MyMemory API by default (no key) and shows the English
-translation in a preview box — it never overwrites what was typed; you
-choose to insert it. Set `CONFIG.TRANSLATE.provider` to `"google"` with
-an `apiKey` for Google Cloud Translate instead, or `"none"` to hide it.
+```powershell
+$secure = Read-Host 'Account password' -AsSecureString
+$env:NEW_USER_PASSWORD = [System.Net.NetworkCredential]::new('', $secure).Password
+npm --prefix backend run create-user -- admin 'Portal Administrator' admin
+Remove-Item Env:NEW_USER_PASSWORD
+```
 
-## 7. Deploying to GitHub Pages
-Nothing special — Pages serves static files, and this is a static site
-that talks to Supabase over HTTPS from the browser. Push the repo, turn
-on Pages (Settings -> Pages -> Deploy from branch), done. Just make sure
-`js/supabase.js` has your real URL/key committed (or, better for a
-public repo, keep them out of git and paste them in after cloning —
-they're not secret, but you may still prefer that).
+## Hosted database and existing data
 
-## 8. REST-API mode (optional, instead of Supabase)
-If you'd rather point this at your own backend instead of Supabase, set
-`CONFIG.BACKEND = "rest"` and fill in `API_BASE` / `ENDPOINTS` — the
-original REST implementation (Bearer token or cookie auth) is still in
-js/api.js and works exactly as before. `CONFIG.BACKEND = "demo"` (or
-leaving Supabase unconfigured) runs on in-memory sample data.
+Provision a persistent PostgreSQL database (for example, Neon, Render PostgreSQL, or Supabase) or use the existing remotely hosted MySQL service. Configure the backend with one of:
+
+- `DATABASE_URL=postgresql://...` for PostgreSQL
+- `DATABASE_URL=mysql://...` for MySQL
+- `DATABASE_HOST`, `DATABASE_PORT`, `DATABASE_USER`, `DATABASE_PASSWORD`, and `DATABASE_NAME` for MySQL
+
+The backend creates the required `enquiries`, `remarks`, `fees`, and `portal_users` tables at startup. To run schema setup separately after configuring the backend environment:
+
+```powershell
+npm --prefix backend run migrate
+```
+
+If `backend/data/lbstimn.db` is available, it is ignored by Git and is not changed by deployment. To copy its enquiries, users, remarks, and payments to a newly provisioned, empty hosted database, run this once from the repository root with the hosted database URL and a strong signing secret set in the shell. Set `SQLITE_SOURCE` only if your source file is at a different path:
+
+```powershell
+$env:NODE_ENV = 'production'
+$env:DATABASE_URL = 'postgresql://USER:PASSWORD@HOST:5432/DATABASE?sslmode=require'
+$env:AUTH_SECRET = '<random value with at least 32 characters>'
+npm --prefix backend run migrate:sqlite
+Remove-Item Env:NODE_ENV, Env:DATABASE_URL, Env:AUTH_SECRET
+```
+
+The importer reads `backend/data/lbstimn.db` in read-only mode and refuses to write into a target with existing records. Back up both databases first. If the old data is already in hosted MySQL, point the API at that database instead; do not import it a second time.
+
+If the import contains no portal user, create one using the command above while connected to the hosted database. Otherwise, imported user accounts and password hashes are retained.
+
+## Deploy the API
+
+Deploy `backend/` as a Node web service on Render, Railway, Fly.io, or an equivalent host. Use:
+
+- Build command: `npm ci --omit=dev`
+- Start command: `npm start`
+- Runtime: Node.js 20.19+
+
+Set these service environment variables in the host dashboard:
+
+```text
+NODE_ENV=production
+AUTH_SECRET=<unique random value, at least 32 characters>
+FRONTEND_URL=https://<your-frontend-domain>
+DATABASE_URL=<hosted PostgreSQL or MySQL connection string>
+```
+
+The hosting platform supplies `PORT`. The API listens on `0.0.0.0` and exposes `GET /api/health`; it reports database availability. CORS allows only exact origins in `FRONTEND_URL` (comma-separated for multiple known domains). Do not use `*` or include a trailing path in the origin.
+
+## Deploy the frontend
+
+Deploy `frontend/` as a Vite static site on Vercel, Netlify, Cloudflare Pages, or equivalent:
+
+- Root directory: `frontend`
+- Build command: `npm run build`
+- Output directory: `dist`
+- Environment variable: `VITE_API_URL=https://<your-api-domain>`
+
+`VITE_API_URL` is the public HTTPS API origin; the React client appends `/api`. Rebuild/redeploy the frontend after changing this variable. Production code refuses to silently fall back to a same-origin API when it is unset.
+
+## API and verification
+
+The API requires a Bearer token for enquiry, remark, fee, and receipt operations.
+
+- `POST /api/auth/login`, `GET /api/auth/me`
+- `GET|POST /api/enquiries`, `PATCH|DELETE /api/enquiries/:id`
+- `POST /api/enquiries/:id/confirm`
+- `GET|POST /api/enquiries/:id/remarks`
+- `GET|POST /api/fees`, `DELETE /api/fees/:id`
+- `POST /api/receipts`
+- `GET /api/health`
+
+Build the frontend:
+
+```powershell
+$env:VITE_API_URL = 'https://<your-api-domain>'
+npm --prefix frontend run build
+Remove-Item Env:VITE_API_URL
+```
+
+Run the live API create/read/update/delete check with an account authorized for fees. It removes the temporary enquiry and payment it creates:
+
+```powershell
+$env:API_BASE_URL = 'https://<your-api-domain>'
+$env:FRONTEND_ORIGIN = 'https://<your-frontend-domain>'
+$env:TEST_USERNAME = '<test-account>'
+$secure = Read-Host 'Test account password' -AsSecureString
+$env:TEST_PASSWORD = [System.Net.NetworkCredential]::new('', $secure).Password
+npm --prefix backend run test:api
+Remove-Item Env:API_BASE_URL, Env:FRONTEND_ORIGIN, Env:TEST_USERNAME, Env:TEST_PASSWORD
+```
+
+Verify CORS from the deployed browser origin, sign in, create/update/delete a test enquiry and payment, issue a receipt, and refresh the frontend. The smoke test needs a deployed API and a real database-backed account; it is intentionally not run against the preserved local database.
+
+## Deployment status
+
+Source code is prepared for separate frontend, API, and hosted-database deployment, but this workspace does not contain hosting-provider access or database credentials. Therefore no public frontend/API URLs have been provisioned or verified here. The example domains above are placeholders, not live services; supply the hosting accounts and real database connection settings before a public deployment can be completed.

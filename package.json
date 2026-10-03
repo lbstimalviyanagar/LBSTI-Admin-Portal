@@ -1,24 +1,22 @@
 {
-  "name": "lbsti-crm",
+  "name": "lbsti-crm-portal",
   "version": "1.0.0",
-  "description": "LBSTIMN admissions CRM with a local backend and SQLite database",
-  "main": "server.js",
+  "description": "LBSTIMN Full-Stack Admissions CRM & Admin Portal",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js",
-    "create-users": "node scripts/create-users.js"
+    "dev": "node -e \"const { spawn } = require('child_process'); spawn('npm', ['run', 'dev'], { cwd: './backend', stdio: 'inherit', shell: true }); spawn('npm', ['run', 'dev'], { cwd: './frontend', stdio: 'inherit', shell: true });\"",
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "build": "npm --prefix frontend run build",
+    "start": "npm --prefix backend start",
+    "install:all": "npm --prefix backend install && npm --prefix frontend install"
   },
   "keywords": [
     "crm",
+    "react",
     "express",
-    "sqlite",
-    "admissions"
+    "admissions",
+    "fullstack"
   ],
   "author": "",
-  "license": "MIT",
-  "dependencies": {
-    "cors": "^2.8.5",
-    "express": "^4.19.2",
-    "sqlite3": "^5.1.7"
-  }
+  "license": "MIT"
 }

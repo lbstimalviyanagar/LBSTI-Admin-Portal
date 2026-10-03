@@ -1,3 +1,50 @@
+# Node modules
 node_modules/
+*/node_modules/
+
+# Local environment files and credentials
+.env
+.env.local
+.env.*.local
+*.env
+backend/.env
+frontend/.env
+# Note: frontend/.env.production is deliberately allowed if it only contains public VITE_API_URL
+# Uncomment the line below if you add sensitive tokens to it:
+# frontend/.env.production 
+
+.auth-secret
+backend/data/.auth-secret
+
+# PHP Backend Config & Setup
+php_backend/config.php
+php_backend/setup_admin.php
+scratch_fix_php.js
+
+# Production build outputs
+dist/
+build/
+frontend/dist/
+.vite/
+.cache/
+coverage/
+
+# Local SQLite databases & runtime data
 data/*.db
+data/*.db-journal
+backend/data/*.db
+backend/data/*.db-journal
+
+# Logs
 npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# IDE configuration
+.vscode/
+.idea/
