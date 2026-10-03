@@ -1,0 +1,50 @@
+name: Deploy to Hostinger FTP
+
+on:
+  push:
+    branches:
+      - main # Triggers deployment when you push to the main branch
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20' # Use your local node version
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Frontend Dependencies
+        working-directory: ./frontend
+        run: npm install
+
+      - name: Build Frontend (React/Vite)
+        working-directory: ./frontend
+        run: npm run build
+        
+      - name: Prepare Deployment Folder
+        run: |
+          mkdir -p deployment-bundle
+          # 1. Copy the built React app into the root of the bundle (public_html)
+          cp -R frontend/dist/* deployment-bundle/
+          
+          # 2. If you are using the PHP backend, uncomment the line below:
+          # cp -R php_backend/* deployment-bundle/api/
+          
+          # (If you are using the Node.js 'backend', it requires manual setup in Hostinger's Node.js App module)
+
+      - name: Sync files via FTP to Hostinger
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          local-dir: ./deployment-bundle/
+          # Hostinger's FTP root is already public_html for this specific user, so we upload to the root of the FTP account:
+          server-dir: ./
