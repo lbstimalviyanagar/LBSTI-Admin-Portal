@@ -34,8 +34,8 @@ jobs:
           # 1. Copy the built React app into the root of the bundle (public_html)
           cp -R frontend/dist/* deployment-bundle/
           
-          # 2. If you are using the PHP backend, uncomment the line below:
-          # cp -R php_backend/* deployment-bundle/api/
+          # 2. Deploy the PHP backend to the /api folder:
+          cp -a php_backend/. deployment-bundle/api/
           
           # (If you are using the Node.js 'backend', it requires manual setup in Hostinger's Node.js App module)
 
