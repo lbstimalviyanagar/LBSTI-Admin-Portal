@@ -35,6 +35,7 @@ jobs:
           cp -R frontend/dist/* deployment-bundle/
           
           # 2. Deploy the PHP backend to the /api folder:
+          mkdir -p deployment-bundle/api
           cp -a php_backend/. deployment-bundle/api/
           
           # (If you are using the Node.js 'backend', it requires manual setup in Hostinger's Node.js App module)
