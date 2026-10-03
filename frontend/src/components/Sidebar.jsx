@@ -59,7 +59,11 @@ export default function Sidebar({
       </div>
 
       <div className="user">
-        <div className="avatar">{initials(userName)}</div>
+        {user?.profilePhotoUrl ? (
+          <img src={user.profilePhotoUrl} alt={userName} className="avatar" />
+        ) : (
+          <div className="avatar">{initials(userName)}</div>
+        )}
         <div>
           <b>{userName}</b>
           <span>{userRole}</span>

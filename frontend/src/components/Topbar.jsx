@@ -145,7 +145,11 @@ export default function Topbar({
         </div>
 
         <div className="top-user">
-          <div className="avatar">{userName.charAt(0).toUpperCase()}</div>
+          {user?.profilePhotoUrl ? (
+            <img src={user.profilePhotoUrl} alt={userName} className="avatar" />
+          ) : (
+            <div className="avatar">{userName.charAt(0).toUpperCase()}</div>
+          )}
           <span>{userName}</span>
         </div>
       </div>
