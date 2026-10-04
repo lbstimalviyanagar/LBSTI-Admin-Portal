@@ -229,12 +229,14 @@ export function numberToIndianWords(amount) {
 export function feeBreakdownTotals(items = {}) {
   let cash = 0;
   let cheque = 0;
+  let online = 0;
   for (const key of Object.keys(items)) {
     const item = items[key] || {};
     cash += Number(item.cash || 0);
     cheque += Number(item.cheque || 0);
+    online += Number(item.online || 0);
   }
-  return { cash, cheque };
+  return { cash, cheque, online };
 }
 
 // Translation helper using MyMemory or Google Translate

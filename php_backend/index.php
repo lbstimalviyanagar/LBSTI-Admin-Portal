@@ -133,6 +133,43 @@ if ($route === 'auth/login') {
     elseif ($method === "POST") createBatch($pdo, $user, $body);
     elseif ($method === "PUT" || $method === "PATCH") updateBatch($pdo, $user, $id, $body);
     elseif ($method === "DELETE") deleteBatch($pdo, $user, $id);
+} elseif ($route === "search-students") {
+    $user = requireAuth($authSecret);
+    $q = isset($_GET['q']) ? trim($_GET['q']) : '';
+    if (strlen($q) < 1) {
+        echo json_encode([]);
+        exit();
+    }
+    $like = "%{$q}%";
+    $sql = "SELECT s.id, s.student_id, s.name, s.guardian_name, s.phone, s.email,
+                   GROUP_CONCAT(DISTINCT e.course ORDER BY e.doa DESC SEPARATOR ', ') AS courses,
+                   GROUP_CONCAT(DISTINCT CONCAT(e.course, ' (', e.status, ')') ORDER BY e.doa DESC SEPARATOR ', ') AS course_details,
+                   MAX(e.doa) AS last_enrollment_date,
+                   COUNT(e.id) AS enrollment_count
+            FROM students s
+            LEFT JOIN enrollments e ON e.student_id = s.student_id
+            WHERE s.name LIKE ? OR s.student_id LIKE ? OR s.phone LIKE ?
+            GROUP BY s.id
+            ORDER BY s.name ASC
+            LIMIT 30";
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([$like, $like, $like]);
+    $results = [];
+    while ($row = $stmt->fetch()) {
+        $results[] = [
+            "id" => (int)$row["id"],
+            "studentId" => $row["student_id"],
+            "name" => $row["name"],
+            "guardianName" => $row["guardian_name"],
+            "phone" => $row["phone"],
+            "email" => $row["email"],
+            "courses" => $row["courses"] ?: "",
+            "courseDetails" => $row["course_details"] ?: "",
+            "lastEnrollmentDate" => $row["last_enrollment_date"],
+            "enrollmentCount" => (int)$row["enrollment_count"]
+        ];
+    }
+    echo json_encode($results);
 } else {
     http_response_code(404);
     echo json_encode(["message" => "Endpoint not found"]);

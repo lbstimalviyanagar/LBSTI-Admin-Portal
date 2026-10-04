@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import Icon from './Icons';
 import {
   FEE_ITEMS,
@@ -12,6 +12,16 @@ import {
 } from '../utils/helpers';
 import api from '../services/api';
 
+// Debounce helper
+function useDebounce(value, delay) {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+  useEffect(() => {
+    const handler = setTimeout(() => setDebouncedValue(value), delay);
+    return () => clearTimeout(handler);
+  }, [value, delay]);
+  return debouncedValue;
+}
+
 export default function PaymentsSection({
   fees = [],
   enquiries = [], students = [],
@@ -21,8 +31,15 @@ export default function PaymentsSection({
   onToast
 }) {
   const [feeTab, setFeeTab] = useState('dashboard'); // 'dashboard' | 'payment' | 'history' | 'receipt'
-  const [searchStudent, setSearchStudent] = useState('');
-  const [selectedEnquiryId, setSelectedEnquiryId] = useState('');
+
+  // Smart search state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [selectedStudent, setSelectedStudent] = useState(null);
+  const dropdownRef = useRef(null);
+
   const [batch, setBatch] = useState('');
   const [feeMonth, setFeeMonth] = useState(isoDay(new Date()).slice(0, 7));
   const [relation, setRelation] = useState('');
@@ -31,9 +48,9 @@ export default function PaymentsSection({
   const [selectedReceiptPaymentId, setSelectedReceiptPaymentId] = useState('');
   const [savingPayment, setSavingPayment] = useState(false);
 
-  // Particulars breakdown
+  // Particulars breakdown — now includes 'online'
   const [breakdown, setBreakdown] = useState(
-    Object.fromEntries(FEE_ITEMS.map(([key]) => [key, { cash: 0, cheque: 0 }]))
+    Object.fromEntries(FEE_ITEMS.map(([key]) => [key, { cash: 0, cheque: 0, online: 0 }]))
   );
 
   const handleBreakdownChange = (key, mode, val) => {
@@ -48,37 +65,71 @@ export default function PaymentsSection({
   };
 
   const totals = feeBreakdownTotals(breakdown);
-  const totalAmount = (totals.cash + totals.cheque).toFixed(2);
+  const totalAmount = (totals.cash + totals.cheque + totals.online).toFixed(2);
 
-  // Filter student enquiries for selection
-  const needle = searchStudent.trim().toLowerCase();
-  const matchedEnquiries = students
-    .filter(e => !needle || `${e.name} ${e.phone}`.toLowerCase().includes(needle))
-    .slice(0, 50);
+  // ── Smart Student Search ──
+  const debouncedQuery = useDebounce(searchQuery, 350);
 
-  const handleSelectStudent = (id) => {
-    setSelectedEnquiryId(id);
-    const enquiry = students.find(e => String(e.id) === String(id));
-    if (enquiry && enquiry?.batch) {
-      setBatch(enquiry.batch);
+  useEffect(() => {
+    if (!debouncedQuery || debouncedQuery.trim().length < 1) {
+      setSearchResults([]);
+      return;
     }
-  };
+    let cancelled = false;
+    (async () => {
+      setSearching(true);
+      try {
+        const results = await api.searchStudents(debouncedQuery);
+        if (!cancelled) {
+          setSearchResults(results);
+          setShowDropdown(true);
+        }
+      } catch {
+        if (!cancelled) setSearchResults([]);
+      } finally {
+        if (!cancelled) setSearching(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [debouncedQuery]);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handler = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setShowDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const handleSelectStudent = useCallback((student) => {
+    setSelectedStudent(student);
+    setSearchQuery(student.name);
+    setShowDropdown(false);
+    // Auto-fill guardian name
+    setRelation(student.guardianName || '');
+    // Auto-fill batch from course info
+    setBatch(student.courses || '');
+  }, []);
 
   const handleClearForm = () => {
-    setSelectedEnquiryId('');
-    setSearchStudent('');
+    setSelectedStudent(null);
+    setSearchQuery('');
+    setSearchResults([]);
     setBatch('');
     setFeeMonth(isoDay(new Date()).slice(0, 7));
     setRelation('');
     setPaymentDate(isoDay(new Date()));
     setNotes('');
-    setBreakdown(Object.fromEntries(FEE_ITEMS.map(([key]) => [key, { cash: 0, cheque: 0 }])));
+    setBreakdown(Object.fromEntries(FEE_ITEMS.map(([key]) => [key, { cash: 0, cheque: 0, online: 0 }])));
   };
 
   const handleSubmitPayment = async (e) => {
     e.preventDefault();
-    if (!selectedEnquiryId) {
-      onToast("Search and pick a student enquiry.", true);
+    if (!selectedStudent) {
+      onToast("Search and pick a student first.", true);
       return;
     }
     if (!(parseFloat(totalAmount) > 0)) {
@@ -87,17 +138,20 @@ export default function PaymentsSection({
     }
 
     setSavingPayment(true);
-    const selectedEnquiry = students.find(e => String(e.id) === String(selectedEnquiryId)) || {};
-    const mode = totals.cash && totals.cheque ? "Cash + Cheque" : totals.cheque ? "Cheque" : "Cash";
+    const modes = [];
+    if (totals.cash) modes.push("Cash");
+    if (totals.cheque) modes.push("Cheque");
+    if (totals.online) modes.push("UPI/Online");
+    const mode = modes.join(" + ") || "Cash";
 
     const payload = {
-      enquiryId: Number(selectedEnquiryId),
+      enquiryId: Number(selectedStudent.id),
       amount: parseFloat(totalAmount),
       paymentDate: paymentDate || isoDay(new Date()),
       mode,
       notes: notes.trim(),
       receiptDetails: {
-        batch: batch.trim() || selectedEnquiry.batch || '',
+        batch: batch.trim() || selectedStudent.courses || '',
         month: feeMonth,
         relation: relation.trim(),
         items: breakdown
@@ -145,15 +199,16 @@ export default function PaymentsSection({
     const items = details.items && typeof details.items === 'object' ? details.items : {
       others: {
         cash: fee.mode === "Cheque" ? 0 : Number(fee.amount || 0),
-        cheque: fee.mode === "Cheque" ? Number(fee.amount || 0) : 0
+        cheque: fee.mode === "Cheque" ? Number(fee.amount || 0) : 0,
+        online: 0
       }
     };
 
     const feeTotals = feeBreakdownTotals(Object.assign(
-      Object.fromEntries(FEE_ITEMS.map(([key]) => [key, { cash: 0, cheque: 0 }])),
+      Object.fromEntries(FEE_ITEMS.map(([key]) => [key, { cash: 0, cheque: 0, online: 0 }])),
       items
     ));
-    const total = feeTotals.cash + feeTotals.cheque || Number(fee.amount || 0);
+    const total = feeTotals.cash + feeTotals.cheque + feeTotals.online || Number(fee.amount || 0);
     const monthValue = details.month || "";
     const monthLabel = monthValue ? new Date(`${monthValue}-01T00:00:00`).toLocaleDateString("en-IN", { month: "long", year: "numeric" }) : "–";
     const amountWords = numberToIndianWords(total);
@@ -162,19 +217,25 @@ export default function PaymentsSection({
       const item = items[key] || {};
       const cash = Number(item.cash) || 0;
       const cheque = Number(item.cheque) || 0;
-      const itemTotal = cash + cheque;
+      const online = Number(item.online) || 0;
+      const itemTotal = cash + cheque + online;
       return `
         <tr>
           <td>${index + 1}.</td>
           <th scope="row">${label}</th>
           <td>${cash ? `₹${cash.toLocaleString("en-IN")}` : ''}</td>
           <td>${cheque ? `₹${cheque.toLocaleString("en-IN")}` : ''}</td>
+          <td>${online ? `₹${online.toLocaleString("en-IN")}` : ''}</td>
           <td>${itemTotal ? `₹${itemTotal.toLocaleString("en-IN")}` : ''}</td>
         </tr>
       `;
     }).join("");
 
-    const displayMode = feeTotals.cash && feeTotals.cheque ? "Cash and Cheque" : feeTotals.cheque ? "Cheque" : "Cash";
+    const displayModes = [];
+    if (feeTotals.cash) displayModes.push("Cash");
+    if (feeTotals.cheque) displayModes.push("Cheque");
+    if (feeTotals.online) displayModes.push("UPI/Online");
+    const displayMode = displayModes.join(" and ") || "Cash";
 
     receiptWin.document.write(`
       <!doctype html>
@@ -232,6 +293,7 @@ export default function PaymentsSection({
               <th>Particulars</th>
               <th>Cash</th>
               <th>Cheque</th>
+              <th>UPI/Online</th>
               <th>Total</th>
             </tr>
           </thead>
@@ -243,6 +305,7 @@ export default function PaymentsSection({
               <th colspan="2">TOTAL</th>
               <td>₹${feeTotals.cash.toLocaleString("en-IN")}</td>
               <td>₹${feeTotals.cheque.toLocaleString("en-IN")}</td>
+              <td>₹${feeTotals.online.toLocaleString("en-IN")}</td>
               <td class="total-row">₹${total.toLocaleString("en-IN")}</td>
             </tr>
           </tfoot>
@@ -270,7 +333,8 @@ export default function PaymentsSection({
     }
     const itemColumns = FEE_ITEMS.flatMap(([key, label]) => [
       [key, `${label} Cash`],
-      [key, `${label} Cheque`]
+      [key, `${label} Cheque`],
+      [key, `${label} UPI/Online`]
     ]);
     const headers = [
       "Form No.", "Student", "Course", "Batch", "Fee month", "Relation",
@@ -287,11 +351,12 @@ export default function PaymentsSection({
         const items = details.items || {
           others: {
             cash: f.mode === "Cheque" ? 0 : Number(f.amount || 0),
-            cheque: f.mode === "Cheque" ? Number(f.amount || 0) : 0
+            cheque: f.mode === "Cheque" ? Number(f.amount || 0) : 0,
+            online: 0
           }
         };
         const breakdownValues = itemColumns.map(([key, modeLabel]) => {
-          const m = modeLabel.toLowerCase().endsWith("cash") ? "cash" : "cheque";
+          const m = modeLabel.toLowerCase().endsWith("cash") ? "cash" : modeLabel.toLowerCase().endsWith("cheque") ? "cheque" : "online";
           return Number((items[key] || {})[m]) || 0;
         });
 
@@ -340,7 +405,7 @@ export default function PaymentsSection({
     <section>
       <div className="page-head">
         <div>
-          <h2>Fees Management</h2>
+          <h2>Payments</h2>
           <p>Manage fee payments, breakdown particulars, and official receipts.</p>
         </div>
       </div>
@@ -437,44 +502,119 @@ export default function PaymentsSection({
           <form className="card form-card" onSubmit={handleSubmitPayment} noValidate>
             <div className="form-body">
               <h3>Record a payment</h3>
-              <p className="lead">Log a fee payment against an existing lead or admitted student.</p>
+              <p className="lead">Search for an enrolled student by Name, Student ID, or Phone number.</p>
 
               <div className="fgrid">
-                {/* Student Search & Selection */}
-                <div className="fld full">
-                  <label htmlFor="fee-enquiry-search">Student <em>*</em></label>
+                {/* Smart Student Search */}
+                <div className="fld full" ref={dropdownRef} style={{ position: 'relative' }}>
+                  <label htmlFor="fee-student-search">Student <em>*</em></label>
                   <input
                     className="input"
-                    id="fee-enquiry-search"
-                    placeholder="Search by name or phone to find the lead"
-                    value={searchStudent}
-                    onChange={(e) => setSearchStudent(e.target.value)}
+                    id="fee-student-search"
+                    placeholder="Type student name, ID (e.g. S1001), or phone number..."
+                    value={searchQuery}
+                    onChange={(e) => {
+                      setSearchQuery(e.target.value);
+                      if (selectedStudent) setSelectedStudent(null);
+                    }}
+                    onFocus={() => { if (searchResults.length) setShowDropdown(true); }}
                     autoComplete="off"
+                    style={selectedStudent ? { borderColor: '#00C49F', background: '#f0fdf4' } : {}}
                   />
-                  <select
-                    className="select"
-                    id="fee-enquiry"
-                    style={{ marginTop: '8px' }}
-                    value={selectedEnquiryId}
-                    onChange={(e) => handleSelectStudent(e.target.value)}
-                  >
-                    <option value="">Select a student...</option>
-                    {matchedEnquiries.map((e) => (
-                      <option key={e.id} value={e.id}>
-                        {e.name} — {e.phone} {e.course ? `— ${e.course}` : ''}
-                      </option>
-                    ))}
-                  </select>
+                  {searching && (
+                    <div style={{ position: 'absolute', right: '12px', top: '38px', color: '#64748b', fontSize: '13px' }}>
+                      Searching...
+                    </div>
+                  )}
+
+                  {/* Dropdown Results */}
+                  {showDropdown && searchResults.length > 0 && !selectedStudent && (
+                    <div style={{
+                      position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 50,
+                      background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px',
+                      boxShadow: '0 10px 25px rgba(0,0,0,0.12)', maxHeight: '280px', overflowY: 'auto',
+                      marginTop: '4px'
+                    }}>
+                      {searchResults.map((s) => (
+                        <button
+                          key={s.id}
+                          type="button"
+                          onClick={() => handleSelectStudent(s)}
+                          style={{
+                            display: 'block', width: '100%', padding: '12px 16px', textAlign: 'left',
+                            border: 'none', borderBottom: '1px solid #f1f5f9', background: 'none',
+                            cursor: 'pointer', fontSize: '14px', transition: 'background 0.15s'
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.background = '#f8fafc'}
+                          onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
+                        >
+                          <div style={{ fontWeight: 600, color: '#1e293b' }}>
+                            {s.name}
+                            <span style={{ fontWeight: 400, color: '#64748b', marginLeft: '8px', fontSize: '13px' }}>
+                              {s.studentId}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
+                            📞 {s.phone || 'N/A'}
+                            {s.courses && <> &nbsp;·&nbsp; 📚 {s.courses}</>}
+                            {s.guardianName && <> &nbsp;·&nbsp; 👤 {s.guardianName}</>}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {showDropdown && searchResults.length === 0 && searchQuery.length >= 2 && !searching && !selectedStudent && (
+                    <div style={{
+                      position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 50,
+                      background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px',
+                      boxShadow: '0 10px 25px rgba(0,0,0,0.12)', padding: '16px', textAlign: 'center',
+                      color: '#94a3b8', marginTop: '4px'
+                    }}>
+                      No students found matching "{searchQuery}"
+                    </div>
+                  )}
                 </div>
 
+                {/* Selected Student Info Badge */}
+                {selectedStudent && (
+                  <div className="fld full" style={{ padding: 0 }}>
+                    <div style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      background: 'linear-gradient(135deg, #f0fdf4, #ecfdf5)', border: '1px solid #86efac',
+                      borderRadius: '10px', padding: '14px 18px', gap: '16px'
+                    }}>
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: '15px', color: '#166534' }}>
+                          ✅ {selectedStudent.name}
+                          <span style={{ fontWeight: 400, color: '#4ade80', marginLeft: '8px', fontSize: '13px' }}>
+                            {selectedStudent.studentId}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#4b5563', marginTop: '4px' }}>
+                          📞 {selectedStudent.phone || 'N/A'}
+                          {selectedStudent.courseDetails && <> &nbsp;·&nbsp; 📚 {selectedStudent.courseDetails}</>}
+                          {selectedStudent.enrollmentCount > 0 && <> &nbsp;·&nbsp; {selectedStudent.enrollmentCount} enrollment(s)</>}
+                        </div>
+                      </div>
+                      <button type="button" onClick={() => { setSelectedStudent(null); setSearchQuery(''); }}
+                        style={{ border: 'none', background: '#dc2626', color: '#fff', borderRadius: '6px', padding: '6px 12px', cursor: 'pointer', fontSize: '12px', fontWeight: 600 }}>
+                        Change
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 <div className="fld">
-                  <label htmlFor="fee-batch">Batch</label>
+                  <label htmlFor="fee-batch">Batch / Course</label>
                   <input
                     className="input"
                     id="fee-batch"
-                    placeholder="Batch / timing"
+                    placeholder="Auto-filled from student record"
                     value={batch}
                     onChange={(e) => setBatch(e.target.value)}
+                    readOnly={!!selectedStudent}
+                    style={selectedStudent ? { background: '#f9fafb', color: '#4b5563' } : {}}
                   />
                 </div>
 
@@ -494,13 +634,15 @@ export default function PaymentsSection({
                   <input
                     className="input"
                     id="fee-relation"
-                    placeholder="Parent or guardian name"
+                    placeholder="Auto-filled from student's Guardian Name"
                     value={relation}
                     onChange={(e) => setRelation(e.target.value)}
+                    readOnly={!!selectedStudent}
+                    style={selectedStudent ? { background: '#f9fafb', color: '#4b5563' } : {}}
                   />
                 </div>
 
-                {/* Particulars Breakdown Table */}
+                {/* Particulars Breakdown Table — with UPI/Online column */}
                 <div className="fld full fee-breakdown-field">
                   <span className="field-label">Fee particulars breakdown</span>
                   <div className="fee-breakdown-wrap">
@@ -510,6 +652,7 @@ export default function PaymentsSection({
                           <th scope="col">Particulars</th>
                           <th scope="col">Cash (₹)</th>
                           <th scope="col">Cheque (₹)</th>
+                          <th scope="col">UPI / Online (₹)</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -536,6 +679,16 @@ export default function PaymentsSection({
                                 onChange={(e) => handleBreakdownChange(key, 'cheque', e.target.value)}
                               />
                             </td>
+                            <td>
+                              <input
+                                className="input"
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={breakdown[key]?.online || 0}
+                                onChange={(e) => handleBreakdownChange(key, 'online', e.target.value)}
+                              />
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -544,22 +697,29 @@ export default function PaymentsSection({
                           <th scope="row">Total</th>
                           <td>₹{totals.cash.toLocaleString("en-IN")}</td>
                           <td>₹{totals.cheque.toLocaleString("en-IN")}</td>
+                          <td>₹{totals.online.toLocaleString("en-IN")}</td>
                         </tr>
                       </tfoot>
                     </table>
                   </div>
                 </div>
 
-                {/* Total Calculated Amount */}
+                {/* Total Calculated Amount — Strictly Read-Only */}
                 <div className="fld">
                   <label htmlFor="fee-amount">Total amount (₹) <em>*</em></label>
                   <input
                     className="input"
                     id="fee-amount"
-                    type="number"
-                    value={totalAmount}
+                    type="text"
+                    value={`₹ ${Number(totalAmount).toLocaleString("en-IN")}`}
                     readOnly
+                    style={{ fontWeight: 700, fontSize: '18px', background: '#f0f9ff', color: '#0369a1', border: '2px solid #0ea5e9' }}
                   />
+                  {parseFloat(totalAmount) > 0 && (
+                    <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px', fontStyle: 'italic' }}>
+                      {numberToIndianWords(parseFloat(totalAmount))}
+                    </div>
+                  )}
                 </div>
 
                 <div className="fld">

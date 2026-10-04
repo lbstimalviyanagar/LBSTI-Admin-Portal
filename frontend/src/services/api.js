@@ -192,6 +192,11 @@ export const api = {
   async getStudents() {
     return request("/students", { method: "GET" });
   },
+  async searchStudents(q) {
+    if (!q || q.trim().length < 1) return [];
+    const data = await request(`/search-students?q=${encodeURIComponent(q.trim())}`, { method: "GET" });
+    return Array.isArray(data) ? data : [];
+  },
   async createStudent(data) {
     return request("/students", {
       method: "POST",
