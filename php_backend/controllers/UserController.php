@@ -5,12 +5,13 @@ function normalizeUser($row) {
         "username" => $row['username'],
         "fullName" => $row['full_name'],
         "role" => $row['role'],
+        "profilePhotoUrl" => $row['profile_photo'] ?? null,
         "createdAt" => $row['created_at']
     ];
 }
 
 function getUsers($pdo) {
-    $stmt = $pdo->query("SELECT id, username, full_name, role, created_at FROM portal_users ORDER BY created_at DESC");
+    $stmt = $pdo->query("SELECT id, username, full_name, role, profile_photo, created_at FROM portal_users ORDER BY created_at DESC");
     $users = [];
     while ($row = $stmt->fetch()) {
         $users[] = normalizeUser($row);
@@ -23,6 +24,7 @@ function createUser($pdo, $body) {
     $fullName = $body['fullName'] ?? '';
     $role = $body['role'] ?? '';
     $password = $body['password'] ?? '';
+    $profilePhoto = $body['profilePhotoUrl'] ?? null;
     
     if (!$username || !$fullName || !$role || !$password) {
         http_response_code(400);
@@ -39,11 +41,11 @@ function createUser($pdo, $body) {
     $hash = password_hash($password, PASSWORD_DEFAULT);
     $now = date('Y-m-d H:i:s');
     
-    $stmt = $pdo->prepare("INSERT INTO portal_users (username, full_name, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?)");
-    $stmt->execute([$username, $fullName, $hash, $role, $now]);
+    $stmt = $pdo->prepare("INSERT INTO portal_users (username, full_name, password_hash, role, profile_photo, created_at) VALUES (?, ?, ?, ?, ?, ?)");
+    $stmt->execute([$username, $fullName, $hash, $role, $profilePhoto, $now]);
     $id = $pdo->lastInsertId();
     
-    $stmt = $pdo->prepare("SELECT id, username, full_name, role, created_at FROM portal_users WHERE id = ?");
+    $stmt = $pdo->prepare("SELECT id, username, full_name, role, profile_photo, created_at FROM portal_users WHERE id = ?");
     $stmt->execute([$id]);
     
     http_response_code(201);
@@ -51,9 +53,42 @@ function createUser($pdo, $body) {
 }
 
 function updateUser($pdo, $id, $body) {
-    // Basic implementation for update user
-    http_response_code(501);
-    echo json_encode(["message" => "Not fully implemented in this preview."]);
+    $fullName = $body['fullName'] ?? null;
+    $role = $body['role'] ?? null;
+    $password = $body['password'] ?? null;
+    $profilePhoto = $body['profilePhotoUrl'] ?? null;
+    
+    $updates = [];
+    $params = [];
+    
+    if ($fullName !== null) {
+        $updates[] = "full_name = ?";
+        $params[] = $fullName;
+    }
+    if ($role !== null) {
+        $updates[] = "role = ?";
+        $params[] = $role;
+    }
+    if ($password) {
+        $updates[] = "password_hash = ?";
+        $params[] = password_hash($password, PASSWORD_DEFAULT);
+    }
+    if (array_key_exists('profilePhotoUrl', $body)) {
+        $updates[] = "profile_photo = ?";
+        $params[] = $profilePhoto;
+    }
+    
+    if (count($updates) > 0) {
+        $params[] = $id;
+        $sql = "UPDATE portal_users SET " . implode(', ', $updates) . " WHERE id = ?";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+    }
+    
+    $stmt = $pdo->prepare("SELECT id, username, full_name, role, profile_photo, created_at FROM portal_users WHERE id = ?");
+    $stmt->execute([$id]);
+    
+    echo json_encode(normalizeUser($stmt->fetch()));
 }
 
 function deleteUser($pdo, $id) {

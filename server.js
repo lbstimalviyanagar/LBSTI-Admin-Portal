@@ -179,9 +179,14 @@ db.serialize(() => {
       password_salt TEXT NOT NULL,
       password_hash TEXT NOT NULL,
       role TEXT NOT NULL CHECK (role IN ('admin', 'counselor', 'user')),
+      profile_photo TEXT,
       created_at TEXT NOT NULL
     )
   `);
+
+  db.run('ALTER TABLE portal_users ADD COLUMN profile_photo TEXT', (err) => {
+    if (err && !/duplicate column name/i.test(err.message)) console.error('Unable to add portal_users.profile_photo:', err.message);
+  });
 
   const defaults = [
     { username: process.env.DEFAULT_ADMIN_USERNAME || 'admin', password: process.env.DEFAULT_ADMIN_PASSWORD || 'admin123', fullName: process.env.DEFAULT_ADMIN_NAME || 'Admin', role: 'admin' },
@@ -288,17 +293,24 @@ app.post('/api/auth/login', async (req, res) => {
     if (hash.length !== expected.length || !crypto.timingSafeEqual(hash, expected)) {
       return res.status(401).json({ message: 'Incorrect username or password.' });
     }
-    return res.json({ token: signToken(user), user: { name: user.full_name, role: user.role } });
+    return res.json({ token: signToken(user), user: { id: user.id, name: user.full_name, role: user.role, profilePhotoUrl: user.profile_photo } });
   } catch (error) {
     return res.status(500).json({ message: 'Unable to sign in.' });
   }
 });
 
-app.get('/api/auth/me', (req, res) => {
+app.get('/api/auth/me', async (req, res) => {
   const match = String(req.get('Authorization') || '').match(/^Bearer\s+(.+)$/i);
   const user = match && verifyToken(match[1]);
   if (!user) return res.status(401).json({ message: 'Your session has expired. Please sign in again.' });
-  return res.json({ name: user.name, role: user.role });
+  
+  try {
+    const rows = await getSql('SELECT profile_photo FROM portal_users WHERE id = ?', [user.sub]);
+    const profilePhotoUrl = rows[0]?.profile_photo || null;
+    return res.json({ id: user.sub, name: user.name, role: user.role, profilePhotoUrl });
+  } catch (err) {
+    return res.json({ id: user.sub, name: user.name, role: user.role });
+  }
 });
 
 app.get('/api/enquiries', async (req, res) => {
@@ -589,6 +601,94 @@ app.post('/api/receipts', requireFeesRole, async (req, res) => {
     });
   } catch (error) {
     return res.status(500).json({ message: 'Unable to generate receipt.', error: error.message });
+  }
+});
+
+// Users Endpoints
+app.get('/api/users', async (req, res) => {
+  try {
+    const rows = await getSql('SELECT id, username, full_name as fullName, role, profile_photo as profilePhotoUrl, created_at as createdAt FROM portal_users ORDER BY created_at DESC');
+    res.json(rows);
+  } catch (error) {
+    res.status(500).json({ message: 'Unable to fetch users.', error: error.message });
+  }
+});
+
+app.post('/api/users', async (req, res) => {
+  try {
+    const body = req.body || {};
+    const { username, fullName, role, password, profilePhotoUrl } = body;
+    if (!username || !fullName || !role || !password) {
+      return res.status(400).json({ message: 'All fields are required.' });
+    }
+    const existing = await getSql('SELECT id FROM portal_users WHERE username = ?', [username]);
+    if (existing.length > 0) return res.status(409).json({ message: 'User already exists.' });
+    
+    const salt = crypto.randomBytes(16).toString('hex');
+    const hash = crypto.scryptSync(password, salt, 64).toString('hex');
+    const now = new Date().toISOString();
+    
+    const result = await runSql(
+      'INSERT INTO portal_users (username, full_name, password_salt, password_hash, role, profile_photo, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [username, fullName, salt, hash, role, profilePhotoUrl || null, now]
+    );
+    const rows = await getSql('SELECT id, username, full_name as fullName, role, profile_photo as profilePhotoUrl, created_at as createdAt FROM portal_users WHERE id = ?', [result.id]);
+    res.status(201).json(rows[0]);
+  } catch (error) {
+    res.status(500).json({ message: 'Unable to create user.', error: error.message });
+  }
+});
+
+app.patch('/api/users/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const body = req.body || {};
+    
+    const current = await getSql('SELECT * FROM portal_users WHERE id = ?', [id]);
+    if (!current.length) return res.status(404).json({ message: 'User not found.' });
+    
+    const updates = [];
+    const params = [];
+    
+    if (body.fullName !== undefined) {
+      updates.push("full_name = ?");
+      params.push(body.fullName);
+    }
+    if (body.role !== undefined) {
+      updates.push("role = ?");
+      params.push(body.role);
+    }
+    if (body.profilePhotoUrl !== undefined) {
+      updates.push("profile_photo = ?");
+      params.push(body.profilePhotoUrl);
+    }
+    if (body.password) {
+      const salt = crypto.randomBytes(16).toString('hex');
+      const hash = crypto.scryptSync(body.password, salt, 64).toString('hex');
+      updates.push("password_salt = ?");
+      params.push(salt);
+      updates.push("password_hash = ?");
+      params.push(hash);
+    }
+    
+    if (updates.length > 0) {
+      params.push(id);
+      await runSql(`UPDATE portal_users SET ${updates.join(', ')} WHERE id = ?`, params);
+    }
+    
+    const rows = await getSql('SELECT id, username, full_name as fullName, role, profile_photo as profilePhotoUrl, created_at as createdAt FROM portal_users WHERE id = ?', [id]);
+    res.json(rows[0]);
+  } catch (error) {
+    res.status(500).json({ message: 'Unable to update user.', error: error.message });
+  }
+});
+
+app.delete('/api/users/:id', async (req, res) => {
+  try {
+    await runSql('DELETE FROM portal_users WHERE id = ?', [Number(req.params.id)]);
+    res.status(204).send();
+  } catch (error) {
+    res.status(500).json({ message: 'Unable to delete user.', error: error.message });
   }
 });
 

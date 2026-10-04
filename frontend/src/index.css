@@ -420,9 +420,8 @@ svg {
   width: 42px;
   height: 42px;
   border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: grid;
+  place-items: center;
   text-align: center;
   line-height: 1;
   font-weight: 800;
@@ -431,6 +430,9 @@ svg {
   background: var(--navy-700);
   color: #fff;
   border: 1px solid rgba(255, 255, 255, .2);
+}
+
+img.avatar {
   object-fit: cover;
 }
 

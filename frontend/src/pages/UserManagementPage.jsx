@@ -18,7 +18,8 @@ export default function UserManagementPage({ currentUser }) {
     username: '',
     fullName: '',
     role: 'counselor',
-    password: ''
+    password: '',
+    profilePhotoUrl: ''
   });
 
   const [confirmDialog, setConfirmDialog] = useState({
@@ -51,7 +52,8 @@ export default function UserManagementPage({ currentUser }) {
         username: user.username,
         fullName: user.fullName,
         role: user.role,
-        password: '' // Don't populate password
+        password: '', // Don't populate password
+        profilePhotoUrl: user.profilePhotoUrl || ''
       });
     } else {
       setEditingUser(null);
@@ -59,7 +61,8 @@ export default function UserManagementPage({ currentUser }) {
         username: '',
         fullName: '',
         role: 'counselor',
-        password: ''
+        password: '',
+        profilePhotoUrl: ''
       });
     }
     setIsModalOpen(true);
@@ -85,7 +88,8 @@ export default function UserManagementPage({ currentUser }) {
       if (editingUser) {
         const patch = {
           fullName: formData.fullName,
-          role: formData.role
+          role: formData.role,
+          profilePhotoUrl: formData.profilePhotoUrl || null
         };
         if (formData.password) patch.password = formData.password;
         
@@ -170,7 +174,7 @@ export default function UserManagementPage({ currentUser }) {
                   <tr key={u.id}>
                     <td>
                       <div className="person">
-                        <span className="av" style={{ background: avColor(u.fullName) }}>
+                        <span className="av" style={u.profilePhotoUrl ? { background: `url(${u.profilePhotoUrl}) center/cover no-repeat`, color: 'transparent' } : { background: avColor(u.fullName) }}>
                           {initials(u.fullName)}
                         </span>
                         <span><b>{u.fullName}</b></span>
@@ -257,6 +261,55 @@ export default function UserManagementPage({ currentUser }) {
                     onChange={e => setFormData({...formData, password: e.target.value})}
                     required={!editingUser}
                   />
+                </div>
+                <div className="fld full">
+                  <label>Profile Photo</label>
+                  <input 
+                    className="input" 
+                    type="file"
+                    accept="image/*"
+                    onChange={e => {
+                      const file = e.target.files[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onload = (ev) => {
+                          const img = new Image();
+                          img.onload = () => {
+                            const canvas = document.createElement('canvas');
+                            const MAX_WIDTH = 200;
+                            const MAX_HEIGHT = 200;
+                            let width = img.width;
+                            let height = img.height;
+                            
+                            if (width > height) {
+                              if (width > MAX_WIDTH) {
+                                height *= MAX_WIDTH / width;
+                                width = MAX_WIDTH;
+                              }
+                            } else {
+                              if (height > MAX_HEIGHT) {
+                                width *= MAX_HEIGHT / height;
+                                height = MAX_HEIGHT;
+                              }
+                            }
+                            canvas.width = width;
+                            canvas.height = height;
+                            const ctx = canvas.getContext('2d');
+                            ctx.drawImage(img, 0, 0, width, height);
+                            setFormData({...formData, profilePhotoUrl: canvas.toDataURL('image/jpeg', 0.85)});
+                          };
+                          img.src = ev.target.result;
+                        };
+                        reader.readAsDataURL(file);
+                      }
+                    }} 
+                  />
+                  {formData.profilePhotoUrl && (
+                    <div style={{ marginTop: '12px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <img src={formData.profilePhotoUrl} style={{ width: '42px', height: '42px', borderRadius: '50%', objectFit: 'cover' }} alt="Profile Preview" />
+                      <button type="button" className="btn sm danger" onClick={() => setFormData({...formData, profilePhotoUrl: ''})}>Remove Photo</button>
+                    </div>
+                  )}
                 </div>
               </form>
             </div>

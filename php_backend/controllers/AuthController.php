@@ -40,7 +40,8 @@ function login($pdo, $body, $secret) {
             "id" => $user['id'],
             "username" => $user['username'],
             "name" => $user['full_name'],
-            "role" => $user['role']
+            "role" => $user['role'],
+            "profilePhotoUrl" => $user['profile_photo'] ?? null
         ]
     ]);
 }

@@ -34,6 +34,10 @@ if ($route === 'auth/login') {
     login($pdo, $body, $authSecret);
 } elseif ($route === 'auth/me') {
     $user = requireAuth($authSecret);
+    $stmt = $pdo->prepare("SELECT profile_photo FROM portal_users WHERE id = ?");
+    $stmt->execute([$user['sub']]);
+    $dbUser = $stmt->fetch();
+    $user['profilePhotoUrl'] = $dbUser ? $dbUser['profile_photo'] : null;
     echo json_encode(["ok" => true, "user" => $user]);
 } elseif (strpos($route, 'enquiries') === 0) {
     require 'controllers/EnquiryController.php';
