@@ -12,9 +12,9 @@ import {
 } from '../utils/helpers';
 import api from '../services/api';
 
-export default function FeesSection({
+export default function PaymentsSection({
   fees = [],
-  enquiries = [],
+  enquiries = [], students = [],
   loading = false,
   onSavePayment,
   onDeletePayment,
@@ -52,14 +52,14 @@ export default function FeesSection({
 
   // Filter student enquiries for selection
   const needle = searchStudent.trim().toLowerCase();
-  const matchedEnquiries = enquiries
+  const matchedEnquiries = students
     .filter(e => !needle || `${e.name} ${e.phone}`.toLowerCase().includes(needle))
     .slice(0, 50);
 
   const handleSelectStudent = (id) => {
     setSelectedEnquiryId(id);
-    const enquiry = enquiries.find(e => String(e.id) === String(id));
-    if (enquiry && enquiry.batch) {
+    const enquiry = students.find(e => String(e.id) === String(id));
+    if (enquiry && enquiry?.batch) {
       setBatch(enquiry.batch);
     }
   };
@@ -87,7 +87,7 @@ export default function FeesSection({
     }
 
     setSavingPayment(true);
-    const selectedEnquiry = enquiries.find(e => String(e.id) === String(selectedEnquiryId)) || {};
+    const selectedEnquiry = students.find(e => String(e.id) === String(selectedEnquiryId)) || {};
     const mode = totals.cash && totals.cheque ? "Cash + Cheque" : totals.cheque ? "Cheque" : "Cash";
 
     const payload = {
@@ -140,7 +140,7 @@ export default function FeesSection({
       // Continue with default number
     }
 
-    const enquiry = enquiries.find(e => String(e.id) === String(fee.enquiryId)) || {};
+    const enquiry = students.find(e => String(e.id) === String(fee.enquiryId)) || {};
     const details = fee.receiptDetails || {};
     const items = details.items && typeof details.items === 'object' ? details.items : {
       others: {
@@ -218,10 +218,10 @@ export default function FeesSection({
           <div><b>Date:</b> ${fmtDate(fee.paymentDate)}</div>
         </div>
         <div class="studentline">
-          <div><b>Course:</b> ${enquiry.course || fee.course || "–"}</div>
+          <div><b>Course:</b> ${enquiry?.course || fee.course || "–"}</div>
           <div><b>Batch:</b> ${details.batch || enquiry.batch || "–"}</div>
           <div><b>To Month:</b> ${monthLabel}</div>
-          <div><b>Received with thanks from:</b> ${fee.studentName || enquiry.name || "Student"}</div>
+          <div><b>Received with thanks from:</b> ${fee.studentName || enquiry?.name || "Student"}</div>
           <div style="grid-column:1/-1"><b>Son/Daughter/Wife of:</b> ${details.relation || "–"}</div>
         </div>
         <div class="receipt-title">OFFICIAL FEE RECEIPT</div>
@@ -282,7 +282,7 @@ export default function FeesSection({
     const csvContent = [
       headers.map(escapeCsv).join(","),
       ...fees.map((f) => {
-        const enquiry = enquiries.find(e => String(e.id) === String(f.enquiryId)) || {};
+        const enquiry = students.find(e => String(e.id) === String(f.enquiryId)) || {};
         const details = f.receiptDetails || {};
         const items = details.items || {
           others: {

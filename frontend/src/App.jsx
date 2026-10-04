@@ -4,7 +4,8 @@ import Topbar from './components/Topbar';
 import DashboardPage from './pages/DashboardPage';
 import NewEnquiryPage from './pages/NewEnquiryPage';
 import EnquiriesPage from './pages/EnquiriesPage';
-import FeesPage from './pages/FeesPage';
+import PaymentsPage from './pages/PaymentsPage';
+import StudentsPage from './pages/StudentsPage';
 import LoginPage from './pages/LoginPage';
 import UserManagementPage from './pages/UserManagementPage';
 import EditLeadModal from './components/EditLeadModal';
@@ -23,11 +24,13 @@ export default function App() {
 
   const [enquiries, setEnquiries] = useState([]);
   const [fees, setFees] = useState([]);
+  const [students, setStudents] = useState([]);
+  const [enrollments, setEnrollments] = useState([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState('');
 
   // Navigation & View state
-  const [tab, setTab] = useState('dashboard'); // 'dashboard' | 'new' | 'table' | 'fees'
+  const [tab, setTab] = useState('dashboard'); // 'dashboard' | 'new' | 'table' | 'payments' | 'students'
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
@@ -68,12 +71,16 @@ export default function App() {
     if (!silent) setLoading(true);
     setLoadError('');
     try {
-      const [enquiryList, feeList] = await Promise.all([
+      const [enquiryList, feeList, studentList, enrollmentList] = await Promise.all([
         api.getEnquiries(),
-        api.getFees().catch(() => []) // Fees might be restricted for non-admin/counselor
+        api.getFees().catch(() => []),
+        api.getStudents().catch(() => []),
+        api.getEnrollments().catch(() => [])
       ]);
       setEnquiries(enquiryList || []);
       setFees(feeList || []);
+      setStudents(studentList || []);
+      setEnrollments(enrollmentList || []);
     } catch (err) {
       console.error(err);
       if (err.code === 401) {
@@ -98,6 +105,8 @@ export default function App() {
     logout();
     setEnquiries([]);
     setFees([]);
+    setStudents([]);
+    setEnrollments([]);
     addToast("Logged out successfully");
   };
 
@@ -430,14 +439,24 @@ export default function App() {
             />
           )}
 
-          {tab === 'fees' && (
-            <FeesPage
+          {tab === 'payments' && (
+            <PaymentsPage
               fees={fees}
               enquiries={enquiries}
+              students={students}
               loading={loading}
               onSavePayment={handleSavePayment}
               onDeletePayment={handleDeletePayment}
               onToast={addToast}
+            />
+          )}
+
+          {tab === 'students' && (
+            <StudentsPage
+              students={students}
+              enrollments={enrollments}
+              loading={loading}
+              onRefresh={loadData}
             />
           )}
 

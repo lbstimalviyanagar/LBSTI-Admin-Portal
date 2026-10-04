@@ -1,7 +1,7 @@
 import React from 'react';
-import FeesSection from '../components/FeesSection';
+import PaymentsSection from '../components/PaymentsSection';
 
-export default function FeesPage({
+export default function PaymentsPage({
   fees,
   enquiries,
   loading,
@@ -10,7 +10,7 @@ export default function FeesPage({
   onToast
 }) {
   return (
-    <FeesSection
+    <PaymentsSection
       fees={fees}
       enquiries={enquiries}
       loading={loading}

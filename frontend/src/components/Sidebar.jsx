@@ -88,7 +88,7 @@ export default function Sidebar({
             className="nav-item"
             type="button"
             aria-current={tab === 'fees' ? 'page' : undefined}
-            onClick={() => { setTab('fees'); if (onNavClick) onNavClick(); }}
+            onClick={() => { setTab('payments'); if (onNavClick) onNavClick(); }}
             data-tooltip-right={collapsed ? "Fees" : undefined}
           >
             <span className="ic"><Icon name="fee" size={20} /></span>
@@ -124,3 +124,4 @@ export default function Sidebar({
     </aside>
   );
 }
+
