@@ -1,41 +1,6 @@
 const fs = require("fs");
-const logsDir = `C:/Users/Shail/.gemini/antigravity-ide/brain/81abcc27-4f79-4822-9b6e-9d6026c48890/.system_generated/logs`;
-const logLines = fs.readFileSync(logsDir + "/transcript.jsonl", "utf8").split("\n");
-
-let userMessage = "";
-for (let i = logLines.length - 1; i >= 0; i--) {
-  if (!logLines[i]) continue;
-  try {
-    const log = JSON.parse(logLines[i]);
-    if (log.source === "USER_EXPLICIT" && log.type === "USER_INPUT") {
-      userMessage = log.content;
-      break;
-    }
-  } catch(e) {}
-}
-
-const lines = userMessage.split("\n");
-let studentsCsv = [];
-let enrollmentsCsv = [];
-let mode = 0;
-
-for (let line of lines) {
-    if (line.includes("Student Id,Name,Guardian,Phone")) {
-        mode = 1;
-    } else if (line.includes("REG NO,STUDENT_ID,DOA,COURSE,STATUS")) {
-        mode = 2;
-    }
-    
-    if (mode === 1 && line.trim() && !line.includes("USER_REQUEST") && !line.includes("ADDITIONAL_METADATA")) {
-        studentsCsv.push(line.trim());
-    } else if (mode === 2 && line.trim() && !line.includes("USER_REQUEST") && !line.includes("ADDITIONAL_METADATA")) {
-        enrollmentsCsv.push(line.trim());
-    }
-}
-
-while (enrollmentsCsv.length > 0 && !enrollmentsCsv[enrollmentsCsv.length - 1].includes(",")) {
-    enrollmentsCsv.pop();
-}
+const studentsCsv = fs.readFileSync("C:/Users/Shail/.gemini/antigravity-ide/brain/81abcc27-4f79-4822-9b6e-9d6026c48890/.user_uploaded/media_1791148820127.csv", "utf8").trim();
+const enrollmentsCsv = fs.readFileSync("C:/Users/Shail/.gemini/antigravity-ide/brain/81abcc27-4f79-4822-9b6e-9d6026c48890/.user_uploaded/media_1791148820134.csv", "utf8").trim();
 
 const phpCode = `<?php
 error_reporting(E_ALL);
@@ -43,11 +8,11 @@ ini_set("display_errors", 1);
 require "config.php";
 
 $studentsCsv = <<<CSV
-${studentsCsv.join("\n")}
+${studentsCsv}
 CSV;
 
 $enrollmentsCsv = <<<CSV
-${enrollmentsCsv.join("\n")}
+${enrollmentsCsv}
 CSV;
 
 try {
@@ -99,3 +64,4 @@ try {
 `;
 
 fs.writeFileSync("php_backend/import_students_enrollments.php", phpCode);
+console.log("Written!");
