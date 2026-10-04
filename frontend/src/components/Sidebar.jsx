@@ -75,8 +75,8 @@ export default function Sidebar({
         <button
           className="nav-item"
           type="button"
-          aria-current={tab !== 'fees' && tab !== 'users' ? 'page' : undefined}
-          onClick={() => { setTab(tab === 'fees' || tab === 'users' ? 'dashboard' : tab); if (onNavClick) onNavClick(); }}
+          aria-current={['dashboard', 'new', 'table'].includes(tab) ? 'page' : undefined}
+          onClick={() => { setTab(['dashboard', 'new', 'table'].includes(tab) ? tab : 'dashboard'); if (onNavClick) onNavClick(); }}
           data-tooltip-right={collapsed ? "Enquiries" : undefined}
         >
           <span className="ic"><Icon name="inbox" size={20} /></span>
@@ -87,12 +87,26 @@ export default function Sidebar({
           <button
             className="nav-item"
             type="button"
-            aria-current={tab === 'fees' ? 'page' : undefined}
+            aria-current={tab === 'payments' ? 'page' : undefined}
             onClick={() => { setTab('payments'); if (onNavClick) onNavClick(); }}
-            data-tooltip-right={collapsed ? "Fees" : undefined}
+            data-tooltip-right={collapsed ? "Payments" : undefined}
           >
             <span className="ic"><Icon name="fee" size={20} /></span>
-            <span className="label">Fees</span>
+            <span className="label">Payments</span>
+          </button>
+        )}
+
+        
+        {isFeesVisible && (
+          <button
+            className="nav-item"
+            type="button"
+            aria-current={tab === "students" ? "page" : undefined}
+            onClick={() => { setTab("students"); if (onNavClick) onNavClick(); }}
+            data-tooltip-right={collapsed ? "Students" : undefined}
+          >
+            <span className="ic"><Icon name="users" size={20} /></span>
+            <span className="label">Students</span>
           </button>
         )}
 
