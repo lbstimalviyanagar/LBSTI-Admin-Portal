@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import api from '../services/api';
 import Icon from '../components/Icons';
-import Modal from '../components/Modal'; // Assuming we can use native dialog or custom modal
 
 export default function TasksPage({ user, users, onToast }) {
   const [tasks, setTasks] = useState([]);
