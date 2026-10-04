@@ -52,7 +52,7 @@ export default function CsvUploader({ onImportSuccess, onToast }) {
     const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/"/g, ''));
     
     // Map expected columns to CSV headers
-    const nameIdx = headers.findIndex(h => h.includes('name'));
+    const nameIdx = headers.findIndex(h => h.includes('name') || h === 'student' || h === 'student name');
     const phoneIdx = headers.findIndex(h => h.includes('phone') || h.includes('mobile') || h.includes('contact'));
     const emailIdx = headers.findIndex(h => h.includes('email'));
     const cityIdx = headers.findIndex(h => h.includes('city') || h.includes('area') || h.includes('local'));
@@ -61,7 +61,7 @@ export default function CsvUploader({ onImportSuccess, onToast }) {
     const sourceIdx = headers.findIndex(h => h.includes('source'));
     
     if (nameIdx === -1 || phoneIdx === -1) {
-      throw new Error("CSV must contain at least 'Name' and 'Phone' columns.");
+      throw new Error("CSV must contain at least 'Name/Student' and 'Phone' columns.");
     }
 
     const leads = [];

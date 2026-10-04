@@ -210,7 +210,7 @@ export const api = {
   async bulkImportStudents(students) {
     return request("/students/bulk", {
       method: "POST",
-      body: JSON.stringify({ students })
+      body: { students }
     });
   },
 
@@ -236,7 +236,7 @@ export const api = {
   async bulkImportEnrollments(enrollments) {
     return request("/enrollments/bulk", {
       method: "POST",
-      body: JSON.stringify({ enrollments })
+      body: { enrollments }
     });
   },
 

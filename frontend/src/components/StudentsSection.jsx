@@ -137,11 +137,17 @@ export default function StudentsSection({ students, enrollments, loading, onRefr
           return obj;
         });
 
-        if (type === "students") {
-          await api.bulkImportStudents(data);
+        const validRows = data.filter(d => (type === "students" ? d.studentId && d.name : d.enrollmentId && d.studentId));
+          if (validRows.length === 0) {
+            onToast("No valid rows found in CSV. Make sure you have correct headers.", true);
+            if (fileInputRef.current) fileInputRef.current.value = "";
+            return;
+          }
+          if (type === "students") {
+          await api.bulkImportStudents(validRows);
           addToast(`Imported students successfully.`);
         } else {
-          await api.bulkImportEnrollments(data);
+          await api.bulkImportEnrollments(validRows);
           addToast(`Imported enrollments successfully.`);
         }
         onRefresh();
