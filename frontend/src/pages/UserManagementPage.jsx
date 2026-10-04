@@ -6,7 +6,7 @@ import ToastContainer from '../components/ToastContainer';
 import { useToast } from '../hooks/useToast';
 import { initials, avColor } from '../utils/helpers';
 
-export default function UserManagementPage({ currentUser }) {
+export default function UserManagementPage({ currentUser, onUpdateUser }) {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const { toasts, addToast } = useToast();
@@ -93,8 +93,18 @@ export default function UserManagementPage({ currentUser }) {
         };
         if (formData.password) patch.password = formData.password;
         
-        await api.updateUser(editingUser.id, patch);
+        const updated = await api.updateUser(editingUser.id, patch);
         addToast("User updated successfully.");
+        
+        // If updating own profile, update global auth context
+        if (String(editingUser.id) === String(currentUser?.id) && onUpdateUser) {
+          onUpdateUser({
+            ...currentUser,
+            name: updated.fullName || formData.fullName,
+            role: updated.role || formData.role,
+            profilePhotoUrl: patch.profilePhotoUrl
+          });
+        }
       } else {
         await api.createUser(formData);
         addToast("User created successfully.");

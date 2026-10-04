@@ -442,7 +442,7 @@ export default function App() {
           )}
 
           {tab === 'users' && (
-            <UserManagementPage currentUser={user} />
+            <UserManagementPage currentUser={user} onUpdateUser={setUser} />
           )}
         </div>
 
