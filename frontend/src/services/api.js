@@ -264,6 +264,58 @@ export const api = {
     return request(`/users/${id}`, {
       method: "DELETE"
     });
+  },
+
+  // Attendance
+  async getAttendance() {
+    return request("/attendance", { method: "GET" });
+  },
+  async clockIn() {
+    return request("/attendance/clock-in", { method: "POST" });
+  },
+  async clockOut() {
+    return request("/attendance/clock-out", { method: "PUT" });
+  },
+
+  // Tasks
+  async getTasks() {
+    return request("/tasks", { method: "GET" });
+  },
+  async createTask(data) {
+    return request("/tasks", {
+      method: "POST",
+      body: data
+    });
+  },
+  async updateTask(id, patch) {
+    return request(`/tasks/${id}`, {
+      method: "PATCH",
+      body: patch
+    });
+  },
+  async deleteTask(id) {
+    return request(`/tasks/${id}`, { method: "DELETE" });
+  },
+
+  // Batches
+  async getBatches(dateStr = "") {
+    const query = dateStr ? `?date=${dateStr}` : "";
+    return request(`/batches${query}`, { method: "GET" });
+  },
+  async createBatch(data) {
+    return request("/batches", {
+      method: "POST",
+      body: data
+    });
+  },
+  async updateBatch(id, patch) {
+    return request(`/batches/${id}`, {
+      method: "PATCH",
+      body: patch
+    });
+  },
+  async deleteBatch(id) {
+    return request(`/batches/${id}`, { method: "DELETE" });
   }
 };
 

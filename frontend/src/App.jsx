@@ -8,6 +8,9 @@ import PaymentsPage from './pages/PaymentsPage';
 import StudentsPage from './pages/StudentsPage';
 import LoginPage from './pages/LoginPage';
 import UserManagementPage from './pages/UserManagementPage';
+import AttendancePage from './pages/AttendancePage';
+import TasksPage from './pages/TasksPage';
+import BatchesPage from './pages/BatchesPage';
 import EditLeadModal from './components/EditLeadModal';
 import ConfirmDialog from './components/ConfirmDialog';
 import DailyReminder from './components/DailyReminder';
@@ -26,6 +29,7 @@ export default function App() {
   const [fees, setFees] = useState([]);
   const [students, setStudents] = useState([]);
   const [enrollments, setEnrollments] = useState([]);
+  const [usersList, setUsersList] = useState([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState('');
 
@@ -71,16 +75,18 @@ export default function App() {
     if (!silent) setLoading(true);
     setLoadError('');
     try {
-      const [enquiryList, feeList, studentList, enrollmentList] = await Promise.all([
+      const [enquiryList, feeList, studentList, enrollmentList, usersRes] = await Promise.all([
         api.getEnquiries(),
         api.getFees().catch(() => []),
         api.getStudents().catch(() => []),
-        api.getEnrollments().catch(() => [])
+        api.getEnrollments().catch(() => []),
+        api.getUsers().catch(() => [])
       ]);
       setEnquiries(enquiryList || []);
       setFees(feeList || []);
       setStudents(studentList || []);
       setEnrollments(enrollmentList || []);
+      setUsersList(usersRes || []);
     } catch (err) {
       console.error(err);
       if (err.code === 401) {
@@ -457,6 +463,29 @@ export default function App() {
               enrollments={enrollments}
               loading={loading}
               onRefresh={loadData}
+            />
+          )}
+
+          {tab === 'attendance' && (
+            <AttendancePage
+              user={user}
+              onToast={addToast}
+            />
+          )}
+
+          {tab === 'tasks' && (
+            <TasksPage
+              user={user}
+              users={usersList}
+              onToast={addToast}
+            />
+          )}
+
+          {tab === 'batches' && (
+            <BatchesPage
+              user={user}
+              users={usersList}
+              onToast={addToast}
             />
           )}
 

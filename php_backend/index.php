@@ -107,6 +107,32 @@ if ($route === 'auth/login') {
     elseif ($method === "POST") createEnrollment($pdo, $body);
     elseif ($method === "PUT" || $method === "PATCH") updateEnrollment($pdo, $id, $body);
     elseif ($method === "DELETE") deleteEnrollment($pdo, $id);
+} elseif (strpos($route, "attendance") === 0) {
+    require "controllers/AttendanceController.php";
+    $user = requireAuth($authSecret);
+    $parts = explode("/", $route);
+    $action = isset($parts[1]) ? $parts[1] : null;
+    if ($method === "GET") getAttendance($pdo, $user);
+    elseif ($method === "POST" && $action === "clock-in") clockIn($pdo, $user);
+    elseif ($method === "PUT" && $action === "clock-out") clockOut($pdo, $user, $body);
+} elseif (strpos($route, "tasks") === 0) {
+    require "controllers/TaskController.php";
+    $user = requireAuth($authSecret);
+    $parts = explode("/", $route);
+    $id = isset($parts[1]) ? $parts[1] : null;
+    if ($method === "GET") getTasks($pdo, $user);
+    elseif ($method === "POST") createTask($pdo, $user, $body);
+    elseif ($method === "PUT" || $method === "PATCH") updateTask($pdo, $user, $id, $body);
+    elseif ($method === "DELETE") deleteTask($pdo, $user, $id);
+} elseif (strpos($route, "batches") === 0) {
+    require "controllers/BatchController.php";
+    $user = requireAuth($authSecret);
+    $parts = explode("/", $route);
+    $id = isset($parts[1]) ? $parts[1] : null;
+    if ($method === "GET") getBatches($pdo);
+    elseif ($method === "POST") createBatch($pdo, $user, $body);
+    elseif ($method === "PUT" || $method === "PATCH") updateBatch($pdo, $user, $id, $body);
+    elseif ($method === "DELETE") deleteBatch($pdo, $user, $id);
 } else {
     http_response_code(404);
     echo json_encode(["message" => "Endpoint not found"]);

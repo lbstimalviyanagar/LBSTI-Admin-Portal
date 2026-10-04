@@ -110,6 +110,39 @@ export default function Sidebar({
           </button>
         )}
 
+        <button
+          className="nav-item"
+          type="button"
+          aria-current={tab === "attendance" ? "page" : undefined}
+          onClick={() => { setTab("attendance"); if (onNavClick) onNavClick(); }}
+          data-tooltip-right={collapsed ? "Attendance" : undefined}
+        >
+          <span className="ic"><Icon name="clock" size={20} /></span>
+          <span className="label">Attendance</span>
+        </button>
+
+        <button
+          className="nav-item"
+          type="button"
+          aria-current={tab === "tasks" ? "page" : undefined}
+          onClick={() => { setTab("tasks"); if (onNavClick) onNavClick(); }}
+          data-tooltip-right={collapsed ? "Tasks" : undefined}
+        >
+          <span className="ic"><Icon name="check" size={20} /></span>
+          <span className="label">Tasks</span>
+        </button>
+
+        <button
+          className="nav-item"
+          type="button"
+          aria-current={tab === "batches" ? "page" : undefined}
+          onClick={() => { setTab("batches"); if (onNavClick) onNavClick(); }}
+          data-tooltip-right={collapsed ? "Batches" : undefined}
+        >
+          <span className="ic"><Icon name="dashboard" size={20} /></span>
+          <span className="label">Batches</span>
+        </button>
+
         {isAdmin && (
           <button
             className="nav-item"
