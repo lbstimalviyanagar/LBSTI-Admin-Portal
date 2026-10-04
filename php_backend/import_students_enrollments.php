@@ -2416,10 +2416,7 @@ M202267,S2143,01-Oct-26,DADA,ACTIVE
 CSV;
 
 try {
-    $pdo->query("DROP TABLE IF EXISTS enrollments;");
-    $pdo->query("DROP TABLE IF EXISTS students;");
-
-    $pdo->query("CREATE TABLE students (
+    $pdo->query("CREATE TABLE IF NOT EXISTS students (
       id INT(11) PRIMARY KEY AUTO_INCREMENT,
       student_id VARCHAR(50) UNIQUE NOT NULL,
       name VARCHAR(255) NOT NULL,
@@ -2431,7 +2428,7 @@ try {
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     ) ENGINE=InnoDB;");
 
-    $pdo->query("CREATE TABLE enrollments (
+    $pdo->query("CREATE TABLE IF NOT EXISTS enrollments (
       id INT(11) PRIMARY KEY AUTO_INCREMENT,
       enrollment_id VARCHAR(50) UNIQUE NOT NULL,
       student_id VARCHAR(50) NOT NULL,
