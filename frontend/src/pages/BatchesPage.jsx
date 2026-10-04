@@ -176,18 +176,20 @@ export default function BatchesPage({ user, users, onToast }) {
       </div>
 
       {isModalOpen && user?.role === 'admin' && (
-        <div className="modal-backdrop">
-          <div className="modal">
-            <div className="modal-head">
-              <h3>{editingBatch ? 'Edit Batch' : 'Schedule Batch'}</h3>
-              <button className="icon-btn" onClick={() => setIsModalOpen(false)}>
-                <Icon name="x" size={20} />
+        <div className="overlay" id="batchOverlay" onMouseDown={(e) => { if (e.target.id === 'batchOverlay') setIsModalOpen(false); }}>
+          <div className="modal" role="dialog" aria-modal="true" style={{ maxWidth: '550px' }}>
+            <header>
+              <div className="t">
+                <h3>{editingBatch ? 'Edit Batch' : 'Schedule Batch'}</h3>
+              </div>
+              <button className="icon-btn" type="button" aria-label="Close" onClick={() => setIsModalOpen(false)}>
+                <span className="ic"><Icon name="x" size={18} /></span>
               </button>
-            </div>
+            </header>
             <div className="modal-body">
-              <form onSubmit={handleSubmit}>
-                <div className="form-group">
-                  <label>Time Slot <span className="req">*</span></label>
+              <form onSubmit={handleSubmit} style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <div className="fld">
+                  <label>Time Slot <em>*</em></label>
                   <select required className="select" value={formData.batchTime} onChange={e => setFormData({...formData, batchTime: e.target.value})}>
                     <option value="">Select Time Slot</option>
                     {timeSlots.map(slot => (
@@ -197,22 +199,22 @@ export default function BatchesPage({ user, users, onToast }) {
                   </select>
                 </div>
                 {formData.batchTime === 'Other' && (
-                  <div className="form-group">
+                  <div className="fld">
                     <input required className="input" placeholder="e.g. 07:00 AM - 08:00 AM" onChange={e => setFormData({...formData, batchTime: e.target.value})} />
                   </div>
                 )}
                 
-                <div className="form-group">
-                  <label>Course Name <span className="req">*</span></label>
+                <div className="fld">
+                  <label>Course Name <em>*</em></label>
                   <input required className="input" value={formData.courseName} onChange={e => setFormData({...formData, courseName: e.target.value})} />
                 </div>
                 
-                <div className="form-group">
+                <div className="fld">
                   <label>Topic / Description</label>
                   <input className="input" value={formData.topic} onChange={e => setFormData({...formData, topic: e.target.value})} />
                 </div>
 
-                <div className="form-group">
+                <div className="fld">
                   <label>Instructor</label>
                   <select className="select" value={formData.instructorId} onChange={e => setFormData({...formData, instructorId: e.target.value})}>
                     <option value="">Select Instructor</option>
@@ -222,12 +224,12 @@ export default function BatchesPage({ user, users, onToast }) {
                   </select>
                 </div>
 
-                <div className="form-group" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                  <div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  <div className="fld">
                     <label>Student Count</label>
                     <input type="number" className="input" value={formData.studentCount} onChange={e => setFormData({...formData, studentCount: e.target.value})} />
                   </div>
-                  <div>
+                  <div className="fld">
                     <label>Status</label>
                     <select className="select" value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})}>
                       <option value="Upcoming">Upcoming</option>
@@ -237,9 +239,9 @@ export default function BatchesPage({ user, users, onToast }) {
                   </div>
                 </div>
 
-                <div className="modal-actions" style={{ marginTop: '1rem', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                <div className="form-foot" style={{ marginTop: '1rem', display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
                   <button type="button" className="btn" onClick={() => setIsModalOpen(false)}>Cancel</button>
-                  <button type="submit" className="btn btn-primary">Save Batch</button>
+                  <button type="submit" className="btn primary">Save Batch</button>
                 </div>
               </form>
             </div>

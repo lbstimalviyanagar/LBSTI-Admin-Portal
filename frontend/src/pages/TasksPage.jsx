@@ -150,28 +150,30 @@ export default function TasksPage({ user, users, onToast }) {
       )}
 
       {isModalOpen && (
-        <div className="modal-backdrop">
-          <div className="modal">
-            <div className="modal-head">
-              <h3>{editingTask ? 'Edit Task' : 'Assign Task'}</h3>
-              <button className="icon-btn" onClick={() => setIsModalOpen(false)}>
-                <Icon name="x" size={20} />
+        <div className="overlay" id="taskOverlay" onMouseDown={(e) => { if (e.target.id === 'taskOverlay') setIsModalOpen(false); }}>
+          <div className="modal" role="dialog" aria-modal="true" style={{ maxWidth: '500px' }}>
+            <header>
+              <div className="t">
+                <h3>{editingTask ? 'Edit Task' : 'Assign Task'}</h3>
+              </div>
+              <button className="icon-btn" type="button" aria-label="Close" onClick={() => setIsModalOpen(false)}>
+                <span className="ic"><Icon name="x" size={18} /></span>
               </button>
-            </div>
+            </header>
             <div className="modal-body">
-              <form onSubmit={handleSubmit}>
-                <div className="form-group">
-                  <label>Title <span className="req">*</span></label>
+              <form onSubmit={handleSubmit} style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <div className="fld">
+                  <label>Title <em>*</em></label>
                   <input required className="input" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} disabled={user?.role !== 'admin' && !editingTask} />
                 </div>
-                <div className="form-group">
+                <div className="fld">
                   <label>Description</label>
-                  <textarea className="input" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} disabled={user?.role !== 'admin' && !editingTask} />
+                  <textarea className="textarea" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} disabled={user?.role !== 'admin' && !editingTask} />
                 </div>
                 {user?.role === 'admin' && (
                   <>
-                    <div className="form-group">
-                      <label>Assign To <span className="req">*</span></label>
+                    <div className="fld">
+                      <label>Assign To <em>*</em></label>
                       <select required className="select" value={formData.assignedTo} onChange={e => setFormData({...formData, assignedTo: e.target.value})}>
                         <option value="">Select Staff</option>
                         {users?.map(u => (
@@ -179,7 +181,7 @@ export default function TasksPage({ user, users, onToast }) {
                         ))}
                       </select>
                     </div>
-                    <div className="form-group">
+                    <div className="fld">
                       <label>Due Date</label>
                       <input type="date" className="input" value={formData.dueDate} onChange={e => setFormData({...formData, dueDate: e.target.value})} />
                     </div>
@@ -187,7 +189,7 @@ export default function TasksPage({ user, users, onToast }) {
                 )}
                 {editingTask && (
                   <>
-                    <div className="form-group">
+                    <div className="fld">
                       <label>Status</label>
                       <select className="select" value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})}>
                         <option value="Pending">Pending</option>
@@ -195,15 +197,15 @@ export default function TasksPage({ user, users, onToast }) {
                         <option value="Completed">Completed</option>
                       </select>
                     </div>
-                    <div className="form-group">
+                    <div className="fld">
                       <label>Remarks / Update</label>
-                      <textarea className="input" value={formData.remarks} onChange={e => setFormData({...formData, remarks: e.target.value})} />
+                      <textarea className="textarea" value={formData.remarks} onChange={e => setFormData({...formData, remarks: e.target.value})} />
                     </div>
                   </>
                 )}
-                <div className="modal-actions" style={{ marginTop: '1rem', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                <div className="form-foot" style={{ marginTop: '1rem', display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
                   <button type="button" className="btn" onClick={() => setIsModalOpen(false)}>Cancel</button>
-                  <button type="submit" className="btn btn-primary">Save Task</button>
+                  <button type="submit" className="btn primary">Save Task</button>
                 </div>
               </form>
             </div>
