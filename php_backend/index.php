@@ -43,7 +43,8 @@ if ($route === 'auth/login') {
     $id = isset($parts[1]) ? $parts[1] : null;
     $resource = isset($_GET['resource']) ? $_GET['resource'] : null;
     
-    if ($method === 'GET') getEnquiries($pdo, $id, $resource);
+    if ($id === 'bulk' && $method === 'POST') bulkCreateEnquiries($pdo, $body);
+    elseif ($method === 'GET') getEnquiries($pdo, $id, $resource);
     elseif ($method === 'POST') createEnquiry($pdo, $body);
     elseif ($method === 'PUT') updateEnquiry($pdo, $id, $body);
     elseif ($method === 'DELETE') deleteEnquiry($pdo, $id);

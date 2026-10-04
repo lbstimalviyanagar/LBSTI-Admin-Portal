@@ -96,3 +96,44 @@ function deleteEnquiry($pdo, $id) {
     $stmt->execute([$id]);
     echo json_encode(["message" => "Enquiry deleted."]);
 }
+
+function bulkCreateEnquiries($pdo, $body) {
+    $leads = $body['leads'] ?? [];
+    if (!is_array($leads) || count($leads) === 0) {
+        http_response_code(400);
+        die(json_encode(["message" => "No leads provided for import."]));
+    }
+
+    $successCount = 0;
+    $skipCount = 0;
+    
+    $checkStmt = $pdo->prepare("SELECT id FROM enquiries WHERE phone = ?");
+    $insertStmt = $pdo->prepare("INSERT INTO enquiries (name, phone, email, city, course, batch, source, status, assigned_to, follow_up_date, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+
+    foreach ($leads as $lead) {
+        $name = trim($lead['name'] ?? '');
+        $phone = trim($lead['phone'] ?? '');
+        
+        if (!$name || !$phone) {
+            $skipCount++;
+            continue;
+        }
+
+        $checkStmt->execute([$phone]);
+        if ($checkStmt->fetch()) {
+            $skipCount++;
+            continue;
+        }
+
+        $now = date('Y-m-d H:i:s');
+        $insertStmt->execute([
+            $name, $phone, trim($lead['email'] ?? ''), trim($lead['city'] ?? ''), trim($lead['course'] ?? ''),
+            trim($lead['batch'] ?? ''), trim($lead['source'] ?? ''), trim($lead['status'] ?? 'New'),
+            trim($lead['assignedTo'] ?? ''), trim($lead['followUpDate'] ?? '') ?: null, trim($lead['notes'] ?? ''),
+            $now, $now
+        ]);
+        $successCount++;
+    }
+
+    echo json_encode(["message" => "Successfully imported $successCount leads. Skipped $skipCount duplicates/invalid."]);
+}

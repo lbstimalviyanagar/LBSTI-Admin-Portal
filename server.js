@@ -345,6 +345,63 @@ app.post('/api/enquiries', async (req, res) => {
   }
 });
 
+app.post('/api/enquiries/bulk', async (req, res) => {
+  try {
+    const leads = req.body.leads;
+    if (!Array.isArray(leads) || leads.length === 0) {
+      return res.status(400).json({ message: 'No leads provided for import.' });
+    }
+
+    let successCount = 0;
+    let skipCount = 0;
+
+    for (const lead of leads) {
+      const name = String(lead.name || '').trim();
+      const phone = String(lead.phone || '').trim();
+
+      if (!name || !phone) {
+        skipCount++;
+        continue;
+      }
+
+      const existingCheck = await getSql('SELECT id FROM enquiries WHERE phone = ?', [phone]);
+      if (existingCheck.length > 0) {
+        skipCount++;
+        continue;
+      }
+
+      const now = new Date().toISOString();
+      const sql = `
+        INSERT INTO enquiries (
+          name, phone, email, city, course, batch, source, status, assigned_to, follow_up_date, notes, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `;
+
+      await runSql(sql, [
+        name,
+        phone,
+        String(lead.email || '').trim(),
+        String(lead.city || '').trim(),
+        String(lead.course || '').trim(),
+        String(lead.batch || '').trim(),
+        String(lead.source || '').trim(),
+        String(lead.status || 'New').trim(),
+        String(lead.assignedTo || '').trim(),
+        String(lead.followUpDate || '').trim(),
+        String(lead.notes || '').trim(),
+        now,
+        now
+      ]);
+
+      successCount++;
+    }
+
+    res.json({ message: `Successfully imported ${successCount} leads. Skipped ${skipCount} duplicates/invalid.` });
+  } catch (error) {
+    res.status(500).json({ message: 'Unable to process bulk import.', error: error.message });
+  }
+});
+
 app.patch('/api/enquiries/:id', async (req, res) => {
   try {
     const id = Number(req.params.id);
