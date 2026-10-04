@@ -85,8 +85,35 @@ export default function TasksPage({ user, users, onToast }) {
     }
   };
 
+  const handleDragStart = (e, id) => {
+    e.dataTransfer.setData('taskId', id);
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault(); // allow drop
+  };
+
+  const handleDrop = (e, newStatus) => {
+    e.preventDefault();
+    const taskId = e.dataTransfer.getData('taskId');
+    if (taskId) {
+      const task = tasks.find(t => t.id.toString() === taskId);
+      if (task && task.status !== newStatus) {
+        // Optimistic UI update
+        setTasks(prev => prev.map(t => t.id.toString() === taskId ? { ...t, status: newStatus } : t));
+        updateStatus(taskId, newStatus);
+      }
+    }
+  };
+
   const renderTaskCard = (task) => (
-    <div key={task.id} className="card" style={{ padding: '1rem', marginBottom: '1rem', borderLeft: task.status === 'Completed' ? '4px solid #10b981' : task.status === 'In Progress' ? '4px solid #3b82f6' : '4px solid #f59e0b' }}>
+    <div 
+      key={task.id} 
+      className="card" 
+      draggable
+      onDragStart={(e) => handleDragStart(e, task.id)}
+      style={{ padding: '1rem', marginBottom: '1rem', cursor: 'grab', borderLeft: task.status === 'Completed' ? '4px solid #10b981' : task.status === 'In Progress' ? '4px solid #3b82f6' : '4px solid #f59e0b' }}
+    >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <h4 style={{ margin: '0 0 0.5rem 0' }}>{task.title}</h4>
         <div>
@@ -136,12 +163,17 @@ export default function TasksPage({ user, users, onToast }) {
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem' }}>
           {['Pending', 'In Progress', 'Completed'].map(status => (
-            <div key={status} style={{ background: '#f8fafc', padding: '1rem', borderRadius: '8px' }}>
+            <div 
+              key={status} 
+              style={{ background: '#f8fafc', padding: '1rem', borderRadius: '8px' }}
+              onDragOver={handleDragOver}
+              onDrop={(e) => handleDrop(e, status)}
+            >
               <h3 style={{ marginTop: 0, marginBottom: '1rem', fontSize: '1.1rem', color: '#334155' }}>{status}</h3>
-              <div className="kanban-column">
+              <div className="kanban-column" style={{ minHeight: '150px' }}>
                 {tasks.filter(t => t.status === status).map(renderTaskCard)}
                 {tasks.filter(t => t.status === status).length === 0 && (
-                  <p className="muted" style={{ fontSize: '0.9rem' }}>No tasks in this list.</p>
+                  <p className="muted" style={{ fontSize: '0.9rem' }}>No tasks in this list. Drop tasks here.</p>
                 )}
               </div>
             </div>
