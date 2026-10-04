@@ -2,6 +2,11 @@ import React, { useState } from "react";
 import Icon from "./Icons";
 import api from "../services/api";
 import { useToast } from "../hooks/useToast";
+import { PieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend } from "recharts";
+
+const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ffc658', '#d0ed57', '#a4de6c'];
+const STATUS_COLORS = { "Active": "#0088FE", "Completed": "#00C49F", "Dropped": "#FF8042" };
+
 
 export default function StudentsSection({ students, enrollments, loading, onRefresh }) {
   const [tab, setTab] = useState("dashboard");
@@ -161,6 +166,42 @@ export default function StudentsSection({ students, enrollments, loading, onRefr
     e.target.value = "";
   };
 
+  // Data Aggregations for Charts
+  const courseData = React.useMemo(() => {
+    const counts = {};
+    enrollments.forEach(en => {
+      if (!en.course) return;
+      counts[en.course] = (counts[en.course] || 0) + 1;
+    });
+    return Object.keys(counts).map(k => ({ name: k, value: counts[k] })).sort((a,b) => b.value - a.value);
+  }, [enrollments]);
+
+  const statusData = React.useMemo(() => {
+    const counts = { Active: 0, Completed: 0, Dropped: 0 };
+    enrollments.forEach(en => {
+      if (!en.status) return;
+      const s = en.status.charAt(0).toUpperCase() + en.status.slice(1).toLowerCase();
+      counts[s] = (counts[s] || 0) + 1;
+    });
+    return Object.keys(counts).map(k => ({ name: k, value: counts[k] }));
+  }, [enrollments]);
+
+  const enrollmentsTrend = React.useMemo(() => {
+    const counts = {};
+    enrollments.forEach(en => {
+      if (!en.doa) return;
+      const d = new Date(en.doa);
+      if(isNaN(d)) return;
+      const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+      counts[key] = (counts[key] || 0) + 1;
+    });
+    return Object.keys(counts).sort().map(k => {
+      const [y, m] = k.split('-');
+      const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      return { name: `${months[parseInt(m)-1]} ${y.slice(2)}`, "Enrollments": counts[k] };
+    }).slice(-12);
+  }, [enrollments]);
+
   return (
     <section>
       <div className="page-head">
@@ -178,20 +219,73 @@ export default function StudentsSection({ students, enrollments, loading, onRefr
       </div>
 
       {tab === "dashboard" && (
-        <div className="stats">
-          <div className="card stat">
-            <div className="stat-top">
-              <span className="stat-ico"><Icon name="users" size={20} /></span>
-              <span className="stat-label">Total Students</span>
+        <div style={{display: "flex", flexDirection: "column", gap: "20px"}}>
+          <div className="stats">
+            <div className="card stat">
+              <div className="stat-top">
+                <span className="stat-ico"><Icon name="users" size={20} /></span>
+                <span className="stat-label">Total Students</span>
+              </div>
+              <div className="stat-val">{students.length}</div>
             </div>
-            <div className="stat-val">{students.length}</div>
+            <div className="card stat">
+              <div className="stat-top">
+                <span className="stat-ico"><Icon name="award" size={20} /></span>
+                <span className="stat-label">Total Enrollments</span>
+              </div>
+              <div className="stat-val">{enrollments.length}</div>
+            </div>
           </div>
-          <div className="card stat">
-            <div className="stat-top">
-              <span className="stat-ico"><Icon name="award" size={20} /></span>
-              <span className="stat-label">Total Enrollments</span>
+          
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "20px" }}>
+            <div className="card section" style={{ padding: "20px" }}>
+              <h3 style={{ marginBottom: "15px", fontSize: "16px", color: "#1e293b" }}>Course Distribution</h3>
+              <div style={{ width: "100%", height: 300 }}>
+                <ResponsiveContainer>
+                  <PieChart>
+                    <Pie data={courseData} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={5} dataKey="value">
+                      {courseData.map((entry, index) => (
+                        <Cell key={`cell-\${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <RechartsTooltip />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
             </div>
-            <div className="stat-val">{enrollments.length}</div>
+
+            <div className="card section" style={{ padding: "20px" }}>
+              <h3 style={{ marginBottom: "15px", fontSize: "16px", color: "#1e293b" }}>Enrollment Status</h3>
+              <div style={{ width: "100%", height: 300 }}>
+                <ResponsiveContainer>
+                  <PieChart>
+                    <Pie data={statusData} cx="50%" cy="50%" innerRadius={0} outerRadius={100} dataKey="value">
+                      {statusData.map((entry, index) => (
+                        <Cell key={`cell-\${index}`} fill={STATUS_COLORS[entry.name] || COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <RechartsTooltip />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+
+          <div className="card section" style={{ padding: "20px" }}>
+            <h3 style={{ marginBottom: "15px", fontSize: "16px", color: "#1e293b" }}>Enrollments Over Time</h3>
+            <div style={{ width: "100%", height: 350 }}>
+              <ResponsiveContainer>
+                <BarChart data={enrollmentsTrend} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                  <XAxis dataKey="name" tick={{fill: '#64748b'}} tickLine={false} />
+                  <YAxis tick={{fill: '#64748b'}} tickLine={false} axisLine={false} />
+                  <RechartsTooltip cursor={{fill: '#f1f5f9'}} />
+                  <Bar dataKey="Enrollments" fill="#4f46e5" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         </div>
       )}
