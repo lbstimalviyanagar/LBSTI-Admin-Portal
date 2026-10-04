@@ -168,12 +168,24 @@ export default function StudentsSection({ students, enrollments, loading, onRefr
 
   // Data Aggregations for Charts
   const courseData = React.useMemo(() => {
-    const counts = {};
+    const courses = {};
     enrollments.forEach(en => {
       if (!en.course) return;
-      counts[en.course] = (counts[en.course] || 0) + 1;
+      const c = en.course.toUpperCase();
+      const s = (en.status || 'Active').charAt(0).toUpperCase() + (en.status || 'Active').slice(1).toLowerCase();
+      
+      if (!courses[c]) {
+        courses[c] = { name: c, Active: 0, Completed: 0, Dropped: 0, Total: 0 };
+      }
+      
+      if (courses[c][s] !== undefined) {
+        courses[c][s]++;
+      } else {
+        courses[c][s] = 1;
+      }
+      courses[c].Total++;
     });
-    return Object.keys(counts).map(k => ({ name: k, value: counts[k] })).sort((a,b) => b.value - a.value);
+    return Object.values(courses).sort((a, b) => b.Total - a.Total);
   }, [enrollments]);
 
   const statusData = React.useMemo(() => {
@@ -190,16 +202,22 @@ export default function StudentsSection({ students, enrollments, loading, onRefr
     const counts = {};
     enrollments.forEach(en => {
       if (!en.doa) return;
-      const d = new Date(en.doa);
-      if(isNaN(d)) return;
-      const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
-      counts[key] = (counts[key] || 0) + 1;
+      // Parse YYYY-MM-DD safely
+      const parts = en.doa.split('-');
+      if (parts.length >= 2) {
+        const y = parts[0];
+        const m = parts[1];
+        if (y.length === 4) {
+          const key = `${y}-${m}`;
+          counts[key] = (counts[key] || 0) + 1;
+        }
+      }
     });
     return Object.keys(counts).sort().map(k => {
       const [y, m] = k.split('-');
       const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-      return { name: `${months[parseInt(m)-1]} ${y.slice(2)}`, "Enrollments": counts[k] };
-    }).slice(-12);
+      return { name: `${months[parseInt(m, 10)-1]} ${y}`, "Enrollments": counts[k] };
+    });
   }, [enrollments]);
 
   return (
@@ -237,24 +255,27 @@ export default function StudentsSection({ students, enrollments, loading, onRefr
             </div>
           </div>
           
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "20px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "20px" }}>
             <div className="card section" style={{ padding: "20px" }}>
-              <h3 style={{ marginBottom: "15px", fontSize: "16px", color: "#1e293b" }}>Course Distribution</h3>
-              <div style={{ width: "100%", height: 300 }}>
+              <h3 style={{ marginBottom: "15px", fontSize: "16px", color: "#1e293b" }}>Course Insights (Enrollments & Status)</h3>
+              <div style={{ width: "100%", height: 400 }}>
                 <ResponsiveContainer>
-                  <PieChart>
-                    <Pie data={courseData} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={5} dataKey="value">
-                      {courseData.map((entry, index) => (
-                        <Cell key={`cell-\${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <RechartsTooltip />
-                    <Legend />
-                  </PieChart>
+                  <BarChart data={courseData} margin={{ top: 20, right: 30, left: 0, bottom: 60 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                    <XAxis dataKey="name" angle={-45} textAnchor="end" tick={{fontSize: 12, fill: '#64748b'}} interval={0} height={60} />
+                    <YAxis tick={{fill: '#64748b'}} />
+                    <RechartsTooltip cursor={{fill: '#f1f5f9'}} />
+                    <Legend verticalAlign="top" height={36} />
+                    <Bar dataKey="Active" stackId="a" fill="#0088FE" />
+                    <Bar dataKey="Completed" stackId="a" fill="#00C49F" />
+                    <Bar dataKey="Dropped" stackId="a" fill="#FF8042" />
+                  </BarChart>
                 </ResponsiveContainer>
               </div>
             </div>
+          </div>
 
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "20px" }}>
             <div className="card section" style={{ padding: "20px" }}>
               <h3 style={{ marginBottom: "15px", fontSize: "16px", color: "#1e293b" }}>Enrollment Status</h3>
               <div style={{ width: "100%", height: 300 }}>
