@@ -1,4 +1,8 @@
 <?php
+// Enforce IST (Asia/Kolkata, UTC+5:30) for all date/time operations
+// regardless of the hosting server's default timezone setting.
+date_default_timezone_set('Asia/Kolkata');
+
 error_reporting(E_ALL);
 ini_set("display_errors", 0);
 ini_set("log_errors", 1);

@@ -1,5 +1,9 @@
 <?php
 
+// Ensure IST is always used for all date/time operations in this controller,
+// regardless of the hosting server's default timezone.
+date_default_timezone_set('Asia/Kolkata');
+
 function getAttendance($pdo, $user) {
     try {
         if ($user['role'] === 'admin') {
@@ -29,9 +33,12 @@ function getAttendance($pdo, $user) {
 
 function clockIn($pdo, $user) {
     try {
+        // Force IST for this operation
+        date_default_timezone_set('Asia/Kolkata');
+
         $staffId = $user['sub'];
-        $date = date('Y-m-d');
-        $now = date('Y-m-d H:i:s');
+        $date    = date('Y-m-d');           // Today in IST
+        $now     = date('Y-m-d H:i:s');     // Current time in IST
 
         $stmt = $pdo->prepare("SELECT id FROM staff_attendance WHERE staff_id = ? AND `date` = ? AND clock_out IS NULL");
         $stmt->execute([$staffId, $date]);
@@ -43,11 +50,11 @@ function clockIn($pdo, $user) {
 
         $stmt = $pdo->prepare("INSERT INTO staff_attendance (staff_id, `date`, clock_in) VALUES (?, ?, ?)");
         $stmt->execute([$staffId, $date, $now]);
-        
-        $id = $pdo->lastInsertId();
+
+        $id   = $pdo->lastInsertId();
         $stmt = $pdo->prepare("SELECT * FROM staff_attendance WHERE id = ?");
         $stmt->execute([$id]);
-        
+
         echo json_encode($stmt->fetch());
     } catch (PDOException $e) {
         http_response_code(500);
@@ -57,9 +64,12 @@ function clockIn($pdo, $user) {
 
 function clockOut($pdo, $user, $body) {
     try {
+        // Force IST for this operation
+        date_default_timezone_set('Asia/Kolkata');
+
         $staffId = $user['sub'];
-        $date = date('Y-m-d');
-        $now = date('Y-m-d H:i:s');
+        $date    = date('Y-m-d');           // Today in IST
+        $now     = date('Y-m-d H:i:s');     // Current time in IST
 
         $stmt = $pdo->prepare("SELECT * FROM staff_attendance WHERE staff_id = ? AND `date` = ? AND clock_out IS NULL ORDER BY clock_in DESC LIMIT 1");
         $stmt->execute([$staffId, $date]);
@@ -71,16 +81,16 @@ function clockOut($pdo, $user, $body) {
             return;
         }
 
-        $clockInTime = strtotime($record['clock_in']);
+        $clockInTime  = strtotime($record['clock_in']);
         $clockOutTime = strtotime($now);
-        $hours = ($clockOutTime - $clockInTime) / 3600;
+        $hours        = ($clockOutTime - $clockInTime) / 3600;
 
         $stmt = $pdo->prepare("UPDATE staff_attendance SET clock_out = ?, total_hours = ? WHERE id = ?");
         $stmt->execute([$now, round($hours, 2), $record['id']]);
 
         $stmt = $pdo->prepare("SELECT * FROM staff_attendance WHERE id = ?");
         $stmt->execute([$record['id']]);
-        
+
         echo json_encode($stmt->fetch());
     } catch (PDOException $e) {
         http_response_code(500);
