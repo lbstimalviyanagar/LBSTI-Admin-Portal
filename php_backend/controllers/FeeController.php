@@ -1,6 +1,6 @@
 <?php
 function ensureFeesTable($pdo) {
-    // Use TEXT instead of JSON for broader MySQL compatibility (5.6+)
+    // Create table if it doesn't exist (TEXT instead of JSON for MySQL 5.6+ compat)
     try {
         $pdo->exec("CREATE TABLE IF NOT EXISTS fees (
             id INT(11) PRIMARY KEY AUTO_INCREMENT,
@@ -18,7 +18,38 @@ function ensureFeesTable($pdo) {
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
     } catch (Exception $e) {
-        // Table may already exist with a different schema; proceed
+        // Table may already exist — proceed to column migration below
+    }
+
+    // ---------------------------------------------------------------
+    // Migration: add any columns that are missing in an older table.
+    // Each ALTER is in its own try-catch so one failure doesn't block others.
+    // ---------------------------------------------------------------
+    $columnsToAdd = [
+        "student_name"    => "VARCHAR(255) DEFAULT NULL",
+        "course"          => "VARCHAR(255) DEFAULT NULL",
+        "receipt_details" => "TEXT DEFAULT NULL",
+        "receipt_number"  => "VARCHAR(100) DEFAULT NULL",
+        "updated_at"      => "DATETIME DEFAULT CURRENT_TIMESTAMP",
+    ];
+
+    // Fetch existing column names
+    $existing = [];
+    try {
+        $res = $pdo->query("SHOW COLUMNS FROM fees");
+        while ($col = $res->fetch()) {
+            $existing[] = strtolower($col["Field"]);
+        }
+    } catch (Exception $e) { /* can't introspect — skip */ }
+
+    foreach ($columnsToAdd as $col => $definition) {
+        if (!in_array(strtolower($col), $existing)) {
+            try {
+                $pdo->exec("ALTER TABLE fees ADD COLUMN $col $definition");
+            } catch (Exception $e) {
+                // Column may have been added concurrently; ignore
+            }
+        }
     }
 }
 
@@ -47,22 +78,19 @@ function getFees($pdo, $id) {
 function createFee($pdo, $body, $user) {
     ensureFeesTable($pdo);
 
-    $enquiryId      = isset($body["enquiryId"])      ? (int)$body["enquiryId"]      : null;
-    $amount         = isset($body["amount"])          ? (float)$body["amount"]       : 0;
-    $paymentDate    = isset($body["paymentDate"])     ? $body["paymentDate"]         : date("Y-m-d");
-    $mode           = isset($body["mode"])            ? $body["mode"]                : "Cash";
-    $notes          = isset($body["notes"])           ? $body["notes"]               : "";
-    $receiptDetails = isset($body["receiptDetails"])  ? $body["receiptDetails"]      : null;
+    $enquiryId      = isset($body["enquiryId"])     ? (int)$body["enquiryId"]     : null;
+    $amount         = isset($body["amount"])         ? (float)$body["amount"]      : 0;
+    $paymentDate    = isset($body["paymentDate"])    ? $body["paymentDate"]        : date("Y-m-d");
+    $mode           = isset($body["mode"])           ? $body["mode"]               : "Cash";
+    $notes          = isset($body["notes"])          ? $body["notes"]              : "";
+    $receiptDetails = isset($body["receiptDetails"]) ? $body["receiptDetails"]     : null;
 
     if (!$enquiryId || !($amount > 0)) {
         http_response_code(400);
         die(json_encode(["message" => "Student and amount are required."]));
     }
 
-    // ---------------------------------------------------------------
-    // Look up student name + course from enquiries table first.
-    // The Payments tab sends enquiryId which maps to enquiries.id.
-    // ---------------------------------------------------------------
+    // Look up student name + course from enquiries table first
     $studentName = "Student";
     $course      = "";
 
@@ -74,9 +102,7 @@ function createFee($pdo, $body, $user) {
             $studentName = $enquiryRow["name"]   ? $enquiryRow["name"]   : "Student";
             $course      = $enquiryRow["course"] ? $enquiryRow["course"] : "";
         }
-    } catch (Exception $e) {
-        // enquiries table unavailable — fall through to students lookup
-    }
+    } catch (Exception $e) { /* fall through */ }
 
     // Fallback: try students + enrollments tables
     if ($studentName === "Student") {
@@ -94,25 +120,25 @@ function createFee($pdo, $body, $user) {
                 $studentName = $studentRow["name"]    ? $studentRow["name"]    : "Student";
                 $course      = $studentRow["courses"] ? $studentRow["courses"] : "";
             }
-        } catch (Exception $e) {
-            // students/enrollments table may not exist; keep defaults
-        }
+        } catch (Exception $e) { /* keep defaults */ }
     }
 
     $receivedBy         = isset($user["name"]) ? $user["name"] : "Admin";
     $receiptDetailsJson = $receiptDetails ? json_encode($receiptDetails) : null;
-    $now                = date("Y-m-d H:i:s");
 
+    // NOTE: created_at and updated_at are intentionally omitted from the INSERT —
+    // MySQL sets them automatically via DEFAULT CURRENT_TIMESTAMP. This means
+    // the INSERT works regardless of whether those columns exist in the live table.
     $stmt = $pdo->prepare(
         "INSERT INTO fees
-            (enquiry_id, student_name, course, amount, payment_date, mode, received_by, notes, receipt_details, created_at, updated_at)
+            (enquiry_id, student_name, course, amount, payment_date, mode, received_by, notes, receipt_details)
          VALUES
-            (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            (?, ?, ?, ?, ?, ?, ?, ?, ?)"
     );
     $stmt->execute([
         $enquiryId, $studentName, $course, $amount,
         $paymentDate, $mode, $receivedBy, $notes,
-        $receiptDetailsJson, $now, $now
+        $receiptDetailsJson
     ]);
 
     $newId = $pdo->lastInsertId();
@@ -126,7 +152,6 @@ function createFee($pdo, $body, $user) {
 function updateFee($pdo, $id, $body) {
     $updates = [];
     $params  = [];
-    $now     = date("Y-m-d H:i:s");
 
     $fields = [
         "amount"      => "amount",
@@ -148,11 +173,9 @@ function updateFee($pdo, $id, $body) {
     }
 
     if (count($updates) > 0) {
-        $updates[] = "updated_at = ?";
-        $params[]  = $now;
-        $params[]  = $id;
-        $sql       = "UPDATE fees SET " . implode(", ", $updates) . " WHERE id = ?";
-        $stmt      = $pdo->prepare($sql);
+        $params[] = $id;
+        $sql      = "UPDATE fees SET " . implode(", ", $updates) . " WHERE id = ?";
+        $stmt     = $pdo->prepare($sql);
         $stmt->execute($params);
     }
 
@@ -182,17 +205,17 @@ function normalizeFee($row) {
     }
     return [
         "id"             => (int)$row["id"],
-        "enquiryId"      => (int)($row["enquiry_id"] ?? 0),
-        "studentName"    => $row["student_name"] ?? "Student",
-        "course"         => $row["course"]        ?? "",
-        "amount"         => (float)($row["amount"] ?? 0),
-        "paymentDate"    => $row["payment_date"]  ?? "",
-        "mode"           => $row["mode"]          ?? "Cash",
-        "receivedBy"     => $row["received_by"]   ?? "Admin",
-        "notes"          => $row["notes"]         ?? "",
+        "enquiryId"      => (int)($row["enquiry_id"]   ?? 0),
+        "studentName"    => $row["student_name"]        ?? "Student",
+        "course"         => $row["course"]              ?? "",
+        "amount"         => (float)($row["amount"]      ?? 0),
+        "paymentDate"    => $row["payment_date"]        ?? "",
+        "mode"           => $row["mode"]                ?? "Cash",
+        "receivedBy"     => $row["received_by"]         ?? "Admin",
+        "notes"          => $row["notes"]               ?? "",
         "receiptDetails" => $receiptDetails,
-        "receiptNumber"  => $row["receipt_number"] ?? null,
-        "createdAt"      => $row["created_at"]    ?? "",
-        "updatedAt"      => $row["updated_at"]    ?? ""
+        "receiptNumber"  => $row["receipt_number"]      ?? null,
+        "createdAt"      => $row["created_at"]          ?? "",
+        "updatedAt"      => $row["updated_at"]          ?? ""
     ];
 }
