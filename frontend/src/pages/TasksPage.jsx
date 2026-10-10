@@ -209,7 +209,7 @@ export default function TasksPage({ user, users, onToast }) {
                       <select required className="select" value={formData.assignedTo} onChange={e => setFormData({...formData, assignedTo: e.target.value})}>
                         <option value="">Select Staff</option>
                         {users?.map(u => (
-                          <option key={u.id} value={u.id}>{u.full_name}</option>
+                          <option key={u.id} value={u.id}>{u.fullName || u.full_name || u.username}</option>
                         ))}
                       </select>
                     </div>

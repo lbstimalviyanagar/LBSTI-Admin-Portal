@@ -97,7 +97,7 @@ export default function Sidebar({
         )}
 
         
-        {isFeesVisible && (
+        {isStudentsVisible && (
           <button
             className="nav-item"
             type="button"

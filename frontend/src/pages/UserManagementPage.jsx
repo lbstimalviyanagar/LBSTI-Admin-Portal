@@ -257,9 +257,10 @@ export default function UserManagementPage({ currentUser, onUpdateUser }) {
                     value={formData.role} 
                     onChange={e => setFormData({...formData, role: e.target.value})}
                   >
-                    <option value="counselor">Counselor</option>
                     <option value="admin">Admin</option>
-                    <option value="user">User</option>
+                    <option value="receptionist">Receptionist</option>
+                    <option value="counselor">Counselor</option>
+                    <option value="teacher">Teacher</option>
                   </select>
                 </div>
                 <div className="fld full">
