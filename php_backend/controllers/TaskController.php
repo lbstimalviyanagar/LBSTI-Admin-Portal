@@ -4,7 +4,7 @@ function getTasks($pdo, $user) {
     try {
         if ($user['role'] === 'admin') {
             $stmt = $pdo->prepare("
-                SELECT t.*, u1.full_name as assigned_to_name, u2.full_name as assigned_by_name 
+                SELECT t.*, u1.full_name as assigned_to_name, u1.profile_photo as assigned_to_photo, u2.full_name as assigned_by_name 
                 FROM staff_tasks t 
                 LEFT JOIN portal_users u1 ON u1.id = t.assigned_to 
                 LEFT JOIN portal_users u2 ON u2.id = t.assigned_by 
@@ -13,7 +13,7 @@ function getTasks($pdo, $user) {
             $stmt->execute();
         } else {
             $stmt = $pdo->prepare("
-                SELECT t.*, u1.full_name as assigned_to_name, u2.full_name as assigned_by_name 
+                SELECT t.*, u1.full_name as assigned_to_name, u1.profile_photo as assigned_to_photo, u2.full_name as assigned_by_name 
                 FROM staff_tasks t 
                 LEFT JOIN portal_users u1 ON u1.id = t.assigned_to 
                 LEFT JOIN portal_users u2 ON u2.id = t.assigned_by 

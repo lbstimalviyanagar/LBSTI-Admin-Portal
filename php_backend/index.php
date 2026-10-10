@@ -54,10 +54,14 @@ if ($route === 'auth/login') {
     login($pdo, $body, $authSecret);
 } elseif ($route === 'auth/me') {
     $user = requireAuth($authSecret);
-    $stmt = $pdo->prepare("SELECT profile_photo FROM portal_users WHERE id = ?");
+    $stmt = $pdo->prepare("SELECT id, username, full_name, role, profile_photo FROM portal_users WHERE id = ?");
     $stmt->execute([$user['sub']]);
     $dbUser = $stmt->fetch();
-    $user['profilePhotoUrl'] = $dbUser ? $dbUser['profile_photo'] : null;
+    if ($dbUser) {
+        $user['name'] = $dbUser['full_name'];
+        $user['role'] = $dbUser['role'];
+        $user['profilePhotoUrl'] = $dbUser['profile_photo'] ?? null;
+    }
     echo json_encode(["ok" => true, "user" => $user]);
 } elseif (strpos($route, 'enquiries') === 0) {
     require 'controllers/EnquiryController.php';
@@ -85,7 +89,7 @@ if ($route === 'auth/login') {
     
     if ($method === 'GET') getUsers($pdo);
     elseif ($method === 'POST') createUser($pdo, $body);
-    elseif ($method === 'PUT') updateUser($pdo, $id, $body);
+    elseif ($method === 'PUT' || $method === 'PATCH') updateUser($pdo, $id, $body);
     elseif ($method === 'DELETE') deleteUser($pdo, $id);
 } elseif (strpos($route, 'fees') === 0) {
     require 'controllers/FeeController.php';

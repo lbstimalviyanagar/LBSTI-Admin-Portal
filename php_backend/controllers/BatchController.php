@@ -21,14 +21,8 @@ function getBatches($pdo) {
 
 function createBatch($pdo, $user, $body) {
     try {
-        if ($user['role'] !== 'admin') {
-            http_response_code(403);
-            echo json_encode(["message" => "Only admins can manage batches."]);
-            return;
-        }
-
         $batchTime = $body['batchTime'] ?? null;
-        $instructorId = $body['instructorId'] ?? null;
+        $instructorId = $user['role'] === 'admin' ? ($body['instructorId'] ?? null) : $user['sub'];
         $courseName = $body['courseName'] ?? null;
         $topic = $body['topic'] ?? null;
         $studentCount = $body['studentCount'] ?? 0;
@@ -57,12 +51,6 @@ function createBatch($pdo, $user, $body) {
 
 function updateBatch($pdo, $user, $id, $body) {
     try {
-        if ($user['role'] !== 'admin') {
-            http_response_code(403);
-            echo json_encode(["message" => "Only admins can manage batches."]);
-            return;
-        }
-
         $stmt = $pdo->prepare("SELECT * FROM institute_batches WHERE id = ?");
         $stmt->execute([$id]);
         $batch = $stmt->fetch();
@@ -70,6 +58,12 @@ function updateBatch($pdo, $user, $id, $body) {
         if (!$batch) {
             http_response_code(404);
             echo json_encode(["message" => "Batch not found."]);
+            return;
+        }
+
+        if ($user['role'] !== 'admin' && (int)$batch['instructor_id'] !== (int)$user['sub']) {
+            http_response_code(403);
+            echo json_encode(["message" => "Access denied. You can only edit your own batches."]);
             return;
         }
 

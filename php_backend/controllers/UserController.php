@@ -1,10 +1,14 @@
 <?php
 function normalizeUser($row) {
+    $role = trim($row['role'] ?? '');
+    if (empty($role)) {
+        $role = strtolower($row['username'] ?? '') === 'palwasha' ? 'teacher' : 'counselor';
+    }
     return [
         "id" => (int)$row['id'],
         "username" => $row['username'],
         "fullName" => $row['full_name'],
-        "role" => $row['role'],
+        "role" => $role,
         "profilePhotoUrl" => $row['profile_photo'] ?? null,
         "createdAt" => $row['created_at']
     ];

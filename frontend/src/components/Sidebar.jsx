@@ -19,8 +19,11 @@ export default function Sidebar({
   const isFeesVisible = !isTeacher;
   const isStudentsVisible = !isTeacher;
   
-  const userName = user?.name || 'User';
-  const userRole = user?.role || 'counselor';
+  const userName = user?.name || user?.fullName || 'User';
+  const roleRaw = (user?.designation || user?.role || user?.role_name || '').trim();
+  const displayRole = roleRaw 
+    ? (roleRaw.charAt(0).toUpperCase() + roleRaw.slice(1).toLowerCase()) 
+    : (user?.username?.toLowerCase() === 'palwasha' ? 'Teacher' : (isAdmin ? 'Admin' : 'Staff'));
 
   return (
     <aside className="sidebar" aria-label="Sidebar">
@@ -72,7 +75,7 @@ export default function Sidebar({
         )}
         <div>
           <b>{userName}</b>
-          <span>{userRole}</span>
+          <span>{displayRole}</span>
         </div>
       </div>
 

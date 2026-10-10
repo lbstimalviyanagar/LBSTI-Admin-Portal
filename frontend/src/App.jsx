@@ -33,8 +33,49 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState('');
 
-  // Navigation & View state
-  const [tab, setTab] = useState('dashboard'); // 'dashboard' | 'new' | 'table' | 'payments' | 'students'
+  // Navigation & View state (Persistent via URL Hash and localStorage fallback)
+  const getInitialTab = () => {
+    try {
+      const hash = window.location.hash.replace(/^#\/?/, '').trim();
+      const validTabs = ['dashboard', 'new', 'table', 'payments', 'students', 'attendance', 'tasks', 'batches', 'users'];
+      if (hash && validTabs.includes(hash)) return hash;
+      const saved = localStorage.getItem('lbstimn_active_tab');
+      if (saved && validTabs.includes(saved)) return saved;
+    } catch (e) {}
+    return 'dashboard';
+  };
+
+  const [tab, setTabState] = useState(getInitialTab);
+
+  const setTab = useCallback((newTab) => {
+    setTabState(newTab);
+    try {
+      localStorage.setItem('lbstimn_active_tab', newTab);
+      if (window.location.hash !== `#${newTab}`) {
+        window.location.hash = newTab;
+      }
+    } catch (e) {}
+  }, []);
+
+  useEffect(() => {
+    const onHashChange = () => {
+      const hash = window.location.hash.replace(/^#\/?/, '').trim();
+      const validTabs = ['dashboard', 'new', 'table', 'payments', 'students', 'attendance', 'tasks', 'batches', 'users'];
+      if (hash && validTabs.includes(hash)) {
+        setTabState(hash);
+        try { localStorage.setItem('lbstimn_active_tab', hash); } catch (e) {}
+      }
+    };
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
+
+  useEffect(() => {
+    if (user?.role === 'teacher' && ['dashboard', 'new', 'table', 'payments', 'students'].includes(tab)) {
+      setTab('attendance');
+    }
+  }, [user?.role, tab, setTab]);
+
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 

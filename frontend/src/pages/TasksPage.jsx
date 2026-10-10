@@ -106,40 +106,71 @@ export default function TasksPage({ user, users, onToast }) {
     }
   };
 
-  const renderTaskCard = (task) => (
-    <div 
-      key={task.id} 
-      className="card" 
-      draggable
-      onDragStart={(e) => handleDragStart(e, task.id)}
-      style={{ padding: '1rem', marginBottom: '1rem', cursor: 'grab', borderLeft: task.status === 'Completed' ? '4px solid #10b981' : task.status === 'In Progress' ? '4px solid #3b82f6' : '4px solid #f59e0b' }}
-    >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <h4 style={{ margin: '0 0 0.5rem 0' }}>{task.title}</h4>
-        <div>
-          <button className="btn icon-btn" onClick={() => openEditTask(task)} title="Edit"><Icon name="edit" size={14} /></button>
-          {user?.role === 'admin' && (
-            <button className="btn icon-btn" onClick={() => handleDelete(task.id)} title="Delete"><Icon name="trash" size={14} /></button>
-          )}
+  const renderTaskCard = (task) => {
+    const assignedUser = users?.find(u => String(u.id) === String(task.assigned_to));
+    const assignedName = task.assigned_to_name || assignedUser?.fullName || assignedUser?.full_name || assignedUser?.username || 'Staff';
+    const avatarUrl = task.assigned_to_photo || assignedUser?.profilePhotoUrl || assignedUser?.profile_photo;
+
+    return (
+      <div 
+        key={task.id} 
+        className="card" 
+        draggable
+        onDragStart={(e) => handleDragStart(e, task.id)}
+        style={{ padding: '1rem', marginBottom: '1rem', cursor: 'grab', borderLeft: task.status === 'Completed' ? '4px solid #10b981' : task.status === 'In Progress' ? '4px solid #3b82f6' : '4px solid #f59e0b' }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <h4 style={{ margin: '0 0 0.5rem 0' }}>{task.title}</h4>
+          <div>
+            <button className="btn icon-btn" onClick={() => openEditTask(task)} title="Edit"><Icon name="edit" size={14} /></button>
+            {user?.role === 'admin' && (
+              <button className="btn icon-btn" onClick={() => handleDelete(task.id)} title="Delete"><Icon name="trash" size={14} /></button>
+            )}
+          </div>
+        </div>
+        <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.9rem', color: '#64748b' }}>{task.description}</p>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', color: '#64748b' }}>
+          <span>Due: {task.due_date || 'No date'}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            {avatarUrl ? (
+              <img 
+                src={avatarUrl} 
+                alt={assignedName} 
+                style={{ width: '22px', height: '22px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} 
+              />
+            ) : (
+              <span style={{ 
+                width: '22px', 
+                height: '22px', 
+                borderRadius: '50%', 
+                background: '#cbd5e1', 
+                color: '#334155', 
+                display: 'inline-flex', 
+                alignItems: 'center', 
+                justifyContent: 'center', 
+                fontSize: '0.7rem', 
+                fontWeight: '600',
+                flexShrink: 0
+              }}>
+                {assignedName ? assignedName.charAt(0).toUpperCase() : '?'}
+              </span>
+            )}
+            <span>Assigned to: <strong>{assignedName}</strong></span>
+          </div>
+        </div>
+        {task.remarks && (
+          <div style={{ marginTop: '0.5rem', padding: '0.5rem', background: '#f1f5f9', borderRadius: '4px', fontSize: '0.85rem' }}>
+            <strong>Remarks:</strong> {task.remarks}
+          </div>
+        )}
+        <div style={{ marginTop: '0.75rem', display: 'flex', gap: '0.5rem' }}>
+          {task.status !== 'Pending' && <button className="btn btn-sm" onClick={() => updateStatus(task.id, 'Pending')}>Set Pending</button>}
+          {task.status !== 'In Progress' && <button className="btn btn-sm" onClick={() => updateStatus(task.id, 'In Progress')}>Set In Progress</button>}
+          {task.status !== 'Completed' && <button className="btn btn-sm" onClick={() => updateStatus(task.id, 'Completed')}>Set Completed</button>}
         </div>
       </div>
-      <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.9rem', color: '#64748b' }}>{task.description}</p>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: '#64748b' }}>
-        <span>Due: {task.due_date || 'No date'}</span>
-        <span>Assigned to: {task.assigned_to_name || task.assigned_to}</span>
-      </div>
-      {task.remarks && (
-        <div style={{ marginTop: '0.5rem', padding: '0.5rem', background: '#f1f5f9', borderRadius: '4px', fontSize: '0.85rem' }}>
-          <strong>Remarks:</strong> {task.remarks}
-        </div>
-      )}
-      <div style={{ marginTop: '0.75rem', display: 'flex', gap: '0.5rem' }}>
-        {task.status !== 'Pending' && <button className="btn btn-sm" onClick={() => updateStatus(task.id, 'Pending')}>Set Pending</button>}
-        {task.status !== 'In Progress' && <button className="btn btn-sm" onClick={() => updateStatus(task.id, 'In Progress')}>Set In Progress</button>}
-        {task.status !== 'Completed' && <button className="btn btn-sm" onClick={() => updateStatus(task.id, 'Completed')}>Set Completed</button>}
-      </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <div className="page-section">
@@ -183,7 +214,7 @@ export default function TasksPage({ user, users, onToast }) {
 
       {isModalOpen && (
         <div className="overlay" id="taskOverlay" onMouseDown={(e) => { if (e.target.id === 'taskOverlay') setIsModalOpen(false); }}>
-          <div className="modal" role="dialog" aria-modal="true" style={{ maxWidth: '500px' }}>
+          <div className="modal" role="dialog" aria-modal="true" style={{ maxWidth: '500px', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
             <header>
               <div className="t">
                 <h3>{editingTask ? 'Edit Task' : 'Assign Task'}</h3>
@@ -192,7 +223,7 @@ export default function TasksPage({ user, users, onToast }) {
                 <span className="ic"><Icon name="x" size={18} /></span>
               </button>
             </header>
-            <div className="modal-body">
+            <div className="modal-body" style={{ maxHeight: 'calc(90vh - 70px)', overflowY: 'auto' }}>
               <form onSubmit={handleSubmit} style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 <div className="fld">
                   <label>Title <em>*</em></label>

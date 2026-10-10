@@ -44,7 +44,11 @@ $queries = [
         `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         PRIMARY KEY (`id`),
         FOREIGN KEY (`instructor_id`) REFERENCES `portal_users`(`id`) ON DELETE SET NULL
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;"
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;",
+
+    "ALTER TABLE `portal_users` MODIFY COLUMN `role` VARCHAR(50) NOT NULL DEFAULT 'counselor';",
+    "UPDATE `portal_users` SET `role` = 'teacher' WHERE `username` = 'Palwasha' AND (`role` = '' OR `role` IS NULL OR `role` = 'counselor' OR `role` = 'user');",
+    "UPDATE `portal_users` SET `role` = 'counselor' WHERE `role` = '' OR `role` IS NULL;"
 ];
 
 foreach ($queries as $q) {

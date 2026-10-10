@@ -180,38 +180,46 @@ export default function UserManagementPage({ currentUser, onUpdateUser }) {
                   </td>
                 </tr>
               ) : (
-                users.map(u => (
-                  <tr key={u.id}>
-                    <td>
-                      <div className="person">
-                        <span className="av" style={u.profilePhotoUrl ? { background: `url(${u.profilePhotoUrl}) center/cover no-repeat`, color: 'transparent' } : { background: avColor(u.fullName) }}>
-                          {initials(u.fullName)}
-                        </span>
-                        <span><b>{u.fullName}</b></span>
-                      </div>
-                    </td>
-                    <td>{u.username}</td>
-                    <td>
-                      <span className={`pill s-${u.role}`}>{u.role}</span>
-                    </td>
-                    <td>{new Date(u.createdAt).toLocaleDateString()}</td>
-                    <td>
-                      <div className="acts">
-                        <button className="btn sm" onClick={() => handleOpenModal(u)}>
-                          <Icon name="edit" size={15} /> Edit
-                        </button>
-                        <button 
-                          className="btn sm danger icon" 
-                          onClick={() => handleDeleteUser(u.id, u.fullName)}
-                          disabled={String(u.id) === String(currentUser?.id)}
-                          title={String(u.id) === String(currentUser?.id) ? "Cannot delete yourself" : "Delete user"}
-                        >
-                          <Icon name="trash" size={15} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                users.map(u => {
+                  const roleRaw = u.role || u.designation || u.role_name || '';
+                  const roleDisplay = roleRaw 
+                    ? roleRaw.charAt(0).toUpperCase() + roleRaw.slice(1).toLowerCase() 
+                    : (u.username?.toLowerCase() === 'palwasha' ? 'Teacher' : 'Staff');
+                  const roleSlug = (roleRaw || 'staff').toLowerCase();
+
+                  return (
+                    <tr key={u.id}>
+                      <td>
+                        <div className="person">
+                          <span className="av" style={u.profilePhotoUrl ? { background: `url(${u.profilePhotoUrl}) center/cover no-repeat`, color: 'transparent' } : { background: avColor(u.fullName) }}>
+                            {initials(u.fullName)}
+                          </span>
+                          <span><b>{u.fullName}</b></span>
+                        </div>
+                      </td>
+                      <td>{u.username}</td>
+                      <td>
+                        <span className={`pill s-${roleSlug}`}>{roleDisplay}</span>
+                      </td>
+                      <td>{new Date(u.createdAt).toLocaleDateString()}</td>
+                      <td>
+                        <div className="acts">
+                          <button className="btn sm" onClick={() => handleOpenModal(u)}>
+                            <Icon name="edit" size={15} /> Edit
+                          </button>
+                          <button 
+                            className="btn sm danger icon" 
+                            onClick={() => handleDeleteUser(u.id, u.fullName)}
+                            disabled={String(u.id) === String(currentUser?.id)}
+                            title={String(u.id) === String(currentUser?.id) ? "Cannot delete yourself" : "Delete user"}
+                          >
+                            <Icon name="trash" size={15} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>

@@ -1297,6 +1297,11 @@ tbody tr:last-child td {
 .s-counselingdone { --c: #0d9488; }
 .s-confirmed { --c: #047857; }
 .s-dropped { --c: #b91c1c; }
+.s-admin { --c: #0f172a; }
+.s-counselor { --c: #7c3aed; }
+.s-teacher { --c: #059669; }
+.s-receptionist { --c: #d97706; }
+.s-user, .s-staff { --c: #475569; }
 
 .toolbar {
   display: flex;
