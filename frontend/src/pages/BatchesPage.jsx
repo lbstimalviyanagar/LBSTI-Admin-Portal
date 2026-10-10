@@ -219,7 +219,7 @@ export default function BatchesPage({ user, users, onToast }) {
                   <select className="select" value={formData.instructorId} onChange={e => setFormData({...formData, instructorId: e.target.value})}>
                     <option value="">Select Instructor</option>
                     {users?.map(u => (
-                      <option key={u.id} value={u.id}>{u.full_name}</option>
+                      <option key={u.id} value={u.id}>{u.fullName || u.full_name || u.username}</option>
                     ))}
                   </select>
                 </div>
