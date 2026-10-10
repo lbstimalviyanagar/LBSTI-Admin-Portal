@@ -50,11 +50,11 @@ function clockIn($pdo, $user) {
 
         $stmt = $pdo->prepare("INSERT INTO staff_attendance (staff_id, `date`, clock_in) VALUES (?, ?, ?)");
         $stmt->execute([$staffId, $date, $now]);
-
-        $id   = $pdo->lastInsertId();
+        
+        $id = $pdo->lastInsertId();
         $stmt = $pdo->prepare("SELECT * FROM staff_attendance WHERE id = ?");
         $stmt->execute([$id]);
-
+        
         echo json_encode($stmt->fetch());
     } catch (PDOException $e) {
         http_response_code(500);
@@ -81,16 +81,16 @@ function clockOut($pdo, $user, $body) {
             return;
         }
 
-        $clockInTime  = strtotime($record['clock_in']);
+        $clockInTime = strtotime($record['clock_in']);
         $clockOutTime = strtotime($now);
-        $hours        = ($clockOutTime - $clockInTime) / 3600;
+        $hours = ($clockOutTime - $clockInTime) / 3600;
 
         $stmt = $pdo->prepare("UPDATE staff_attendance SET clock_out = ?, total_hours = ? WHERE id = ?");
         $stmt->execute([$now, round($hours, 2), $record['id']]);
 
         $stmt = $pdo->prepare("SELECT * FROM staff_attendance WHERE id = ?");
         $stmt->execute([$record['id']]);
-
+        
         echo json_encode($stmt->fetch());
     } catch (PDOException $e) {
         http_response_code(500);

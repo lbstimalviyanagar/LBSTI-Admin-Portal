@@ -11,8 +11,14 @@ export default function Sidebar({
   setCollapsed,
   onNavClick
 }) {
-  const isFeesVisible = ['admin', 'counselor', 'counsellor'].includes(String(user?.role || '').toLowerCase());
-  const isAdmin = String(user?.role || '').toLowerCase() === 'admin';
+    const role = String(user?.role || '').toLowerCase();
+  const isAdmin = role === 'admin';
+  const isTeacher = role === 'teacher';
+  
+  const isEnquiriesVisible = !isTeacher;
+  const isFeesVisible = !isTeacher;
+  const isStudentsVisible = !isTeacher;
+  
   const userName = user?.name || 'User';
   const userRole = user?.role || 'counselor';
 
@@ -72,7 +78,8 @@ export default function Sidebar({
 
       <div className="nav-label">Menu</div>
       <nav aria-label="Main">
-        <button
+        {isEnquiriesVisible && (
+          <button
           className="nav-item"
           type="button"
           aria-current={['dashboard', 'new', 'table'].includes(tab) ? 'page' : undefined}
@@ -81,7 +88,8 @@ export default function Sidebar({
         >
           <span className="ic"><Icon name="inbox" size={20} /></span>
           <span className="label">Enquiries</span>
-        </button>
+          </button>
+        )}
 
         {isFeesVisible && (
           <button
