@@ -1,6 +1,7 @@
 <?php
-error_reporting(0);
+error_reporting(E_ALL);
 ini_set("display_errors", 0);
+ini_set("log_errors", 1);
 
 header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS");
@@ -11,6 +12,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
     exit();
 }
+
+// Global exception handler — returns real error as JSON instead of blank 500
+set_exception_handler(function($e) {
+    if (!headers_sent()) {
+        http_response_code(500);
+        header("Content-Type: application/json");
+    }
+    echo json_encode([
+        "error"   => true,
+        "message" => $e->getMessage(),
+        "file"    => basename($e->getFile()),
+        "line"    => $e->getLine()
+    ]);
+    exit();
+});
 
 require 'config.php';
 require 'JwtHandler.php';
