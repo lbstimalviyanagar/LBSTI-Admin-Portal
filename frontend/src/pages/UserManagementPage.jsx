@@ -254,14 +254,34 @@ export default function UserManagementPage({ currentUser, onUpdateUser }) {
       {/* User Form Modal */}
       {isModalOpen && (
         <div className="overlay" onMouseDown={(e) => e.target.className === 'overlay' && handleCloseModal()}>
-          <div className="modal" style={{ maxWidth: '440px' }}>
-            <header>
+          <div 
+            className="modal" 
+            role="dialog" 
+            aria-modal="true" 
+            style={{ 
+              maxWidth: '480px', 
+              maxHeight: '90vh', 
+              display: 'flex', 
+              flexDirection: 'column' 
+            }}
+          >
+            <header style={{ flexShrink: 0 }}>
               <div className="t">
                 <h3>{editingUser ? 'Edit User' : 'Add New User'}</h3>
               </div>
-              <button type="button" className="icon-btn" onClick={handleCloseModal}><Icon name="x" size={20} /></button>
+              <button type="button" className="icon-btn" onClick={handleCloseModal} aria-label="Close">
+                <Icon name="x" size={20} />
+              </button>
             </header>
-            <div className="form-body">
+            <div 
+              className="form-body" 
+              style={{ 
+                overflowY: 'auto', 
+                flex: 1, 
+                minHeight: 0, 
+                maxHeight: 'calc(90vh - 130px)' 
+              }}
+            >
               <form id="user-form" onSubmit={handleSaveUser} className="fgrid">
                 <div className="fld full">
                   <label>Full Name <em>*</em></label>
@@ -400,7 +420,7 @@ export default function UserManagementPage({ currentUser, onUpdateUser }) {
                 </div>
               </form>
             </div>
-            <div className="form-actions">
+            <div className="form-actions" style={{ flexShrink: 0 }}>
               <button type="button" className="btn" onClick={handleCloseModal}>Cancel</button>
               <button className="btn primary" type="submit" form="user-form">
                 {editingUser ? 'Update User' : 'Create User'}

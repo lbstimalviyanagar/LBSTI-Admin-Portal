@@ -1418,6 +1418,13 @@ tbody tr:last-child td {
   padding: 24px 26px;
 }
 
+.modal .form-body {
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+  max-height: calc(90vh - 130px);
+}
+
 .form-body .lead {
   margin: 0 0 20px;
   color: var(--muted);
