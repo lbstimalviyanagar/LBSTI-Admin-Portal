@@ -20,6 +20,7 @@ import { useAuth } from './hooks/useAuth';
 import { useToast } from './hooks/useToast';
 import api from './services/api';
 import { COUNSELORS, ORG, WHATSAPP_NUMBER } from './utils/helpers';
+import { hasMenuAccess } from './utils/permissions';
 
 export default function App() {
   const { user, setUser, loading: authLoading, logout } = useAuth();
@@ -71,10 +72,35 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (user?.role === 'teacher' && ['dashboard', 'new', 'table', 'payments', 'students'].includes(tab)) {
-      setTab('attendance');
+    if (!user) return;
+
+    const TAB_PERMISSION_MAP = {
+      dashboard: 'enquiries',
+      new: 'enquiries',
+      table: 'enquiries',
+      payments: 'payments',
+      students: 'students',
+      attendance: 'attendance',
+      tasks: 'tasks',
+      batches: 'batches',
+      users: 'admin'
+    };
+
+    const requiredPermission = TAB_PERMISSION_MAP[tab];
+    const isAllowed = requiredPermission === 'admin' 
+      ? user.role === 'admin' 
+      : hasMenuAccess(user, requiredPermission);
+
+    if (!isAllowed) {
+      const fallbackTabs = ['attendance', 'batches', 'tasks', 'dashboard', 'payments', 'students'];
+      const nextAllowedTab = fallbackTabs.find(t => {
+        const perm = TAB_PERMISSION_MAP[t];
+        return perm === 'admin' ? user.role === 'admin' : hasMenuAccess(user, perm);
+      }) || 'attendance';
+
+      setTab(nextAllowedTab);
     }
-  }, [user?.role, tab, setTab]);
+  }, [user, tab, setTab]);
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);

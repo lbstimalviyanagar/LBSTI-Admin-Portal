@@ -5,6 +5,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import ToastContainer from '../components/ToastContainer';
 import { useToast } from '../hooks/useToast';
 import { initials, avColor } from '../utils/helpers';
+import { AVAILABLE_MENUS } from '../utils/permissions';
 
 export default function UserManagementPage({ currentUser, onUpdateUser }) {
   const [users, setUsers] = useState([]);
@@ -18,6 +19,7 @@ export default function UserManagementPage({ currentUser, onUpdateUser }) {
     username: '',
     fullName: '',
     role: 'counselor',
+    menuPermissions: ['enquiries', 'payments', 'students', 'attendance', 'tasks', 'batches'],
     password: '',
     profilePhotoUrl: ''
   });
@@ -48,11 +50,18 @@ export default function UserManagementPage({ currentUser, onUpdateUser }) {
   const handleOpenModal = (user = null) => {
     if (user) {
       setEditingUser(user);
+      const existingPerms = user.menuPermissions && user.menuPermissions.length > 0
+        ? user.menuPermissions
+        : user.role === 'teacher'
+          ? ['attendance', 'batches', 'tasks']
+          : ['enquiries', 'payments', 'students', 'attendance', 'tasks', 'batches'];
+
       setFormData({
         username: user.username,
         fullName: user.fullName,
-        role: user.role,
-        password: '', // Don't populate password
+        role: user.role || 'counselor',
+        menuPermissions: existingPerms,
+        password: '',
         profilePhotoUrl: user.profilePhotoUrl || ''
       });
     } else {
@@ -61,11 +70,22 @@ export default function UserManagementPage({ currentUser, onUpdateUser }) {
         username: '',
         fullName: '',
         role: 'counselor',
+        menuPermissions: ['enquiries', 'payments', 'students', 'attendance', 'tasks', 'batches'],
         password: '',
         profilePhotoUrl: ''
       });
     }
     setIsModalOpen(true);
+  };
+
+  const toggleMenuPermission = (menuId) => {
+    setFormData(prev => {
+      const current = prev.menuPermissions || [];
+      const next = current.includes(menuId)
+        ? current.filter(id => id !== menuId)
+        : [...current, menuId];
+      return { ...prev, menuPermissions: next };
+    });
   };
 
   const handleCloseModal = () => {
@@ -89,6 +109,7 @@ export default function UserManagementPage({ currentUser, onUpdateUser }) {
         const patch = {
           fullName: formData.fullName,
           role: formData.role,
+          menuPermissions: formData.role === 'admin' ? null : (formData.menuPermissions || []),
           profilePhotoUrl: formData.profilePhotoUrl || null
         };
         if (formData.password) patch.password = formData.password;
@@ -102,11 +123,15 @@ export default function UserManagementPage({ currentUser, onUpdateUser }) {
             ...currentUser,
             name: updated.fullName || formData.fullName,
             role: updated.role || formData.role,
+            menuPermissions: patch.menuPermissions,
             profilePhotoUrl: patch.profilePhotoUrl
           });
         }
       } else {
-        await api.createUser(formData);
+        await api.createUser({
+          ...formData,
+          menuPermissions: formData.role === 'admin' ? null : (formData.menuPermissions || [])
+        });
         addToast("User created successfully.");
       }
       handleCloseModal();
@@ -271,6 +296,49 @@ export default function UserManagementPage({ currentUser, onUpdateUser }) {
                     <option value="teacher">Teacher</option>
                   </select>
                 </div>
+                {formData.role !== 'admin' && (
+                  <div className="fld full" style={{ marginTop: '0.25rem' }}>
+                    <label style={{ display: 'block', fontWeight: 600, marginBottom: '6px' }}>
+                      Sidebar Navigation Access
+                    </label>
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))',
+                      gap: '8px',
+                      background: '#f8fafc',
+                      padding: '12px',
+                      borderRadius: '8px',
+                      border: '1px solid #e2e8f0'
+                    }}>
+                      {AVAILABLE_MENUS.map(m => {
+                        const isChecked = formData.menuPermissions?.includes(m.id);
+                        return (
+                          <label 
+                            key={m.id} 
+                            style={{ 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              gap: '8px', 
+                              cursor: 'pointer', 
+                              fontSize: '0.85rem',
+                              fontWeight: isChecked ? 600 : 400
+                            }}
+                          >
+                            <input 
+                              type="checkbox" 
+                              checked={isChecked} 
+                              onChange={() => toggleMenuPermission(m.id)} 
+                            />
+                            <span>{m.label}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                    <small className="muted" style={{ display: 'block', marginTop: '4px' }}>
+                      Checked menus are explicitly accessible to this user regardless of role defaults.
+                    </small>
+                  </div>
+                )}
                 <div className="fld full">
                   <label>Password {editingUser ? <small>(Leave blank to keep current)</small> : <em>*</em>}</label>
                   <input 

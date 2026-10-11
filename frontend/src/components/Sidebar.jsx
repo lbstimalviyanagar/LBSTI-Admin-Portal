@@ -1,6 +1,7 @@
 import React from 'react';
 import Icon from './Icons';
 import { ORG, initials } from '../utils/helpers';
+import { hasMenuAccess } from '../utils/permissions';
 
 export default function Sidebar({
   user,
@@ -11,13 +12,8 @@ export default function Sidebar({
   setCollapsed,
   onNavClick
 }) {
-    const role = String(user?.role || '').toLowerCase();
+  const role = String(user?.role || '').toLowerCase();
   const isAdmin = role === 'admin';
-  const isTeacher = role === 'teacher';
-  
-  const isEnquiriesVisible = !isTeacher;
-  const isFeesVisible = !isTeacher;
-  const isStudentsVisible = !isTeacher;
   
   const userName = user?.name || user?.fullName || 'User';
   const roleRaw = (user?.designation || user?.role || user?.role_name || '').trim();
@@ -81,20 +77,20 @@ export default function Sidebar({
 
       <div className="nav-label">Menu</div>
       <nav aria-label="Main">
-        {isEnquiriesVisible && (
+        {hasMenuAccess(user, 'enquiries') && (
           <button
-          className="nav-item"
-          type="button"
-          aria-current={['dashboard', 'new', 'table'].includes(tab) ? 'page' : undefined}
-          onClick={() => { setTab(['dashboard', 'new', 'table'].includes(tab) ? tab : 'dashboard'); if (onNavClick) onNavClick(); }}
-          data-tooltip-right={collapsed ? "Enquiries" : undefined}
-        >
-          <span className="ic"><Icon name="inbox" size={20} /></span>
-          <span className="label">Enquiries</span>
+            className="nav-item"
+            type="button"
+            aria-current={['dashboard', 'new', 'table'].includes(tab) ? 'page' : undefined}
+            onClick={() => { setTab(['dashboard', 'new', 'table'].includes(tab) ? tab : 'dashboard'); if (onNavClick) onNavClick(); }}
+            data-tooltip-right={collapsed ? "Enquiries" : undefined}
+          >
+            <span className="ic"><Icon name="inbox" size={20} /></span>
+            <span className="label">Enquiries</span>
           </button>
         )}
 
-        {isFeesVisible && (
+        {hasMenuAccess(user, 'payments') && (
           <button
             className="nav-item"
             type="button"
@@ -107,8 +103,7 @@ export default function Sidebar({
           </button>
         )}
 
-        
-        {isStudentsVisible && (
+        {hasMenuAccess(user, 'students') && (
           <button
             className="nav-item"
             type="button"
@@ -121,38 +116,44 @@ export default function Sidebar({
           </button>
         )}
 
-        <button
-          className="nav-item"
-          type="button"
-          aria-current={tab === "attendance" ? "page" : undefined}
-          onClick={() => { setTab("attendance"); if (onNavClick) onNavClick(); }}
-          data-tooltip-right={collapsed ? "Attendance" : undefined}
-        >
-          <span className="ic"><Icon name="clock" size={20} /></span>
-          <span className="label">Attendance</span>
-        </button>
+        {hasMenuAccess(user, 'attendance') && (
+          <button
+            className="nav-item"
+            type="button"
+            aria-current={tab === "attendance" ? "page" : undefined}
+            onClick={() => { setTab("attendance"); if (onNavClick) onNavClick(); }}
+            data-tooltip-right={collapsed ? "Attendance" : undefined}
+          >
+            <span className="ic"><Icon name="clock" size={20} /></span>
+            <span className="label">Attendance</span>
+          </button>
+        )}
 
-        <button
-          className="nav-item"
-          type="button"
-          aria-current={tab === "tasks" ? "page" : undefined}
-          onClick={() => { setTab("tasks"); if (onNavClick) onNavClick(); }}
-          data-tooltip-right={collapsed ? "Tasks" : undefined}
-        >
-          <span className="ic"><Icon name="check" size={20} /></span>
-          <span className="label">Tasks</span>
-        </button>
+        {hasMenuAccess(user, 'tasks') && (
+          <button
+            className="nav-item"
+            type="button"
+            aria-current={tab === "tasks" ? "page" : undefined}
+            onClick={() => { setTab("tasks"); if (onNavClick) onNavClick(); }}
+            data-tooltip-right={collapsed ? "Tasks" : undefined}
+          >
+            <span className="ic"><Icon name="check" size={20} /></span>
+            <span className="label">Tasks</span>
+          </button>
+        )}
 
-        <button
-          className="nav-item"
-          type="button"
-          aria-current={tab === "batches" ? "page" : undefined}
-          onClick={() => { setTab("batches"); if (onNavClick) onNavClick(); }}
-          data-tooltip-right={collapsed ? "Batches" : undefined}
-        >
-          <span className="ic"><Icon name="dashboard" size={20} /></span>
-          <span className="label">Batches</span>
-        </button>
+        {hasMenuAccess(user, 'batches') && (
+          <button
+            className="nav-item"
+            type="button"
+            aria-current={tab === "batches" ? "page" : undefined}
+            onClick={() => { setTab("batches"); if (onNavClick) onNavClick(); }}
+            data-tooltip-right={collapsed ? "Batches" : undefined}
+          >
+            <span className="ic"><Icon name="dashboard" size={20} /></span>
+            <span className="label">Batches</span>
+          </button>
+        )}
 
         {isAdmin && (
           <button

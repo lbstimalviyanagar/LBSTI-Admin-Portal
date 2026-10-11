@@ -47,6 +47,7 @@ $queries = [
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;",
 
     "ALTER TABLE `portal_users` MODIFY COLUMN `role` VARCHAR(50) NOT NULL DEFAULT 'counselor';",
+    "ALTER TABLE `portal_users` ADD COLUMN `menu_permissions` TEXT DEFAULT NULL AFTER `role`;",
     "UPDATE `portal_users` SET `role` = 'teacher' WHERE `username` = 'Palwasha' AND (`role` = '' OR `role` IS NULL OR `role` = 'counselor' OR `role` = 'user');",
     "UPDATE `portal_users` SET `role` = 'counselor' WHERE `role` = '' OR `role` IS NULL;"
 ];

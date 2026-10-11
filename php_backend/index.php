@@ -49,23 +49,77 @@ function requireAuth($secret) {
     return $user;
 }
 
+function requireMenuPermission($user, $requiredMenu, $pdo) {
+    if (isset($user['role']) && strtolower($user['role']) === 'admin') {
+        return;
+    }
+
+    $stmt = $pdo->prepare("SELECT role, menu_permissions FROM portal_users WHERE id = ?");
+    $stmt->execute([$user['sub']]);
+    $dbUser = $stmt->fetch();
+
+    if (!$dbUser) {
+        http_response_code(403);
+        echo json_encode(["message" => "Access denied. User account not found."]);
+        exit();
+    }
+
+    if (strtolower($dbUser['role']) === 'admin') {
+        return;
+    }
+
+    $permissions = [];
+    if (!empty($dbUser['menu_permissions'])) {
+        $decoded = json_decode($dbUser['menu_permissions'], true);
+        if (is_array($decoded)) {
+            $permissions = $decoded;
+        }
+    }
+
+    if (empty($permissions)) {
+        if ($dbUser['role'] === 'teacher') {
+            $permissions = ['attendance', 'batches', 'tasks'];
+        } else {
+            $permissions = ['enquiries', 'payments', 'students', 'attendance', 'tasks', 'batches'];
+        }
+    }
+
+    if (!in_array($requiredMenu, $permissions, true)) {
+        http_response_code(403);
+        echo json_encode([
+            "message" => "Forbidden: You do not have permission to access the '{$requiredMenu}' resource."
+        ]);
+        exit();
+    }
+}
+
 if ($route === 'auth/login') {
     require 'controllers/AuthController.php';
     login($pdo, $body, $authSecret);
 } elseif ($route === 'auth/me') {
     $user = requireAuth($authSecret);
-    $stmt = $pdo->prepare("SELECT id, username, full_name, role, profile_photo FROM portal_users WHERE id = ?");
+    $stmt = $pdo->prepare("SELECT id, username, full_name, role, menu_permissions, profile_photo FROM portal_users WHERE id = ?");
     $stmt->execute([$user['sub']]);
     $dbUser = $stmt->fetch();
     if ($dbUser) {
         $user['name'] = $dbUser['full_name'];
         $user['role'] = $dbUser['role'];
         $user['profilePhotoUrl'] = $dbUser['profile_photo'] ?? null;
+        
+        $permissions = [];
+        if (!empty($dbUser['menu_permissions'])) {
+            $decoded = json_decode($dbUser['menu_permissions'], true);
+            if (is_array($decoded)) {
+                $permissions = $decoded;
+            }
+        }
+        $user['menuPermissions'] = $permissions;
     }
     echo json_encode(["ok" => true, "user" => $user]);
 } elseif (strpos($route, 'enquiries') === 0) {
     require 'controllers/EnquiryController.php';
     $user = requireAuth($authSecret);
+    requireMenuPermission($user, 'enquiries', $pdo);
     
     $parts = explode('/', $route);
     $id = isset($parts[1]) ? $parts[1] : null;
@@ -94,6 +148,7 @@ if ($route === 'auth/login') {
 } elseif (strpos($route, 'fees') === 0) {
     require 'controllers/FeeController.php';
     $user = requireAuth($authSecret);
+    requireMenuPermission($user, 'payments', $pdo);
     
     $parts = explode('/', $route);
     $id = isset($parts[1]) ? $parts[1] : null;
@@ -105,6 +160,7 @@ if ($route === 'auth/login') {
 } elseif (strpos($route, 'receipts') === 0) {
     require 'controllers/ReceiptController.php';
     $user = requireAuth($authSecret);
+    requireMenuPermission($user, 'payments', $pdo);
     
     $parts = explode('/', $route);
     $id = isset($parts[1]) ? $parts[1] : null;
@@ -114,6 +170,7 @@ if ($route === 'auth/login') {
 } elseif (strpos($route, "students") === 0) {
     require "controllers/StudentController.php";
     $user = requireAuth($authSecret);
+    requireMenuPermission($user, 'students', $pdo);
     $parts = explode("/", $route);
     $id = isset($parts[1]) ? $parts[1] : null;
     if ($id === "bulk" && $method === "POST") bulkCreateStudents($pdo, $body);
@@ -124,6 +181,7 @@ if ($route === 'auth/login') {
 } elseif (strpos($route, "enrollments") === 0) {
     require "controllers/EnrollmentController.php";
     $user = requireAuth($authSecret);
+    requireMenuPermission($user, 'students', $pdo);
     $parts = explode("/", $route);
     $id = isset($parts[1]) ? $parts[1] : null;
     if ($id === "bulk" && $method === "POST") bulkCreateEnrollments($pdo, $body);
@@ -134,6 +192,7 @@ if ($route === 'auth/login') {
 } elseif (strpos($route, "attendance") === 0) {
     require "controllers/AttendanceController.php";
     $user = requireAuth($authSecret);
+    requireMenuPermission($user, 'attendance', $pdo);
     $parts = explode("/", $route);
     $action = isset($parts[1]) ? $parts[1] : null;
     if ($method === "GET") getAttendance($pdo, $user);
@@ -142,6 +201,7 @@ if ($route === 'auth/login') {
 } elseif (strpos($route, "tasks") === 0) {
     require "controllers/TaskController.php";
     $user = requireAuth($authSecret);
+    requireMenuPermission($user, 'tasks', $pdo);
     $parts = explode("/", $route);
     $id = isset($parts[1]) ? $parts[1] : null;
     if ($method === "GET") getTasks($pdo, $user);
@@ -151,6 +211,7 @@ if ($route === 'auth/login') {
 } elseif (strpos($route, "batches") === 0) {
     require "controllers/BatchController.php";
     $user = requireAuth($authSecret);
+    requireMenuPermission($user, 'batches', $pdo);
     $parts = explode("/", $route);
     $id = isset($parts[1]) ? $parts[1] : null;
     if ($method === "GET") getBatches($pdo);
@@ -159,6 +220,7 @@ if ($route === 'auth/login') {
     elseif ($method === "DELETE") deleteBatch($pdo, $user, $id);
 } elseif ($route === "search-students") {
     $user = requireAuth($authSecret);
+    requireMenuPermission($user, 'students', $pdo);
     $q = isset($_GET['q']) ? trim($_GET['q']) : '';
     if (strlen($q) < 1) {
         echo json_encode([]);

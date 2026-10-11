@@ -4,18 +4,28 @@ function normalizeUser($row) {
     if (empty($role)) {
         $role = strtolower($row['username'] ?? '') === 'palwasha' ? 'teacher' : 'counselor';
     }
+    
+    $permissions = [];
+    if (!empty($row['menu_permissions'])) {
+        $decoded = json_decode($row['menu_permissions'], true);
+        if (is_array($decoded)) {
+            $permissions = $decoded;
+        }
+    }
+
     return [
         "id" => (int)$row['id'],
         "username" => $row['username'],
         "fullName" => $row['full_name'],
         "role" => $role,
+        "menuPermissions" => $permissions,
         "profilePhotoUrl" => $row['profile_photo'] ?? null,
         "createdAt" => $row['created_at']
     ];
 }
 
 function getUsers($pdo) {
-    $stmt = $pdo->query("SELECT id, username, full_name, role, profile_photo, created_at FROM portal_users ORDER BY created_at DESC");
+    $stmt = $pdo->query("SELECT id, username, full_name, role, menu_permissions, profile_photo, created_at FROM portal_users ORDER BY created_at DESC");
     $users = [];
     while ($row = $stmt->fetch()) {
         $users[] = normalizeUser($row);
@@ -29,6 +39,9 @@ function createUser($pdo, $body) {
     $role = $body['role'] ?? '';
     $password = $body['password'] ?? '';
     $profilePhoto = $body['profilePhotoUrl'] ?? null;
+    $menuPermissions = isset($body['menuPermissions']) && is_array($body['menuPermissions']) 
+        ? json_encode(array_values(array_unique($body['menuPermissions']))) 
+        : null;
     
     if (!$username || !$fullName || !$role || !$password) {
         http_response_code(400);
@@ -45,11 +58,11 @@ function createUser($pdo, $body) {
     $hash = password_hash($password, PASSWORD_DEFAULT);
     $now = date('Y-m-d H:i:s');
     
-    $stmt = $pdo->prepare("INSERT INTO portal_users (username, full_name, password_hash, role, profile_photo, created_at) VALUES (?, ?, ?, ?, ?, ?)");
-    $stmt->execute([$username, $fullName, $hash, $role, $profilePhoto, $now]);
+    $stmt = $pdo->prepare("INSERT INTO portal_users (username, full_name, password_hash, role, menu_permissions, profile_photo, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)");
+    $stmt->execute([$username, $fullName, $hash, $role, $menuPermissions, $profilePhoto, $now]);
     $id = $pdo->lastInsertId();
     
-    $stmt = $pdo->prepare("SELECT id, username, full_name, role, profile_photo, created_at FROM portal_users WHERE id = ?");
+    $stmt = $pdo->prepare("SELECT id, username, full_name, role, menu_permissions, profile_photo, created_at FROM portal_users WHERE id = ?");
     $stmt->execute([$id]);
     
     http_response_code(201);
@@ -61,6 +74,9 @@ function updateUser($pdo, $id, $body) {
     $role = $body['role'] ?? null;
     $password = $body['password'] ?? null;
     $profilePhoto = $body['profilePhotoUrl'] ?? null;
+    $menuPermissions = array_key_exists('menuPermissions', $body) 
+        ? (is_array($body['menuPermissions']) ? json_encode(array_values(array_unique($body['menuPermissions']))) : null) 
+        : null;
     
     $updates = [];
     $params = [];
@@ -72,6 +88,10 @@ function updateUser($pdo, $id, $body) {
     if ($role !== null) {
         $updates[] = "role = ?";
         $params[] = $role;
+    }
+    if (array_key_exists('menuPermissions', $body)) {
+        $updates[] = "menu_permissions = ?";
+        $params[] = $menuPermissions;
     }
     if ($password) {
         $updates[] = "password_hash = ?";
@@ -89,7 +109,7 @@ function updateUser($pdo, $id, $body) {
         $stmt->execute($params);
     }
     
-    $stmt = $pdo->prepare("SELECT id, username, full_name, role, profile_photo, created_at FROM portal_users WHERE id = ?");
+    $stmt = $pdo->prepare("SELECT id, username, full_name, role, menu_permissions, profile_photo, created_at FROM portal_users WHERE id = ?");
     $stmt->execute([$id]);
     
     echo json_encode(normalizeUser($stmt->fetch()));
