@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { ORG } from '../utils/helpers';
 import api from '../services/api';
+import Icon from './Icons';
 
 export default function Login({ onLoginSuccess }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -64,16 +66,43 @@ export default function Login({ onLoginSuccess }) {
 
         <div className="fld">
           <label htmlFor="lp">Password</label>
-          <input
-            className="input"
-            id="lp"
-            type="password"
-            autoComplete="current-password"
-            placeholder="Enter your password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-          />
+          <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+            <input
+              className="input"
+              id="lp"
+              type={showPassword ? 'text' : 'password'}
+              autoComplete="current-password"
+              placeholder="Enter your password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              style={{ width: '100%', paddingRight: '42px' }}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+              title={showPassword ? 'Hide password' : 'Show password'}
+              style={{
+                position: 'absolute',
+                right: '8px',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                color: 'var(--muted, #64748b)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '6px',
+                borderRadius: '6px',
+                transition: 'color 0.15s ease'
+              }}
+            >
+              <Icon name={showPassword ? 'eyeOff' : 'eye'} size={18} />
+            </button>
+          </div>
         </div>
 
         <div className="form-error" role="alert">

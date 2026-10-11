@@ -33,6 +33,14 @@ function login($pdo, $body, $secret) {
     
     $token = JwtHandler::encode($payload, $secret);
     
+    $permissions = [];
+    if (!empty($user['menu_permissions'])) {
+        $decoded = json_decode($user['menu_permissions'], true);
+        if (is_array($decoded)) {
+            $permissions = $decoded;
+        }
+    }
+    
     echo json_encode([
         "ok" => true,
         "token" => $token,
@@ -41,7 +49,8 @@ function login($pdo, $body, $secret) {
             "username" => $user['username'],
             "name" => $user['full_name'],
             "role" => $user['role'],
-            "profilePhotoUrl" => $user['profile_photo'] ?? null
+            "profilePhotoUrl" => $user['profile_photo'] ?? null,
+            "menuPermissions" => $permissions
         ]
     ]);
 }

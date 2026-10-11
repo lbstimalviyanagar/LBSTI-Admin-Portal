@@ -35,6 +35,22 @@ set_exception_handler(function($e) {
 require 'config.php';
 require 'JwtHandler.php';
 
+// Self-healing schema migration: ensure menu_permissions column exists
+try {
+    $colCheck = $pdo->query("SHOW COLUMNS FROM `portal_users` LIKE 'menu_permissions'");
+    if (!$colCheck || $colCheck->rowCount() === 0) {
+        $pdo->exec("ALTER TABLE `portal_users` ADD COLUMN `menu_permissions` TEXT DEFAULT NULL AFTER `role`");
+    }
+} catch (Exception $e) {
+    try {
+        $pdo->exec("ALTER TABLE `portal_users` ADD COLUMN `menu_permissions` TEXT DEFAULT NULL AFTER `role`");
+    } catch (Exception $e2) {}
+}
+
+try {
+    $pdo->exec("ALTER TABLE `portal_users` MODIFY COLUMN `role` VARCHAR(50) NOT NULL DEFAULT 'counselor'");
+} catch (Exception $e3) {}
+
 $route = isset($_GET['route']) ? $_GET['route'] : '';
 $method = $_SERVER['REQUEST_METHOD'];
 $body = json_decode(file_get_contents('php://input'), true);
@@ -54,7 +70,7 @@ function requireMenuPermission($user, $requiredMenu, $pdo) {
         return;
     }
 
-    $stmt = $pdo->prepare("SELECT role, menu_permissions FROM portal_users WHERE id = ?");
+    $stmt = $pdo->prepare("SELECT * FROM portal_users WHERE id = ?");
     $stmt->execute([$user['sub']]);
     $dbUser = $stmt->fetch();
 
@@ -98,7 +114,7 @@ if ($route === 'auth/login') {
     login($pdo, $body, $authSecret);
 } elseif ($route === 'auth/me') {
     $user = requireAuth($authSecret);
-    $stmt = $pdo->prepare("SELECT id, username, full_name, role, menu_permissions, profile_photo FROM portal_users WHERE id = ?");
+    $stmt = $pdo->prepare("SELECT * FROM portal_users WHERE id = ?");
     $stmt->execute([$user['sub']]);
     $dbUser = $stmt->fetch();
     if ($dbUser) {

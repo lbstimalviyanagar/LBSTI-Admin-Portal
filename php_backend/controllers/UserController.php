@@ -24,8 +24,17 @@ function normalizeUser($row) {
     ];
 }
 
+function hasMenuPermissionsColumn($pdo) {
+    try {
+        $c = $pdo->query("SHOW COLUMNS FROM `portal_users` LIKE 'menu_permissions'");
+        return $c && $c->rowCount() > 0;
+    } catch (Exception $e) {
+        return false;
+    }
+}
+
 function getUsers($pdo) {
-    $stmt = $pdo->query("SELECT id, username, full_name, role, menu_permissions, profile_photo, created_at FROM portal_users ORDER BY created_at DESC");
+    $stmt = $pdo->query("SELECT * FROM portal_users ORDER BY created_at DESC");
     $users = [];
     while ($row = $stmt->fetch()) {
         $users[] = normalizeUser($row);
@@ -58,11 +67,16 @@ function createUser($pdo, $body) {
     $hash = password_hash($password, PASSWORD_DEFAULT);
     $now = date('Y-m-d H:i:s');
     
-    $stmt = $pdo->prepare("INSERT INTO portal_users (username, full_name, password_hash, role, menu_permissions, profile_photo, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)");
-    $stmt->execute([$username, $fullName, $hash, $role, $menuPermissions, $profilePhoto, $now]);
+    if (hasMenuPermissionsColumn($pdo)) {
+        $stmt = $pdo->prepare("INSERT INTO portal_users (username, full_name, password_hash, role, menu_permissions, profile_photo, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)");
+        $stmt->execute([$username, $fullName, $hash, $role, $menuPermissions, $profilePhoto, $now]);
+    } else {
+        $stmt = $pdo->prepare("INSERT INTO portal_users (username, full_name, password_hash, role, profile_photo, created_at) VALUES (?, ?, ?, ?, ?, ?)");
+        $stmt->execute([$username, $fullName, $hash, $role, $profilePhoto, $now]);
+    }
     $id = $pdo->lastInsertId();
     
-    $stmt = $pdo->prepare("SELECT id, username, full_name, role, menu_permissions, profile_photo, created_at FROM portal_users WHERE id = ?");
+    $stmt = $pdo->prepare("SELECT * FROM portal_users WHERE id = ?");
     $stmt->execute([$id]);
     
     http_response_code(201);
@@ -89,7 +103,7 @@ function updateUser($pdo, $id, $body) {
         $updates[] = "role = ?";
         $params[] = $role;
     }
-    if (array_key_exists('menuPermissions', $body)) {
+    if (array_key_exists('menuPermissions', $body) && hasMenuPermissionsColumn($pdo)) {
         $updates[] = "menu_permissions = ?";
         $params[] = $menuPermissions;
     }
@@ -109,7 +123,7 @@ function updateUser($pdo, $id, $body) {
         $stmt->execute($params);
     }
     
-    $stmt = $pdo->prepare("SELECT id, username, full_name, role, menu_permissions, profile_photo, created_at FROM portal_users WHERE id = ?");
+    $stmt = $pdo->prepare("SELECT * FROM portal_users WHERE id = ?");
     $stmt->execute([$id]);
     
     echo json_encode(normalizeUser($stmt->fetch()));
