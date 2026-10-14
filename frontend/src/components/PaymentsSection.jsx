@@ -1283,22 +1283,22 @@ export default function PaymentsSection({
                               className="btn sm btn-issue"
                               type="button"
                               title="Issue printable receipt"
+                              aria-label="Issue printable receipt"
                               onClick={() => handleIssueReceipt(f.id, f)}
                             >
-                              <span className="ic"><Icon name="receipt" size={14} /></span>
-                              <span>Issue</span>
+                              <span className="ic"><Icon name="receipt" size={15} /></span>
                             </button>
                             <button
                               className="btn sm btn-whatsapp-send"
                               type="button"
                               title={f.studentPhone ? `Send receipt to WhatsApp (${f.studentPhone})` : "Send receipt to phone number via WhatsApp"}
+                              aria-label="Send receipt to WhatsApp"
                               onClick={() => handleSendToNumber(f)}
                             >
                               <span className="ic-pair">
-                                <Icon name="send" size={13} />
-                                <Icon name="whatsapp" size={14} />
+                                <Icon name="send" size={14} />
+                                <Icon name="whatsapp" size={15} />
                               </span>
-                              <span>Send to Number</span>
                             </button>
                           </div>
                         </td>

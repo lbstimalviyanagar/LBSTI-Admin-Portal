@@ -2814,6 +2814,7 @@ td:has(.empty), td:has(.skel) {
   background: #2563eb;
   border-color: #2563eb;
   color: #ffffff;
+  padding: 6px 10px;
 }
 
 .payment-actions-group .btn.btn-issue:hover {
@@ -2827,6 +2828,7 @@ td:has(.empty), td:has(.skel) {
   background: #16a34a;
   border-color: #16a34a;
   color: #ffffff;
+  padding: 6px 10px;
 }
 
 .payment-actions-group .btn.btn-whatsapp-send:hover {
@@ -2839,6 +2841,6 @@ td:has(.empty), td:has(.skel) {
 .payment-actions-group .ic-pair {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
 }
 
