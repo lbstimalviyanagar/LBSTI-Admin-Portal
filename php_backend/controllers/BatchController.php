@@ -2,16 +2,26 @@
 
 function getBatches($pdo) {
     try {
-        $date = $_GET['date'] ?? date('Y-m-d');
+        $date = $_GET['date'] ?? null;
         
-        $stmt = $pdo->prepare("
-            SELECT b.*, u.full_name as instructor_name 
-            FROM institute_batches b 
-            LEFT JOIN portal_users u ON u.id = b.instructor_id 
-            WHERE b.`date` = ? 
-            ORDER BY b.batch_time ASC
-        ");
-        $stmt->execute([$date]);
+        if (!empty($date)) {
+            $stmt = $pdo->prepare("
+                SELECT b.*, u.full_name as instructor_name 
+                FROM institute_batches b 
+                LEFT JOIN portal_users u ON u.id = b.instructor_id 
+                WHERE b.`date` = ? 
+                ORDER BY b.batch_time ASC, b.id ASC
+            ");
+            $stmt->execute([$date]);
+        } else {
+            $stmt = $pdo->prepare("
+                SELECT b.*, u.full_name as instructor_name 
+                FROM institute_batches b 
+                LEFT JOIN portal_users u ON u.id = b.instructor_id 
+                ORDER BY b.batch_time ASC, b.id ASC
+            ");
+            $stmt->execute();
+        }
         echo json_encode($stmt->fetchAll());
     } catch (PDOException $e) {
         http_response_code(500);
