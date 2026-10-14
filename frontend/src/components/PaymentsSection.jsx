@@ -23,9 +23,103 @@ function useDebounce(value, delay) {
   return debouncedValue;
 }
 
+// Helper to extract isolated individual course entries from student and enrollments
+const extractStudentCourses = (student, allEnrollments = []) => {
+  if (!student) return [];
+  const map = new Map();
+
+  // 1. Direct enrolledCourses array (from search-students backend)
+  if (Array.isArray(student.enrolledCourses) && student.enrolledCourses.length > 0) {
+    student.enrolledCourses.forEach((enr, idx) => {
+      const courseName = (typeof enr === 'string' ? enr : enr.course || '').trim();
+      if (courseName && !map.has(courseName)) {
+        map.set(courseName, {
+          id: enr.id || enr.enrollmentId || `ec-${idx}`,
+          enrollmentId: enr.enrollmentId || '',
+          course: courseName,
+          status: enr.status || 'Active',
+          doa: enr.doa || null
+        });
+      }
+    });
+  }
+
+  // 2. Cross-reference allEnrollments prop if student has studentId
+  if (allEnrollments && allEnrollments.length > 0 && student.studentId) {
+    const sId = String(student.studentId).trim();
+    allEnrollments
+      .filter(enr => String(enr.studentId || '').trim() === sId)
+      .forEach((enr, idx) => {
+        const courseName = (enr.course || '').trim();
+        if (courseName && !map.has(courseName)) {
+          map.set(courseName, {
+            id: enr.id || enr.enrollmentId || `enr-${idx}`,
+            enrollmentId: enr.enrollmentId || '',
+            course: courseName,
+            status: enr.status || 'Active',
+            doa: enr.doa || null
+          });
+        }
+      });
+  }
+
+  // 3. If student has courseDetails string e.g. "ADCA (12 Months) (Active), UI/UX Design (8 Months) (Active)"
+  if (student.courseDetails && typeof student.courseDetails === 'string') {
+    student.courseDetails.split(',').forEach((cd, idx) => {
+      const trimmed = cd.trim();
+      const clean = trimmed.replace(/\s*\((Active|Completed|Dropped|New|Inactive)\)\s*$/i, '').trim();
+      const statusMatch = trimmed.match(/\((Active|Completed|Dropped|New|Inactive)\)/i);
+      const status = statusMatch ? statusMatch[1] : 'Active';
+      if (clean && !map.has(clean)) {
+        map.set(clean, {
+          id: `cd-${idx}-${clean}`,
+          enrollmentId: `ENR-${student.studentId || student.id}-${idx + 1}`,
+          course: clean,
+          status,
+          doa: null
+        });
+      }
+    });
+  }
+
+  // 4. Split student.courses if available (e.g., "ADCA (12 Months), UI/UX Design (8 Months)")
+  if (student.courses && typeof student.courses === 'string') {
+    student.courses.split(',').forEach((c, idx) => {
+      const courseName = c.trim();
+      if (courseName && !map.has(courseName)) {
+        map.set(courseName, {
+          id: `c-${idx}-${courseName}`,
+          enrollmentId: `ENR-${student.studentId || student.id}-${idx + 1}`,
+          course: courseName,
+          status: 'Active',
+          doa: null
+        });
+      }
+    });
+  }
+
+  // 5. Fallback for single course property
+  if (student.course && typeof student.course === 'string') {
+    const courseName = student.course.trim();
+    if (courseName && !map.has(courseName)) {
+      map.set(courseName, {
+        id: `c-single-${courseName}`,
+        enrollmentId: `ENR-${student.studentId || student.id}-1`,
+        course: courseName,
+        status: 'Active',
+        doa: null
+      });
+    }
+  }
+
+  return Array.from(map.values());
+};
+
 export default function PaymentsSection({
   fees = [],
-  enquiries = [], students = [],
+  enquiries = [],
+  students = [],
+  enrollments = [],
   loading = false,
   onSavePayment,
   onDeletePayment,
@@ -40,6 +134,11 @@ export default function PaymentsSection({
   const [showDropdown, setShowDropdown] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState(null);
   const dropdownRef = useRef(null);
+
+  // Isolated course selection state for single-select dropdown
+  const [studentCourseOptions, setStudentCourseOptions] = useState([]);
+  const [selectedCourse, setSelectedCourse] = useState('');
+  const [selectedEnrollmentId, setSelectedEnrollmentId] = useState('');
 
   const [batch, setBatch] = useState('');
   const [feeMonth, setFeeMonth] = useState(isoDay(new Date()).slice(0, 7));
@@ -111,14 +210,40 @@ export default function PaymentsSection({
     setShowDropdown(false);
     // Auto-fill guardian name
     setRelation(student.guardianName || '');
-    // Auto-fill batch from course info
-    setBatch(student.courses || '');
-  }, []);
+
+    // Dynamically populate isolated individual course options
+    const isolatedOptions = extractStudentCourses(student, enrollments);
+    setStudentCourseOptions(isolatedOptions);
+
+    if (isolatedOptions.length === 1) {
+      // Exactly one course enrolled: auto-select it
+      setSelectedCourse(isolatedOptions[0].course);
+      setSelectedEnrollmentId(isolatedOptions[0].enrollmentId || '');
+      setBatch(isolatedOptions[0].course);
+    } else {
+      // Multiple courses enrolled (e.g., Sahil Choudhary with ADCA and UI/UX Design):
+      // Require the administrator to choose exactly one specific course
+      setSelectedCourse('');
+      setSelectedEnrollmentId('');
+      setBatch('');
+    }
+  }, [enrollments]);
+
+  const handleCourseChange = (e) => {
+    const chosen = e.target.value;
+    setSelectedCourse(chosen);
+    setBatch(chosen);
+    const found = studentCourseOptions.find(opt => opt.course === chosen);
+    setSelectedEnrollmentId(found?.enrollmentId || '');
+  };
 
   const handleClearForm = () => {
     setSelectedStudent(null);
     setSearchQuery('');
     setSearchResults([]);
+    setStudentCourseOptions([]);
+    setSelectedCourse('');
+    setSelectedEnrollmentId('');
     setBatch('');
     setFeeMonth(isoDay(new Date()).slice(0, 7));
     setRelation('');
@@ -131,6 +256,10 @@ export default function PaymentsSection({
     e.preventDefault();
     if (!selectedStudent) {
       onToast("Search and pick a student first.", true);
+      return;
+    }
+    if (!selectedCourse || !selectedCourse.trim()) {
+      onToast("Please select exactly one specific course from the dropdown.", true);
       return;
     }
     if (!(parseFloat(totalAmount) > 0)) {
@@ -147,12 +276,20 @@ export default function PaymentsSection({
 
     const payload = {
       enquiryId: Number(selectedStudent.id),
+      studentId: selectedStudent.studentId,
+      course: selectedCourse.trim(),
+      enrollmentId: selectedEnrollmentId || undefined,
+      courseId: selectedEnrollmentId || undefined,
+      billingMonth: feeMonth,
       amount: parseFloat(totalAmount),
       paymentDate: paymentDate || isoDay(new Date()),
       mode,
       notes: notes.trim(),
       receiptDetails: {
-        batch: batch.trim() || selectedStudent.courses || '',
+        batch: selectedCourse.trim(),
+        course: selectedCourse.trim(),
+        enrollmentId: selectedEnrollmentId || undefined,
+        courseId: selectedEnrollmentId || undefined,
         month: feeMonth,
         relation: relation.trim(),
         items: breakdown
@@ -365,8 +502,8 @@ export default function PaymentsSection({
           <div><b>Date:</b> ${fmtDate(fee.paymentDate)}</div>
         </div>
         <div class="studentline">
-          <div><b>Course:</b> ${enquiry?.course || fee.course || "–"}</div>
-          <div><b>Batch:</b> ${details.batch || enquiry.batch || "–"}</div>
+          <div><b>Course:</b> ${fee.course || details.course || details.batch || enquiry?.course || "–"}</div>
+          <div><b>Batch:</b> ${details.batch || fee.course || enquiry.batch || "–"}</div>
           <div><b>To Month:</b> ${monthLabel}</div>
           <div><b>Received with thanks from:</b> ${fee.studentName || enquiry?.name || "Student"}</div>
           <div style="grid-column:1/-1"><b>Son/Daughter/Wife of:</b> ${details.relation || "–"}</div>
@@ -587,7 +724,7 @@ export default function PaymentsSection({
                         enquiries.find(e => String(e.id) === String(f.enquiryId)) || {};
         const receiptNo = f.receiptNumber || `LBSTI-${new Date(f.paymentDate || Date.now()).getFullYear()}-${String(f.id).padStart(4, '0')}`;
         const studentName = f.studentName || student.name || "Enrolled Student";
-        const course = f.course || student.course || student.courses || "–";
+        const course = f.course || f.receiptDetails?.course || f.receiptDetails?.batch || student.course || "–";
         const dateStr = f.paymentDate ? fmtDate(f.paymentDate) : fmtDate(new Date());
         const amount = Number(f.amount || 0);
         const mode = f.mode || "Cash";
@@ -1037,7 +1174,7 @@ export default function PaymentsSection({
                           {selectedStudent.enrollmentCount > 0 && <> &nbsp;·&nbsp; {selectedStudent.enrollmentCount} enrollment(s)</>}
                         </div>
                       </div>
-                      <button type="button" onClick={() => { setSelectedStudent(null); setSearchQuery(''); }}
+                      <button type="button" onClick={handleClearForm}
                         style={{ border: 'none', background: '#dc2626', color: '#fff', borderRadius: '6px', padding: '6px 12px', cursor: 'pointer', fontSize: '12px', fontWeight: 600 }}>
                         Change
                       </button>
@@ -1046,16 +1183,53 @@ export default function PaymentsSection({
                 )}
 
                 <div className="fld">
-                  <label htmlFor="fee-batch">Batch / Course</label>
-                  <input
-                    className="input"
+                  <label htmlFor="fee-batch" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>Batch / Course <span style={{ color: '#ef4444' }}>*</span></span>
+                    {selectedStudent && studentCourseOptions.length > 1 && (
+                      <span style={{ fontSize: '11px', color: '#1e40af', background: '#dbeafe', padding: '2px 8px', borderRadius: '10px', fontWeight: 600 }}>
+                        {studentCourseOptions.length} Enrolled Courses (Select 1)
+                      </span>
+                    )}
+                  </label>
+                  <select
+                    className="select"
                     id="fee-batch"
-                    placeholder="Auto-filled from student record"
-                    value={batch}
-                    onChange={(e) => setBatch(e.target.value)}
-                    readOnly={!!selectedStudent}
-                    style={selectedStudent ? { background: '#f9fafb', color: '#4b5563' } : {}}
-                  />
+                    value={selectedCourse}
+                    onChange={handleCourseChange}
+                    disabled={!selectedStudent}
+                    style={{
+                      background: !selectedStudent ? '#f9fafb' : '#ffffff',
+                      borderColor: selectedStudent && !selectedCourse ? '#f87171' : '#cbd5e1',
+                      fontWeight: selectedCourse ? 600 : 400,
+                      color: selectedCourse ? '#0f172a' : '#64748b'
+                    }}
+                    required
+                  >
+                    {!selectedStudent ? (
+                      <option value="">-- Search &amp; pick a student first --</option>
+                    ) : studentCourseOptions.length === 0 ? (
+                      <option value="">-- No enrolled courses found for this student --</option>
+                    ) : (
+                      <>
+                        <option value="">-- Choose specific enrolled course (Required) --</option>
+                        {studentCourseOptions.map((opt, idx) => (
+                          <option key={opt.id || opt.enrollmentId || idx} value={opt.course}>
+                            {opt.course}{opt.status && opt.status !== 'Active' ? ` (${opt.status})` : ''}
+                          </option>
+                        ))}
+                      </>
+                    )}
+                  </select>
+                  {selectedStudent && !selectedCourse && (
+                    <div style={{ fontSize: '11px', color: '#dc2626', marginTop: '4px' }}>
+                      * Single selection required: Choose the specific course to receive this payment.
+                    </div>
+                  )}
+                  {selectedStudent && selectedCourse && (
+                    <div style={{ fontSize: '11px', color: '#16a34a', marginTop: '4px', fontWeight: 500 }}>
+                      ✓ Payment mapped exclusively to: <strong>{selectedCourse}</strong>
+                    </div>
+                  )}
                 </div>
 
                 <div className="fld">

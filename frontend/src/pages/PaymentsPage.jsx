@@ -4,6 +4,8 @@ import PaymentsSection from '../components/PaymentsSection';
 export default function PaymentsPage({
   fees,
   enquiries,
+  students,
+  enrollments,
   loading,
   onSavePayment,
   onDeletePayment,
@@ -13,6 +15,8 @@ export default function PaymentsPage({
     <PaymentsSection
       fees={fees}
       enquiries={enquiries}
+      students={students}
+      enrollments={enrollments}
       loading={loading}
       onSavePayment={onSavePayment}
       onDeletePayment={onDeletePayment}

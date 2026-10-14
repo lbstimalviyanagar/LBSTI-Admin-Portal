@@ -236,7 +236,22 @@ if ($route === 'auth/login') {
     elseif ($method === "DELETE") deleteBatch($pdo, $user, $id);
 } elseif ($route === "search-students") {
     $user = requireAuth($authSecret);
-    requireMenuPermission($user, 'students', $pdo);
+
+    // Allow staff with 'students' OR 'payments' permission, or admin
+    if (isset($user['role']) && strtolower($user['role']) !== 'admin') {
+        $stmtPerm = $pdo->prepare("SELECT menu_permissions, role FROM portal_users WHERE id = ?");
+        $stmtPerm->execute([$user['sub']]);
+        $dbU = $stmtPerm->fetch();
+        if ($dbU && strtolower($dbU['role']) !== 'admin') {
+            $perms = !empty($dbU['menu_permissions']) ? json_decode($dbU['menu_permissions'], true) : [];
+            if (!empty($perms) && !in_array('students', $perms, true) && !in_array('payments', $perms, true)) {
+                http_response_code(403);
+                echo json_encode(["message" => "Access denied. Requires students or payments permission."]);
+                exit();
+            }
+        }
+    }
+
     $q = isset($_GET['q']) ? trim($_GET['q']) : '';
     if (strlen($q) < 1) {
         echo json_encode([]);
@@ -257,7 +272,45 @@ if ($route === 'auth/login') {
     $stmt = $pdo->prepare($sql);
     $stmt->execute([$like, $like, $like]);
     $results = [];
+
+    $enrStmt = $pdo->prepare("SELECT id, enrollment_id, course, status, doa FROM enrollments WHERE student_id = ? ORDER BY doa DESC, id DESC");
+
     while ($row = $stmt->fetch()) {
+        $studentId = $row["student_id"];
+        $enrolledCourses = [];
+
+        if (!empty($studentId)) {
+            $enrStmt->execute([$studentId]);
+            while ($er = $enrStmt->fetch()) {
+                $c = trim($er["course"] ?? "");
+                if ($c !== "") {
+                    $enrolledCourses[] = [
+                        "id" => (int)$er["id"],
+                        "enrollmentId" => $er["enrollment_id"],
+                        "course" => $c,
+                        "status" => $er["status"] ?? "Active",
+                        "doa" => $er["doa"]
+                    ];
+                }
+            }
+        }
+
+        // Fallback: If no rows found in enrollments table yet, split comma string into individual isolated courses
+        if (empty($enrolledCourses) && !empty($row["courses"])) {
+            $splits = array_filter(array_map('trim', explode(',', $row["courses"])));
+            $idx = 1;
+            foreach ($splits as $sc) {
+                $enrolledCourses[] = [
+                    "id" => $idx,
+                    "enrollmentId" => "ENR-" . ($studentId ?: $row["id"]) . "-" . $idx,
+                    "course" => $sc,
+                    "status" => "Active",
+                    "doa" => null
+                ];
+                $idx++;
+            }
+        }
+
         $results[] = [
             "id" => (int)$row["id"],
             "studentId" => $row["student_id"],
@@ -268,7 +321,8 @@ if ($route === 'auth/login') {
             "courses" => $row["courses"] ?: "",
             "courseDetails" => $row["course_details"] ?: "",
             "lastEnrollmentDate" => $row["last_enrollment_date"],
-            "enrollmentCount" => (int)$row["enrollment_count"]
+            "enrollmentCount" => (int)$row["enrollment_count"],
+            "enrolledCourses" => $enrolledCourses
         ];
     }
     echo json_encode($results);

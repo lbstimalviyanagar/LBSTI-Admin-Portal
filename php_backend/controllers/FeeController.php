@@ -28,6 +28,9 @@ function ensureFeesTable($pdo) {
     $columnsToAdd = [
         "student_name"    => "VARCHAR(255) DEFAULT NULL",
         "course"          => "VARCHAR(255) DEFAULT NULL",
+        "enrollment_id"   => "VARCHAR(50) DEFAULT NULL",
+        "course_id"       => "VARCHAR(50) DEFAULT NULL",
+        "billing_month"   => "VARCHAR(50) DEFAULT NULL",
         "receipt_details" => "TEXT DEFAULT NULL",
         "receipt_number"  => "VARCHAR(100) DEFAULT NULL",
         "updated_at"      => "DATETIME DEFAULT CURRENT_TIMESTAMP",
@@ -78,65 +81,101 @@ function getFees($pdo, $id) {
 function createFee($pdo, $body, $user) {
     ensureFeesTable($pdo);
 
-    $enquiryId      = isset($body["enquiryId"])     ? (int)$body["enquiryId"]     : null;
-    $amount         = isset($body["amount"])         ? (float)$body["amount"]      : 0;
-    $paymentDate    = isset($body["paymentDate"])    ? $body["paymentDate"]        : date("Y-m-d");
-    $mode           = isset($body["mode"])           ? $body["mode"]               : "Cash";
-    $notes          = isset($body["notes"])          ? $body["notes"]              : "";
-    $receiptDetails = isset($body["receiptDetails"]) ? $body["receiptDetails"]     : null;
+    $enquiryId      = isset($body["enquiryId"])      ? (int)$body["enquiryId"]      : null;
+    $amount         = isset($body["amount"])          ? (float)$body["amount"]       : 0;
+    $paymentDate    = isset($body["paymentDate"])     ? $body["paymentDate"]         : date("Y-m-d");
+    $mode           = isset($body["mode"])            ? $body["mode"]                : "Cash";
+    $notes          = isset($body["notes"])           ? $body["notes"]               : "";
+    $receiptDetails = isset($body["receiptDetails"])  ? $body["receiptDetails"]      : null;
+
+    // Single selected course: extract strictly from request, avoiding comma bundles
+    $selectedCourse = "";
+    if (!empty($body["course"])) {
+        $selectedCourse = trim($body["course"]);
+    } elseif (!empty($receiptDetails["course"])) {
+        $selectedCourse = trim($receiptDetails["course"]);
+    } elseif (!empty($receiptDetails["batch"])) {
+        $selectedCourse = trim($receiptDetails["batch"]);
+    }
+
+    $enrollmentId = !empty($body["enrollmentId"]) ? trim($body["enrollmentId"]) : (!empty($receiptDetails["enrollmentId"]) ? trim($receiptDetails["enrollmentId"]) : null);
+    $courseId     = !empty($body["courseId"]) ? trim($body["courseId"]) : (!empty($receiptDetails["courseId"]) ? trim($receiptDetails["courseId"]) : null);
+    $billingMonth = !empty($body["billingMonth"]) ? trim($body["billingMonth"]) : (!empty($receiptDetails["month"]) ? trim($receiptDetails["month"]) : null);
 
     if (!$enquiryId || !($amount > 0)) {
         http_response_code(400);
         die(json_encode(["message" => "Student and amount are required."]));
     }
 
-    // Look up student name + course from enquiries table first
-    $studentName = "Student";
-    $course      = "";
+    if (empty($selectedCourse)) {
+        http_response_code(400);
+        die(json_encode(["message" => "A single specific course must be selected for payment."]));
+    }
+
+    // Look up student details
+    $studentName  = "Student";
+    $studentIdStr = !empty($body["studentId"]) ? trim($body["studentId"]) : null;
 
     try {
-        $stmt = $pdo->prepare("SELECT name, course FROM enquiries WHERE id = ?");
+        $stmt = $pdo->prepare("SELECT student_id, name FROM students WHERE id = ?");
         $stmt->execute([$enquiryId]);
-        $enquiryRow = $stmt->fetch();
-        if ($enquiryRow) {
-            $studentName = $enquiryRow["name"]   ? $enquiryRow["name"]   : "Student";
-            $course      = $enquiryRow["course"] ? $enquiryRow["course"] : "";
+        $studentRow = $stmt->fetch();
+        if ($studentRow) {
+            $studentName  = $studentRow["name"] ? $studentRow["name"] : "Student";
+            if (empty($studentIdStr)) {
+                $studentIdStr = $studentRow["student_id"];
+            }
         }
-    } catch (Exception $e) { /* fall through */ }
+    } catch (Exception $e) {}
 
-    // Fallback: try students + enrollments tables
     if ($studentName === "Student") {
         try {
-            $stmt = $pdo->prepare(
-                "SELECT s.name, GROUP_CONCAT(DISTINCT e.course SEPARATOR ', ') AS courses
-                 FROM students s
-                 LEFT JOIN enrollments e ON e.student_id = s.student_id
-                 WHERE s.id = ?
-                 GROUP BY s.id"
-            );
+            $stmt = $pdo->prepare("SELECT name, course FROM enquiries WHERE id = ?");
             $stmt->execute([$enquiryId]);
-            $studentRow = $stmt->fetch();
-            if ($studentRow) {
-                $studentName = $studentRow["name"]    ? $studentRow["name"]    : "Student";
-                $course      = $studentRow["courses"] ? $studentRow["courses"] : "";
+            $enquiryRow = $stmt->fetch();
+            if ($enquiryRow) {
+                $studentName = $enquiryRow["name"] ? $enquiryRow["name"] : "Student";
             }
-        } catch (Exception $e) { /* keep defaults */ }
+        } catch (Exception $e) {}
+    }
+
+    // If enrollment_id was not provided, look it up specifically for this student and this selected course
+    if (empty($enrollmentId) && !empty($studentIdStr) && !empty($selectedCourse)) {
+        try {
+            $stmt = $pdo->prepare("SELECT enrollment_id FROM enrollments WHERE student_id = ? AND course = ? LIMIT 1");
+            $stmt->execute([$studentIdStr, $selectedCourse]);
+            $enrRow = $stmt->fetch();
+            if ($enrRow && !empty($enrRow["enrollment_id"])) {
+                $enrollmentId = $enrRow["enrollment_id"];
+            }
+        } catch (Exception $e) {}
+    }
+
+    if (empty($courseId) && !empty($enrollmentId)) {
+        $courseId = $enrollmentId;
+    }
+
+    // Ensure receiptDetails explicitly isolates the selected course, enrollment, month
+    if (is_array($receiptDetails)) {
+        $receiptDetails["batch"] = $selectedCourse;
+        $receiptDetails["course"] = $selectedCourse;
+        if ($enrollmentId) $receiptDetails["enrollmentId"] = $enrollmentId;
+        if ($courseId) $receiptDetails["courseId"] = $courseId;
+        if ($billingMonth) $receiptDetails["month"] = $billingMonth;
     }
 
     $receivedBy         = isset($user["name"]) ? $user["name"] : "Admin";
     $receiptDetailsJson = $receiptDetails ? json_encode($receiptDetails) : null;
 
-    // NOTE: created_at and updated_at are intentionally omitted from the INSERT —
-    // MySQL sets them automatically via DEFAULT CURRENT_TIMESTAMP. This means
-    // the INSERT works regardless of whether those columns exist in the live table.
+    // NOTE: created_at and updated_at are set automatically via DEFAULT CURRENT_TIMESTAMP.
     $stmt = $pdo->prepare(
         "INSERT INTO fees
-            (enquiry_id, student_name, course, amount, payment_date, mode, received_by, notes, receipt_details)
+            (enquiry_id, student_name, course, enrollment_id, course_id, billing_month, amount, payment_date, mode, received_by, notes, receipt_details)
          VALUES
-            (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     );
     $stmt->execute([
-        $enquiryId, $studentName, $course, $amount,
+        $enquiryId, $studentName, $selectedCourse, $enrollmentId, $courseId, $billingMonth, $amount,
         $paymentDate, $mode, $receivedBy, $notes,
         $receiptDetailsJson
     ]);
@@ -154,10 +193,14 @@ function updateFee($pdo, $id, $body) {
     $params  = [];
 
     $fields = [
-        "amount"      => "amount",
-        "paymentDate" => "payment_date",
-        "mode"        => "mode",
-        "notes"       => "notes"
+        "amount"       => "amount",
+        "paymentDate"  => "payment_date",
+        "mode"         => "mode",
+        "notes"        => "notes",
+        "course"       => "course",
+        "enrollmentId" => "enrollment_id",
+        "courseId"     => "course_id",
+        "billingMonth" => "billing_month"
     ];
 
     foreach ($fields as $jsonKey => $dbKey) {
@@ -208,6 +251,9 @@ function normalizeFee($row) {
         "enquiryId"      => (int)($row["enquiry_id"]   ?? 0),
         "studentName"    => $row["student_name"]        ?? "Student",
         "course"         => $row["course"]              ?? "",
+        "enrollmentId"   => $row["enrollment_id"]       ?? null,
+        "courseId"       => $row["course_id"]           ?? null,
+        "billingMonth"   => $row["billing_month"]       ?? ($receiptDetails["month"] ?? null),
         "amount"         => (float)($row["amount"]      ?? 0),
         "paymentDate"    => $row["payment_date"]        ?? "",
         "mode"           => $row["mode"]                ?? "Cash",

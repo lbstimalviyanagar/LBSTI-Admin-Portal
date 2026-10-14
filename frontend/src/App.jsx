@@ -517,6 +517,7 @@ export default function App() {
               fees={fees}
               enquiries={enquiries}
               students={students}
+              enrollments={enrollments}
               loading={loading}
               onSavePayment={handleSavePayment}
               onDeletePayment={handleDeletePayment}
