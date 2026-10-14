@@ -2,7 +2,7 @@ import React, { useState, useMemo } from "react";
 import Icon from "./Icons";
 import api from "../services/api";
 import { useToast } from "../hooks/useToast";
-import { SOURCES, rangeOf, parseDate } from "../utils/helpers";
+import { SOURCES, COURSES, rangeOf, parseDate } from "../utils/helpers";
 import { PieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend } from "recharts";
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ffc658', '#d0ed57', '#a4de6c'];
@@ -34,15 +34,17 @@ export default function StudentsSection({ students = [], enrollments = [], loadi
     setEnrollmentCustomTo("");
   };
 
-  // State for new student
+  // State for new enrollment
   const [newStudent, setNewStudent] = useState({
     studentId: "",
     name: "",
     guardianName: "",
     phone: "",
     email: "",
+    course: "",
     remarks: ""
   });
+  const [duplicateError, setDuplicateError] = useState("");
 
   // State for new enrollment
   const [newEnrollment, setNewEnrollment] = useState({
@@ -152,16 +154,67 @@ export default function StudentsSection({ students = [], enrollments = [], loadi
 
   const handleCreateStudent = async (e) => {
     e.preventDefault();
-    if (!newStudent.studentId || !newStudent.name) {
-      return addToast("Student ID and Name are required.", true);
+    setDuplicateError("");
+
+    if (!newStudent.name || !newStudent.name.trim()) {
+      return addToast("Student Name is required.", true);
     }
+    if (!newStudent.course) {
+      return addToast("Course Selection is required.", true);
+    }
+
+    const cleanName = newStudent.name.trim().toLowerCase();
+    const cleanPhone = String(newStudent.phone || "").replace(/\D/g, "");
+    const cleanEmail = String(newStudent.email || "").trim().toLowerCase();
+    const courseSel = newStudent.course.trim().toLowerCase();
+
+    // Client-side deduplication check
+    const existingMatch = students.find(st => {
+      const stName = String(st.name || "").trim().toLowerCase();
+      const stPhone = String(st.phone || "").replace(/\D/g, "");
+      const stEmail = String(st.email || "").trim().toLowerCase();
+
+      const nameMatches = stName === cleanName;
+      const phoneMatches = (cleanPhone !== "" && stPhone !== "" && (cleanPhone === stPhone || cleanPhone.endsWith(stPhone) || stPhone.endsWith(cleanPhone)))
+                           || (cleanPhone === "" && stPhone === "");
+      const emailMatches = (cleanEmail !== "" && stEmail !== "" && cleanEmail === stEmail)
+                           || (cleanEmail === "" && stEmail === "");
+
+      return nameMatches && phoneMatches && emailMatches;
+    });
+
+    if (existingMatch) {
+      // Check if student already enrolled in this exact course
+      const isDuplicateEnrollment = enrollments.some(en => 
+        String(en.studentId).toLowerCase() === String(existingMatch.studentId).toLowerCase() &&
+        String(en.course || "").trim().toLowerCase() === courseSel
+      );
+
+      if (isDuplicateEnrollment) {
+        const errMsg = `Duplicate entry: Student '${existingMatch.name}' (${existingMatch.studentId}) is already enrolled in ${newStudent.course}.`;
+        setDuplicateError(errMsg);
+        addToast(errMsg, true);
+        return;
+      }
+    }
+
     try {
-      await api.createStudent(newStudent);
-      addToast("Student created successfully!");
-      setNewStudent({ studentId: "", name: "", guardianName: "", phone: "", email: "", remarks: "" });
+      const res = await api.createStudent({
+        ...newStudent,
+        studentId: existingMatch ? existingMatch.studentId : (newStudent.studentId || "Autofilled")
+      });
+      if (res && res.isExistingStudent) {
+        addToast(res.message || `Added new course enrollment for student (${res.studentId || existingMatch.studentId})!`);
+      } else {
+        addToast("Enrollment created successfully!");
+      }
+      setNewStudent({ studentId: "", name: "", guardianName: "", phone: "", email: "", course: "", remarks: "" });
+      setDuplicateError("");
       onRefresh();
     } catch (err) {
-      addToast(err.message || "Failed to create student.", true);
+      const msg = err.message || "Failed to create enrollment.";
+      setDuplicateError(msg);
+      addToast(msg, true);
     }
   };
 
@@ -345,7 +398,7 @@ export default function StudentsSection({ students = [], enrollments = [], loadi
       <div className="tabs fees-tabs" role="tablist">
         <button className="fee-tab" aria-selected={tab === "dashboard"} onClick={() => setTab("dashboard")}>Dashboard</button>
         <button className="fee-tab" aria-selected={tab === "students"} onClick={() => setTab("students")}>Students List</button>
-        <button className="fee-tab" aria-selected={tab === "new_student"} onClick={() => setTab("new_student")}>New Student</button>
+        <button className="fee-tab" aria-selected={tab === "new_enrollment" || tab === "new_student"} onClick={() => setTab("new_enrollment")}>New Enrollment</button>
         <button className="fee-tab" aria-selected={tab === "enrollments"} onClick={() => setTab("enrollments")}>Enrollments</button>
       </div>
 
@@ -424,20 +477,133 @@ export default function StudentsSection({ students = [], enrollments = [], loadi
         </div>
       )}
 
-      {tab === "new_student" && (
+      {(tab === "new_student" || tab === "new_enrollment") && (
         <form className="card form-card" onSubmit={handleCreateStudent}>
           <div className="form-body">
-            <h3>Add New Student</h3>
+            <h3>New Enrollment</h3>
+            {duplicateError && (
+              <div style={{
+                marginBottom: "16px",
+                padding: "10px 14px",
+                background: "#fef2f2",
+                border: "1px solid #fecaca",
+                borderRadius: "8px",
+                color: "#b91c1c",
+                fontWeight: 600,
+                fontSize: "0.88rem",
+                display: "flex",
+                alignItems: "center",
+                gap: "8px"
+              }}>
+                <Icon name="alert" size={16} />
+                <span>{duplicateError}</span>
+              </div>
+            )}
             <div className="fgrid">
-              <div className="fld"><label>Student ID</label><input className="input" value={newStudent.studentId} onChange={e => setNewStudent({...newStudent, studentId: e.target.value})} required/></div>
-              <div className="fld"><label>Name</label><input className="input" value={newStudent.name} onChange={e => setNewStudent({...newStudent, name: e.target.value})} required/></div>
-              <div className="fld"><label>Guardian Name</label><input className="input" value={newStudent.guardianName} onChange={e => setNewStudent({...newStudent, guardianName: e.target.value})} /></div>
-              <div className="fld"><label>Phone</label><input className="input" value={newStudent.phone} onChange={e => setNewStudent({...newStudent, phone: e.target.value})} /></div>
-              <div className="fld"><label>Email</label><input className="input" value={newStudent.email} onChange={e => setNewStudent({...newStudent, email: e.target.value})} /></div>
-              <div className="fld"><label>Remarks</label><input className="input" value={newStudent.remarks} onChange={e => setNewStudent({...newStudent, remarks: e.target.value})} /></div>
+              <div className="fld">
+                <label htmlFor="st-student-id">
+                  Student ID <span style={{ fontSize: "0.8rem", color: "var(--muted)", fontWeight: "normal" }}>(Autofilled)</span>
+                </label>
+                <input
+                  id="st-student-id"
+                  className="input"
+                  value="Autofilled"
+                  readOnly
+                  disabled
+                  placeholder="Autofilled"
+                  style={{
+                    background: "#f1f5f9",
+                    color: "#64748b",
+                    cursor: "not-allowed",
+                    border: "1px solid #cbd5e1",
+                    fontWeight: 600
+                  }}
+                />
+              </div>
+              <div className="fld">
+                <label htmlFor="st-name">Name <em>*</em></label>
+                <input
+                  id="st-name"
+                  className="input"
+                  placeholder="Student Full Name"
+                  value={newStudent.name}
+                  onChange={e => {
+                    setNewStudent({...newStudent, name: e.target.value});
+                    if (duplicateError) setDuplicateError("");
+                  }}
+                  required
+                />
+              </div>
+              <div className="fld">
+                <label htmlFor="st-guardian">Guardian Name</label>
+                <input
+                  id="st-guardian"
+                  className="input"
+                  placeholder="Parent / Guardian Name"
+                  value={newStudent.guardianName}
+                  onChange={e => setNewStudent({...newStudent, guardianName: e.target.value})}
+                />
+              </div>
+              <div className="fld">
+                <label htmlFor="st-phone">Phone</label>
+                <input
+                  id="st-phone"
+                  className="input"
+                  placeholder="10-digit mobile number"
+                  value={newStudent.phone}
+                  onChange={e => {
+                    setNewStudent({...newStudent, phone: e.target.value});
+                    if (duplicateError) setDuplicateError("");
+                  }}
+                />
+              </div>
+              <div className="fld">
+                <label htmlFor="st-email">Email</label>
+                <input
+                  id="st-email"
+                  className="input"
+                  type="email"
+                  placeholder="student@example.com"
+                  value={newStudent.email}
+                  onChange={e => {
+                    setNewStudent({...newStudent, email: e.target.value});
+                    if (duplicateError) setDuplicateError("");
+                  }}
+                />
+              </div>
+              <div className="fld">
+                <label htmlFor="st-course">Course Selection <em>*</em></label>
+                <select
+                  id="st-course"
+                  className="select"
+                  value={newStudent.course}
+                  onChange={e => {
+                    setNewStudent({...newStudent, course: e.target.value});
+                    if (duplicateError) setDuplicateError("");
+                  }}
+                  required
+                >
+                  <option value="">Select a Course...</option>
+                  {COURSES.map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="fld">
+                <label htmlFor="st-remarks">Remarks</label>
+                <input
+                  id="st-remarks"
+                  className="input"
+                  placeholder="Any additional remarks..."
+                  value={newStudent.remarks}
+                  onChange={e => setNewStudent({...newStudent, remarks: e.target.value})}
+                />
+              </div>
             </div>
           </div>
-          <div className="form-actions"><button type="submit" className="btn primary">Save</button></div>
+          <div className="form-actions">
+            <button type="submit" className="btn primary">Save Enrollment</button>
+          </div>
         </form>
       )}
 

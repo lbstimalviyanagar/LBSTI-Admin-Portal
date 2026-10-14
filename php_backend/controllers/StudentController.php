@@ -22,30 +22,193 @@ function getStudents($pdo) {
     echo json_encode($data);
 }
 
+function ensureStudentsAndEnrollmentsTables($pdo) {
+    try {
+        $pdo->exec("CREATE TABLE IF NOT EXISTS students (
+          id INT(11) PRIMARY KEY AUTO_INCREMENT,
+          student_id VARCHAR(50) UNIQUE NOT NULL,
+          name VARCHAR(255) NOT NULL,
+          guardian_name VARCHAR(255),
+          phone VARCHAR(50),
+          email VARCHAR(255),
+          remarks TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB;");
+
+        $pdo->exec("CREATE TABLE IF NOT EXISTS enrollments (
+          id INT(11) PRIMARY KEY AUTO_INCREMENT,
+          enrollment_id VARCHAR(50) UNIQUE NOT NULL,
+          student_id VARCHAR(50) NOT NULL,
+          doa DATE,
+          course VARCHAR(255),
+          status VARCHAR(50) DEFAULT 'Active',
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB;");
+    } catch (Exception $e) {}
+}
+
+function generateNextStudentId($pdo) {
+    ensureStudentsAndEnrollmentsTables($pdo);
+    $stmt = $pdo->query("SELECT student_id FROM students ORDER BY id DESC LIMIT 100");
+    $maxNum = 1000;
+    while ($row = $stmt->fetch()) {
+        if (preg_match('/(?:S|STU-?)([0-9]+)/i', $row['student_id'], $m)) {
+            $num = (int)$m[1];
+            if ($num > $maxNum) $maxNum = $num;
+        }
+    }
+    do {
+        $maxNum++;
+        $newId = "S" . $maxNum;
+        $chk = $pdo->prepare("SELECT id FROM students WHERE student_id = ?");
+        $chk->execute([$newId]);
+    } while ($chk->fetch());
+    return $newId;
+}
+
+function generateNextEnrollmentId($pdo) {
+    ensureStudentsAndEnrollmentsTables($pdo);
+    $stmt = $pdo->query("SELECT enrollment_id FROM enrollments ORDER BY id DESC LIMIT 100");
+    $maxNum = 200000;
+    while ($row = $stmt->fetch()) {
+        if (preg_match('/([0-9]{4,})$/', $row['enrollment_id'], $m)) {
+            $num = (int)$m[1];
+            if ($num > $maxNum) $maxNum = $num;
+        }
+    }
+    do {
+        $maxNum++;
+        $newEnrId = "M" . $maxNum;
+        $chk = $pdo->prepare("SELECT id FROM enrollments WHERE enrollment_id = ?");
+        $chk->execute([$newEnrId]);
+    } while ($chk->fetch());
+    return $newEnrId;
+}
+
 function createStudent($pdo, $body) {
-    $studentId = $body["studentId"] ?? "";
-    $name = $body["name"] ?? "";
-    if (!$studentId || !$name) {
+    ensureStudentsAndEnrollmentsTables($pdo);
+
+    $name = trim($body["name"] ?? "");
+    $guardianName = trim($body["guardianName"] ?? "");
+    $phone = trim($body["phone"] ?? "");
+    $email = trim($body["email"] ?? "");
+    $remarks = trim($body["remarks"] ?? "");
+    $course = trim($body["course"] ?? ($body["courseSelection"] ?? ""));
+    $rawStudentId = trim($body["studentId"] ?? "");
+
+    if (!$name) {
         http_response_code(400);
-        die(json_encode(["message" => "Student ID and Name required."]));
+        die(json_encode(["error" => true, "message" => "Student Name is required."]));
     }
-    
-    $stmt = $pdo->prepare("SELECT id FROM students WHERE student_id = ?");
-    $stmt->execute([$studentId]);
-    if ($stmt->fetch()) {
-        http_response_code(409);
-        die(json_encode(["message" => "Student ID already exists."]));
+
+    $cleanName = strtolower($name);
+    $cleanPhone = preg_replace('/[^0-9]/', '', $phone);
+    $cleanEmail = strtolower($email);
+
+    // 1. Validation check across existing records based on "Name", "Phone", and "Email"
+    $stmt = $pdo->prepare("SELECT * FROM students WHERE LOWER(TRIM(name)) = ?");
+    $stmt->execute([$cleanName]);
+    $candidates = $stmt->fetchAll();
+
+    $matchedStudent = null;
+    foreach ($candidates as $cand) {
+        $candPhone = preg_replace('/[^0-9]/', '', $cand['phone'] ?? '');
+        $candEmail = strtolower(trim($cand['email'] ?? ''));
+
+        // Match Name, Phone, and Email
+        $phoneMatches = ($cleanPhone !== '' && $candPhone !== '' && ($cleanPhone === $candPhone || substr($cleanPhone, -10) === substr($candPhone, -10)))
+                        || ($cleanPhone === '' && $candPhone === '');
+        $emailMatches = ($cleanEmail !== '' && $candEmail !== '' && $cleanEmail === $candEmail)
+                        || ($cleanEmail === '' && $candEmail === '');
+
+        if ($phoneMatches && $emailMatches) {
+            $matchedStudent = $cand;
+            break;
+        }
     }
-    
+
+    // 2. If a record exactly matches an existing student's Name, Phone, and Email:
+    if ($matchedStudent) {
+        $existingStudentId = $matchedStudent['student_id'];
+
+        if (!empty($course)) {
+            // Check if student already enrolled in this exact course
+            $chkEnr = $pdo->prepare("SELECT * FROM enrollments WHERE student_id = ? AND LOWER(TRIM(course)) = ?");
+            $chkEnr->execute([$existingStudentId, strtolower($course)]);
+            $existingEnrollment = $chkEnr->fetch();
+
+            if ($existingEnrollment) {
+                // If all personal identifiers (Name, Phone, Email) AND the Course Selection match -> BLOCK duplicate entry
+                http_response_code(409);
+                echo json_encode([
+                    "error" => true,
+                    "code" => "DUPLICATE_ENROLLMENT",
+                    "message" => "Duplicate entry: Student '{$matchedStudent['name']}' ($existingStudentId) is already enrolled in '{$course}'."
+                ]);
+                exit();
+            }
+
+            // If different "Course Selection" -> ALLOW: Add new course registration under the same student identity
+            $now = date("Y-m-d H:i:s");
+            $newEnrId = generateNextEnrollmentId($pdo);
+            $doa = !empty($body["doa"]) ? $body["doa"] : date("Y-m-d");
+            $insertEnr = $pdo->prepare("INSERT INTO enrollments (enrollment_id, student_id, doa, course, status, created_at, updated_at) VALUES (?, ?, ?, ?, 'Active', ?, ?)");
+            $insertEnr->execute([$newEnrId, $existingStudentId, $doa, $course, $now, $now]);
+
+            if (!empty($remarks) && $remarks !== ($matchedStudent['remarks'] ?? '')) {
+                $mergedRemarks = trim(($matchedStudent['remarks'] ? $matchedStudent['remarks'] . " | " : "") . $remarks);
+                $upd = $pdo->prepare("UPDATE students SET remarks = ?, updated_at = ? WHERE id = ?");
+                $upd->execute([$mergedRemarks, $now, $matchedStudent['id']]);
+            }
+
+            http_response_code(200);
+            $res = normalizeStudent($matchedStudent);
+            $res["isExistingStudent"] = true;
+            $res["message"] = "Added new course enrollment ($course) under existing student ID: $existingStudentId.";
+            echo json_encode($res);
+            exit();
+        } else {
+            http_response_code(409);
+            echo json_encode([
+                "error" => true,
+                "message" => "Student '{$matchedStudent['name']}' ($existingStudentId) already exists in the system."
+            ]);
+            exit();
+        }
+    }
+
+    // 3. If any core personal detail differs -> Treat as brand-new unique student record
+    $finalStudentId = (!empty($rawStudentId) && strtolower($rawStudentId) !== 'autofilled') 
+        ? $rawStudentId 
+        : generateNextStudentId($pdo);
+
+    // Ensure student_id uniqueness
+    $chkId = $pdo->prepare("SELECT id FROM students WHERE student_id = ?");
+    $chkId->execute([$finalStudentId]);
+    if ($chkId->fetch()) {
+        $finalStudentId = generateNextStudentId($pdo);
+    }
+
     $now = date("Y-m-d H:i:s");
     $stmt = $pdo->prepare("INSERT INTO students (student_id, name, guardian_name, phone, email, remarks, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-    $stmt->execute([$studentId, $name, $body["guardianName"] ?? "", $body["phone"] ?? "", $body["email"] ?? "", $body["remarks"] ?? "", $now, $now]);
-    
-    $id = $pdo->lastInsertId();
+    $stmt->execute([$finalStudentId, $name, $guardianName, $phone, $email, $remarks, $now, $now]);
+    $newDbId = $pdo->lastInsertId();
+
+    // Create enrollment for the course if selected
+    if (!empty($course)) {
+        $newEnrId = generateNextEnrollmentId($pdo);
+        $doa = !empty($body["doa"]) ? $body["doa"] : date("Y-m-d");
+        $insertEnr = $pdo->prepare("INSERT INTO enrollments (enrollment_id, student_id, doa, course, status, created_at, updated_at) VALUES (?, ?, ?, ?, 'Active', ?, ?)");
+        $insertEnr->execute([$newEnrId, $finalStudentId, $doa, $course, $now, $now]);
+    }
+
     $stmt = $pdo->prepare("SELECT * FROM students WHERE id = ?");
-    $stmt->execute([$id]);
+    $stmt->execute([$newDbId]);
     http_response_code(201);
     echo json_encode(normalizeStudent($stmt->fetch()));
+    exit();
 }
 
 function updateStudent($pdo, $id, $body) {
