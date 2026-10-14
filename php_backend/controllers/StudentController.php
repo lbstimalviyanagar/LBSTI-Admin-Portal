@@ -8,6 +8,8 @@ function normalizeStudent($row) {
         "phone" => $row["phone"],
         "email" => $row["email"],
         "remarks" => $row["remarks"],
+        "balance" => isset($row["balance"]) ? (float)$row["balance"] : 0,
+        "totalFees" => isset($row["total_fees"]) ? (float)$row["total_fees"] : 0,
         "createdAt" => $row["created_at"],
         "updatedAt" => $row["updated_at"]
     ];
@@ -47,6 +49,27 @@ function ensureStudentsAndEnrollmentsTables($pdo) {
           updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         ) ENGINE=InnoDB;");
     } catch (Exception $e) {}
+
+    // Migrations for existing tables
+    $studentCols = [
+        "balance"    => "DECIMAL(12,2) DEFAULT 0",
+        "total_fees" => "DECIMAL(12,2) DEFAULT 0"
+    ];
+    foreach ($studentCols as $col => $def) {
+        try {
+            $pdo->exec("ALTER TABLE students ADD COLUMN $col $def");
+        } catch (Exception $e) {}
+    }
+
+    $enrCols = [
+        "balance" => "DECIMAL(12,2) DEFAULT 0",
+        "fee_due" => "DECIMAL(12,2) DEFAULT 0"
+    ];
+    foreach ($enrCols as $col => $def) {
+        try {
+            $pdo->exec("ALTER TABLE enrollments ADD COLUMN $col $def");
+        } catch (Exception $e) {}
+    }
 }
 
 function generateNextStudentId($pdo) {
@@ -216,7 +239,16 @@ function updateStudent($pdo, $id, $body) {
     $params = [];
     $now = date("Y-m-d H:i:s");
     
-    $fields = ["studentId" => "student_id", "name" => "name", "guardianName" => "guardian_name", "phone" => "phone", "email" => "email", "remarks" => "remarks"];
+    $fields = [
+        "studentId" => "student_id",
+        "name" => "name",
+        "guardianName" => "guardian_name",
+        "phone" => "phone",
+        "email" => "email",
+        "remarks" => "remarks",
+        "balance" => "balance",
+        "totalFees" => "total_fees"
+    ];
     foreach ($fields as $jsonKey => $dbKey) {
         if (array_key_exists($jsonKey, $body)) {
             $updates[] = "$dbKey = ?";

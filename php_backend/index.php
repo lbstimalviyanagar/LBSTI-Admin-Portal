@@ -259,6 +259,8 @@ if ($route === 'auth/login') {
     }
     $like = "%{$q}%";
     $sql = "SELECT s.id, s.student_id, s.name, s.guardian_name, s.phone, s.email,
+                   COALESCE(s.balance, 0) AS balance,
+                   COALESCE(s.total_fees, 0) AS total_fees,
                    GROUP_CONCAT(DISTINCT e.course ORDER BY e.doa DESC SEPARATOR ', ') AS courses,
                    GROUP_CONCAT(DISTINCT CONCAT(e.course, ' (', e.status, ')') ORDER BY e.doa DESC SEPARATOR ', ') AS course_details,
                    MAX(e.doa) AS last_enrollment_date,
@@ -273,7 +275,7 @@ if ($route === 'auth/login') {
     $stmt->execute([$like, $like, $like]);
     $results = [];
 
-    $enrStmt = $pdo->prepare("SELECT id, enrollment_id, course, status, doa FROM enrollments WHERE student_id = ? ORDER BY doa DESC, id DESC");
+    $enrStmt = $pdo->prepare("SELECT id, enrollment_id, course, status, doa, balance, fee_due FROM enrollments WHERE student_id = ? ORDER BY doa DESC, id DESC");
 
     while ($row = $stmt->fetch()) {
         $studentId = $row["student_id"];
@@ -289,7 +291,9 @@ if ($route === 'auth/login') {
                         "enrollmentId" => $er["enrollment_id"],
                         "course" => $c,
                         "status" => $er["status"] ?? "Active",
-                        "doa" => $er["doa"]
+                        "doa" => $er["doa"],
+                        "balance" => (float)($er["balance"] ?? 0),
+                        "feeDue" => (float)($er["fee_due"] ?? 0)
                     ];
                 }
             }
@@ -305,7 +309,9 @@ if ($route === 'auth/login') {
                     "enrollmentId" => "ENR-" . ($studentId ?: $row["id"]) . "-" . $idx,
                     "course" => $sc,
                     "status" => "Active",
-                    "doa" => null
+                    "doa" => null,
+                    "balance" => 0,
+                    "feeDue" => 0
                 ];
                 $idx++;
             }
@@ -318,6 +324,8 @@ if ($route === 'auth/login') {
             "guardianName" => $row["guardian_name"],
             "phone" => $row["phone"],
             "email" => $row["email"],
+            "balance" => (float)($row["balance"] ?? 0),
+            "totalFees" => (float)($row["total_fees"] ?? 0),
             "courses" => $row["courses"] ?: "",
             "courseDetails" => $row["course_details"] ?: "",
             "lastEnrollmentDate" => $row["last_enrollment_date"],

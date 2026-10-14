@@ -7,6 +7,8 @@ function normalizeEnrollment($row) {
         "doa" => $row["doa"],
         "course" => $row["course"],
         "status" => $row["status"],
+        "balance" => isset($row["balance"]) ? (float)$row["balance"] : 0,
+        "feeDue" => isset($row["fee_due"]) ? (float)$row["fee_due"] : 0,
         "createdAt" => $row["created_at"],
         "updatedAt" => $row["updated_at"],
         "studentName" => $row["student_name"] ?? ""

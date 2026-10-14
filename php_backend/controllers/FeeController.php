@@ -31,6 +31,9 @@ function ensureFeesTable($pdo) {
         "enrollment_id"   => "VARCHAR(50) DEFAULT NULL",
         "course_id"       => "VARCHAR(50) DEFAULT NULL",
         "billing_month"   => "VARCHAR(50) DEFAULT NULL",
+        "balance"         => "DECIMAL(12,2) DEFAULT 0",
+        "total_due"       => "DECIMAL(12,2) DEFAULT 0",
+        "is_bulk"         => "TINYINT(1) DEFAULT 0",
         "receipt_details" => "TEXT DEFAULT NULL",
         "receipt_number"  => "VARCHAR(100) DEFAULT NULL",
         "updated_at"      => "DATETIME DEFAULT CURRENT_TIMESTAMP",
@@ -88,7 +91,7 @@ function createFee($pdo, $body, $user) {
     $notes          = isset($body["notes"])           ? $body["notes"]               : "";
     $receiptDetails = isset($body["receiptDetails"])  ? $body["receiptDetails"]      : null;
 
-    // Single selected course: extract strictly from request, avoiding comma bundles
+    // Course selection
     $selectedCourse = "";
     if (!empty($body["course"])) {
         $selectedCourse = trim($body["course"]);
@@ -98,9 +101,17 @@ function createFee($pdo, $body, $user) {
         $selectedCourse = trim($receiptDetails["batch"]);
     }
 
+    $isBulk = !empty($body["isBulkPayment"]) || $selectedCourse === "ALL_COURSES" || strtolower($selectedCourse) === "all enrolled courses (bulk payment)";
+    if ($isBulk) {
+        $selectedCourse = "All Enrolled Courses (Bulk Payment)";
+    }
+
     $enrollmentId = !empty($body["enrollmentId"]) ? trim($body["enrollmentId"]) : (!empty($receiptDetails["enrollmentId"]) ? trim($receiptDetails["enrollmentId"]) : null);
-    $courseId     = !empty($body["courseId"]) ? trim($body["courseId"]) : (!empty($receiptDetails["courseId"]) ? trim($receiptDetails["courseId"]) : null);
+    $courseId     = !empty($body["courseId"]) ? trim($body["courseId"]) : (!empty($receiptDetails["courseId"]) ? trim($receiptDetails["courseId"]) : ($isBulk ? "BULK" : null));
     $billingMonth = !empty($body["billingMonth"]) ? trim($body["billingMonth"]) : (!empty($receiptDetails["month"]) ? trim($receiptDetails["month"]) : null);
+
+    $totalCourseFeesDue = isset($body["totalCourseFeesDue"]) ? (float)$body["totalCourseFeesDue"] : 0;
+    $outstandingBalance = isset($body["outstandingBalance"]) ? (float)$body["outstandingBalance"] : (isset($body["balance"]) ? (float)$body["balance"] : 0);
 
     if (!$enquiryId || !($amount > 0)) {
         http_response_code(400);
@@ -109,7 +120,7 @@ function createFee($pdo, $body, $user) {
 
     if (empty($selectedCourse)) {
         http_response_code(400);
-        die(json_encode(["message" => "A single specific course must be selected for payment."]));
+        die(json_encode(["message" => "A specific course or bulk payment must be selected."]));
     }
 
     // Look up student details
@@ -139,8 +150,8 @@ function createFee($pdo, $body, $user) {
         } catch (Exception $e) {}
     }
 
-    // If enrollment_id was not provided, look it up specifically for this student and this selected course
-    if (empty($enrollmentId) && !empty($studentIdStr) && !empty($selectedCourse)) {
+    // If single course and enrollment_id not provided, look it up specifically
+    if (!$isBulk && empty($enrollmentId) && !empty($studentIdStr) && !empty($selectedCourse)) {
         try {
             $stmt = $pdo->prepare("SELECT enrollment_id FROM enrollments WHERE student_id = ? AND course = ? LIMIT 1");
             $stmt->execute([$studentIdStr, $selectedCourse]);
@@ -155,10 +166,14 @@ function createFee($pdo, $body, $user) {
         $courseId = $enrollmentId;
     }
 
-    // Ensure receiptDetails explicitly isolates the selected course, enrollment, month
+    // Ensure receiptDetails explicitly isolates metadata
     if (is_array($receiptDetails)) {
         $receiptDetails["batch"] = $selectedCourse;
         $receiptDetails["course"] = $selectedCourse;
+        $receiptDetails["isBulkPayment"] = $isBulk;
+        $receiptDetails["totalCourseFeesDue"] = $totalCourseFeesDue;
+        $receiptDetails["outstandingBalance"] = $outstandingBalance;
+        $receiptDetails["isSettled"] = $outstandingBalance <= 0;
         if ($enrollmentId) $receiptDetails["enrollmentId"] = $enrollmentId;
         if ($courseId) $receiptDetails["courseId"] = $courseId;
         if ($billingMonth) $receiptDetails["month"] = $billingMonth;
@@ -170,18 +185,47 @@ function createFee($pdo, $body, $user) {
     // NOTE: created_at and updated_at are set automatically via DEFAULT CURRENT_TIMESTAMP.
     $stmt = $pdo->prepare(
         "INSERT INTO fees
-            (enquiry_id, student_name, course, enrollment_id, course_id, billing_month, amount, payment_date, mode, received_by, notes, receipt_details)
+            (enquiry_id, student_name, course, enrollment_id, course_id, billing_month, amount, balance, total_due, is_bulk, payment_date, mode, received_by, notes, receipt_details)
          VALUES
-            (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     );
     $stmt->execute([
-        $enquiryId, $studentName, $selectedCourse, $enrollmentId, $courseId, $billingMonth, $amount,
+        $enquiryId, $studentName, $selectedCourse, $enrollmentId, $courseId, $billingMonth,
+        $amount, $outstandingBalance, $totalCourseFeesDue, ($isBulk ? 1 : 0),
         $paymentDate, $mode, $receivedBy, $notes,
         $receiptDetailsJson
     ]);
 
     $newId = $pdo->lastInsertId();
-    $stmt  = $pdo->prepare("SELECT * FROM fees WHERE id = ?");
+
+    // ── Natively update relational student balance and ledger data fields ──
+    try {
+        if (!empty($studentIdStr) || !empty($enquiryId)) {
+            $updStudent = $pdo->prepare("UPDATE students SET balance = ?, total_fees = ? WHERE id = ? OR student_id = ?");
+            $updStudent->execute([$outstandingBalance, $totalCourseFeesDue, $enquiryId, $studentIdStr]);
+        }
+    } catch (Exception $e) {}
+
+    try {
+        if ($isBulk) {
+            if ($outstandingBalance <= 0 && !empty($studentIdStr)) {
+                $updEnr = $pdo->prepare("UPDATE enrollments SET balance = 0 WHERE student_id = ?");
+                $updEnr->execute([$studentIdStr]);
+            }
+        } elseif (!empty($studentIdStr) && !empty($selectedCourse)) {
+            $updEnr = $pdo->prepare("UPDATE enrollments SET balance = ? WHERE student_id = ? AND course = ?");
+            $updEnr->execute([$outstandingBalance, $studentIdStr, $selectedCourse]);
+        }
+    } catch (Exception $e) {}
+
+    try {
+        if (!empty($enquiryId)) {
+            $updEnq = $pdo->prepare("UPDATE enquiries SET balance = ? WHERE id = ?");
+            $updEnq->execute([$outstandingBalance, $enquiryId]);
+        }
+    } catch (Exception $e) {}
+
+    $stmt = $pdo->prepare("SELECT * FROM fees WHERE id = ?");
     $stmt->execute([$newId]);
 
     http_response_code(201);
@@ -200,7 +244,10 @@ function updateFee($pdo, $id, $body) {
         "course"       => "course",
         "enrollmentId" => "enrollment_id",
         "courseId"     => "course_id",
-        "billingMonth" => "billing_month"
+        "billingMonth" => "billing_month",
+        "balance"      => "balance",
+        "totalDue"     => "total_due",
+        "isBulk"       => "is_bulk"
     ];
 
     foreach ($fields as $jsonKey => $dbKey) {
@@ -255,6 +302,9 @@ function normalizeFee($row) {
         "courseId"       => $row["course_id"]           ?? null,
         "billingMonth"   => $row["billing_month"]       ?? ($receiptDetails["month"] ?? null),
         "amount"         => (float)($row["amount"]      ?? 0),
+        "balance"        => (float)($row["balance"]     ?? 0),
+        "totalDue"       => (float)($row["total_due"]   ?? 0),
+        "isBulk"         => (bool)($row["is_bulk"]      ?? 0),
         "paymentDate"    => $row["payment_date"]        ?? "",
         "mode"           => $row["mode"]                ?? "Cash",
         "receivedBy"     => $row["received_by"]         ?? "Admin",

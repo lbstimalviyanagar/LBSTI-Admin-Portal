@@ -273,7 +273,32 @@ export default function App() {
         const freshFees = await api.getFees();
         setFees(freshFees || []);
       }
-      addToast("Fee payment recorded successfully.");
+
+      // Update student balance in local state
+      if (payload.outstandingBalance !== undefined) {
+        setStudents(prev => prev.map(s => {
+          if (String(s.id) === String(payload.enquiryId) || String(s.studentId) === String(payload.studentId)) {
+            return {
+              ...s,
+              balance: Number(payload.outstandingBalance),
+              totalFees: Number(payload.totalCourseFeesDue || s.totalFees || 0)
+            };
+          }
+          return s;
+        }));
+        setEnquiries(prev => prev.map(e => {
+          if (String(e.id) === String(payload.enquiryId)) {
+            return { ...e, balance: Number(payload.outstandingBalance) };
+          }
+          return e;
+        }));
+      }
+
+      if (payload.outstandingBalance <= 0) {
+        addToast("Fee payment recorded successfully. Balance Settled / Nil.");
+      } else {
+        addToast(`Fee payment recorded. Outstanding balance: ₹${Number(payload.outstandingBalance).toLocaleString("en-IN")}`);
+      }
     } catch (err) {
       addToast(err.message || "Failed to record payment.", true);
       throw err;

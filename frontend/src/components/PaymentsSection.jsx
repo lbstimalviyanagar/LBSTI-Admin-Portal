@@ -115,6 +115,44 @@ const extractStudentCourses = (student, allEnrollments = []) => {
   return Array.from(map.values());
 };
 
+// Course targeted fee lookup helper for ledger invoice configuration
+export const getCourseTargetFee = (courseName) => {
+  if (!courseName) return 10000;
+  const c = String(courseName).toLowerCase();
+  
+  if (c.includes('full stack') || c.includes('ui/ux') || c.includes('mern') || c.includes('data science') || c.includes('ai & machine')) {
+    return 14000;
+  }
+  if (c.includes('adca') || c.includes('dit') || c.includes('dabc') || c.includes('dea') || c.includes('dmm') || c.includes('dwd') || c.includes('dacs')) {
+    return 15000;
+  }
+  if (c.includes('ctt')) return 22000;
+  if (c.includes('nptc')) return 28000;
+  if (c.includes('english speaking')) return 7500;
+  if (c.includes('advance excel') || c.includes('vba')) return 3500;
+  if (c.includes('tally prime') || c.includes('tally 9')) return 4000;
+  if (c.includes('gst')) return 4500;
+  if (c.includes('cco') || c.includes('beautician')) return 4500;
+  if (c.includes('word') || c.includes('c language') || c.includes('c++') || c.includes('sql') || c.includes('photoshop')) return 2500;
+  
+  const m = c.match(/(\d+)\s*(month|months|days)/i);
+  if (m) {
+    const num = parseInt(m[1], 10);
+    const unit = m[2].toLowerCase();
+    if (unit.includes('day')) return 3000;
+    if (num >= 24) return 28000;
+    if (num >= 18) return 22000;
+    if (num >= 12) return 15000;
+    if (num >= 8) return 12000;
+    if (num >= 6) return 9000;
+    if (num >= 4) return 7500;
+    if (num >= 3) return 5000;
+    if (num >= 2) return 3500;
+    if (num >= 1) return 2000;
+  }
+  return 10000;
+};
+
 export default function PaymentsSection({
   fees = [],
   enquiries = [],
@@ -135,10 +173,11 @@ export default function PaymentsSection({
   const [selectedStudent, setSelectedStudent] = useState(null);
   const dropdownRef = useRef(null);
 
-  // Isolated course selection state for single-select dropdown
+  // Isolated course selection state for single-select dropdown & bulk mode
   const [studentCourseOptions, setStudentCourseOptions] = useState([]);
   const [selectedCourse, setSelectedCourse] = useState('');
   const [selectedEnrollmentId, setSelectedEnrollmentId] = useState('');
+  const [courseFeeDues, setCourseFeeDues] = useState({});
 
   const [batch, setBatch] = useState('');
   const [feeMonth, setFeeMonth] = useState(isoDay(new Date()).slice(0, 7));
@@ -148,7 +187,7 @@ export default function PaymentsSection({
   const [selectedReceiptPaymentId, setSelectedReceiptPaymentId] = useState('');
   const [savingPayment, setSavingPayment] = useState(false);
 
-  // Particulars breakdown — now includes 'online'
+  // Particulars breakdown — includes cash, cheque, and online
   const [breakdown, setBreakdown] = useState(
     Object.fromEntries(FEE_ITEMS.map(([key]) => [key, { cash: 0, cheque: 0, online: 0 }]))
   );
@@ -166,6 +205,30 @@ export default function PaymentsSection({
 
   const totals = feeBreakdownTotals(breakdown);
   const totalAmount = (totals.cash + totals.cheque + totals.online).toFixed(2);
+  const netPaymentReceived = totals.cash + totals.cheque + totals.online;
+
+  const isBulkPayment = selectedCourse === 'ALL_COURSES' || selectedCourse === 'All Enrolled Courses (Bulk Payment)';
+
+  // Total Course Fees Due calculation: evaluates the targeted ledger invoice structure configuration for active selection
+  const totalCourseFeesDue = useMemo(() => {
+    if (!selectedStudent || studentCourseOptions.length === 0) return 0;
+    if (isBulkPayment) {
+      return studentCourseOptions.reduce((sum, opt) => {
+        const fee = courseFeeDues[opt.course] !== undefined ? courseFeeDues[opt.course] : getCourseTargetFee(opt.course);
+        return sum + fee;
+      }, 0);
+    }
+    if (selectedCourse && selectedCourse !== 'ALL_COURSES') {
+      return courseFeeDues[selectedCourse] !== undefined ? courseFeeDues[selectedCourse] : getCourseTargetFee(selectedCourse);
+    }
+    return studentCourseOptions.reduce((sum, opt) => {
+      const fee = courseFeeDues[opt.course] !== undefined ? courseFeeDues[opt.course] : getCourseTargetFee(opt.course);
+      return sum + fee;
+    }, 0);
+  }, [selectedStudent, selectedCourse, isBulkPayment, studentCourseOptions, courseFeeDues]);
+
+  // Outstanding Balance Remaining calculation: evaluates absolute net difference ([Total Course Fees Due] minus [Net Payment Received])
+  const outstandingBalance = Math.max(0, totalCourseFeesDue - netPaymentReceived);
 
   // ── Smart Student Search ──
   const debouncedQuery = useDebounce(searchQuery, 350);
@@ -215,14 +278,26 @@ export default function PaymentsSection({
     const isolatedOptions = extractStudentCourses(student, enrollments);
     setStudentCourseOptions(isolatedOptions);
 
+    // Initialize course fee dues for each course
+    const dues = {};
+    isolatedOptions.forEach(opt => {
+      const defaultFee = (opt.feeDue && opt.feeDue > 0) ? opt.feeDue : ((opt.balance && opt.balance > 0) ? opt.balance : getCourseTargetFee(opt.course));
+      dues[opt.course] = defaultFee;
+    });
+    setCourseFeeDues(dues);
+
     if (isolatedOptions.length === 1) {
       // Exactly one course enrolled: auto-select it
       setSelectedCourse(isolatedOptions[0].course);
       setSelectedEnrollmentId(isolatedOptions[0].enrollmentId || '');
       setBatch(isolatedOptions[0].course);
-    } else {
+    } else if (isolatedOptions.length > 1) {
       // Multiple courses enrolled (e.g., Sahil Choudhary with ADCA and UI/UX Design):
-      // Require the administrator to choose exactly one specific course
+      // Default to "All Enrolled Courses (Bulk Payment)" to programmatically enable calculation rows for all active courses
+      setSelectedCourse('ALL_COURSES');
+      setSelectedEnrollmentId('BULK');
+      setBatch('All Enrolled Courses (Bulk Payment)');
+    } else {
       setSelectedCourse('');
       setSelectedEnrollmentId('');
       setBatch('');
@@ -232,9 +307,14 @@ export default function PaymentsSection({
   const handleCourseChange = (e) => {
     const chosen = e.target.value;
     setSelectedCourse(chosen);
-    setBatch(chosen);
-    const found = studentCourseOptions.find(opt => opt.course === chosen);
-    setSelectedEnrollmentId(found?.enrollmentId || '');
+    if (chosen === 'ALL_COURSES' || chosen === 'All Enrolled Courses (Bulk Payment)') {
+      setBatch('All Enrolled Courses (Bulk Payment)');
+      setSelectedEnrollmentId('BULK');
+    } else {
+      setBatch(chosen);
+      const found = studentCourseOptions.find(opt => opt.course === chosen);
+      setSelectedEnrollmentId(found?.enrollmentId || '');
+    }
   };
 
   const handleClearForm = () => {
@@ -244,6 +324,7 @@ export default function PaymentsSection({
     setStudentCourseOptions([]);
     setSelectedCourse('');
     setSelectedEnrollmentId('');
+    setCourseFeeDues({});
     setBatch('');
     setFeeMonth(isoDay(new Date()).slice(0, 7));
     setRelation('');
@@ -259,7 +340,7 @@ export default function PaymentsSection({
       return;
     }
     if (!selectedCourse || !selectedCourse.trim()) {
-      onToast("Please select exactly one specific course from the dropdown.", true);
+      onToast("Please select a course or Bulk Payment option.", true);
       return;
     }
     if (!(parseFloat(totalAmount) > 0)) {
@@ -274,22 +355,35 @@ export default function PaymentsSection({
     if (totals.online) modes.push("UPI/Online");
     const mode = modes.join(" + ") || "Cash";
 
+    const isBulk = selectedCourse === 'ALL_COURSES' || selectedCourse === 'All Enrolled Courses (Bulk Payment)';
+    const finalCourseName = isBulk ? "All Enrolled Courses (Bulk Payment)" : selectedCourse.trim();
+
     const payload = {
       enquiryId: Number(selectedStudent.id),
       studentId: selectedStudent.studentId,
-      course: selectedCourse.trim(),
-      enrollmentId: selectedEnrollmentId || undefined,
-      courseId: selectedEnrollmentId || undefined,
+      course: finalCourseName,
+      isBulkPayment: isBulk,
+      selectedCourses: isBulk ? studentCourseOptions.map(c => c.course) : [selectedCourse.trim()],
+      enrollmentId: isBulk ? studentCourseOptions.map(c => c.enrollmentId).filter(Boolean).join(',') : (selectedEnrollmentId || undefined),
+      courseId: isBulk ? "BULK" : (selectedEnrollmentId || undefined),
       billingMonth: feeMonth,
       amount: parseFloat(totalAmount),
+      totalCourseFeesDue,
+      outstandingBalance,
+      balance: outstandingBalance,
       paymentDate: paymentDate || isoDay(new Date()),
       mode,
       notes: notes.trim(),
       receiptDetails: {
-        batch: selectedCourse.trim(),
-        course: selectedCourse.trim(),
-        enrollmentId: selectedEnrollmentId || undefined,
-        courseId: selectedEnrollmentId || undefined,
+        batch: isBulk ? "All Enrolled Courses (Bulk)" : selectedCourse.trim(),
+        course: finalCourseName,
+        isBulkPayment: isBulk,
+        courses: isBulk ? studentCourseOptions.map(c => c.course) : [selectedCourse.trim()],
+        totalCourseFeesDue,
+        netPaymentReceived: parseFloat(totalAmount),
+        outstandingBalance,
+        isSettled: outstandingBalance === 0,
+        enrollmentId: isBulk ? "BULK" : (selectedEnrollmentId || undefined),
         month: feeMonth,
         relation: relation.trim(),
         items: breakdown
@@ -1187,7 +1281,7 @@ export default function PaymentsSection({
                     <span>Batch / Course <span style={{ color: '#ef4444' }}>*</span></span>
                     {selectedStudent && studentCourseOptions.length > 1 && (
                       <span style={{ fontSize: '11px', color: '#1e40af', background: '#dbeafe', padding: '2px 8px', borderRadius: '10px', fontWeight: 600 }}>
-                        {studentCourseOptions.length} Enrolled Courses (Select 1)
+                        {studentCourseOptions.length} Active Courses (Bulk Enabled)
                       </span>
                     )}
                   </label>
@@ -1211,7 +1305,11 @@ export default function PaymentsSection({
                       <option value="">-- No enrolled courses found for this student --</option>
                     ) : (
                       <>
-                        <option value="">-- Choose specific enrolled course (Required) --</option>
+                        <option value="">-- Choose specific course or Bulk Payment --</option>
+                        {/* Dynamic utility option at the top of the dropdown list */}
+                        <option value="ALL_COURSES" style={{ fontWeight: 700, color: '#1d4ed8' }}>
+                          All Enrolled Courses (Bulk Payment)
+                        </option>
                         {studentCourseOptions.map((opt, idx) => (
                           <option key={opt.id || opt.enrollmentId || idx} value={opt.course}>
                             {opt.course}{opt.status && opt.status !== 'Active' ? ` (${opt.status})` : ''}
@@ -1222,10 +1320,15 @@ export default function PaymentsSection({
                   </select>
                   {selectedStudent && !selectedCourse && (
                     <div style={{ fontSize: '11px', color: '#dc2626', marginTop: '4px' }}>
-                      * Single selection required: Choose the specific course to receive this payment.
+                      * Select a specific course or choose "All Enrolled Courses (Bulk Payment)".
                     </div>
                   )}
-                  {selectedStudent && selectedCourse && (
+                  {selectedStudent && isBulkPayment && (
+                    <div style={{ fontSize: '11px', color: '#1d4ed8', marginTop: '4px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <span>⚡ Bulk Payment Mode Active: All {studentCourseOptions.length} active courses enabled simultaneously.</span>
+                    </div>
+                  )}
+                  {selectedStudent && selectedCourse && !isBulkPayment && (
                     <div style={{ fontSize: '11px', color: '#16a34a', marginTop: '4px', fontWeight: 500 }}>
                       ✓ Payment mapped exclusively to: <strong>{selectedCourse}</strong>
                     </div>
@@ -1255,6 +1358,163 @@ export default function PaymentsSection({
                     style={selectedStudent ? { background: '#f9fafb', color: '#4b5563' } : {}}
                   />
                 </div>
+
+                {/* Dual-Course / Multi-Course Balance Calculation Layout */}
+                {selectedStudent && studentCourseOptions.length > 0 && (
+                  <div className="fld full" style={{ padding: 0, margin: '4px 0 14px' }}>
+                    <div style={{
+                      background: isBulkPayment ? 'linear-gradient(135deg, #eff6ff, #f8fafc)' : '#f8fafc',
+                      border: `1.5px solid ${isBulkPayment ? '#93c5fd' : '#cbd5e1'}`,
+                      borderRadius: '12px',
+                      padding: '16px 20px',
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.03)'
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+                        <div>
+                          <span style={{ fontWeight: 700, fontSize: '14px', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span>📚 Course Fee Ledger &amp; Allocation</span>
+                            {isBulkPayment && (
+                              <span style={{ background: '#2563eb', color: '#fff', fontSize: '10px', padding: '1px 7px', borderRadius: '4px', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 700 }}>
+                                Dual-Course Bulk
+                              </span>
+                            )}
+                          </span>
+                          <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
+                            {isBulkPayment 
+                              ? `All ${studentCourseOptions.length} active courses programmatically enabled simultaneously for ledger calculation.` 
+                              : `Singular course active: Ledger targeted specifically to ${selectedCourse || 'chosen course'}.`}
+                          </div>
+                        </div>
+                        <div>
+                          {isBulkPayment ? (
+                            <span style={{ background: '#dbeafe', color: '#1e40af', padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 700, border: '1px solid #bfdbfe' }}>
+                              ⚡ Dual / Multi-Course Active ({studentCourseOptions.length})
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedCourse('ALL_COURSES');
+                                setBatch('All Enrolled Courses (Bulk Payment)');
+                                setSelectedEnrollmentId('BULK');
+                              }}
+                              style={{ border: '1px solid #bfdbfe', background: '#eff6ff', color: '#1d4ed8', padding: '4px 10px', borderRadius: '8px', fontSize: '11px', cursor: 'pointer', fontWeight: 700 }}
+                            >
+                              Switch to Bulk All Courses
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Calculation rows for all active courses assigned to this student */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {studentCourseOptions.map((opt, idx) => {
+                          const isRowActive = isBulkPayment || selectedCourse === opt.course;
+                          const rowTargetFee = courseFeeDues[opt.course] !== undefined ? courseFeeDues[opt.course] : getCourseTargetFee(opt.course);
+                          return (
+                            <div
+                              key={opt.id || opt.enrollmentId || idx}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                padding: '12px 16px',
+                                borderRadius: '10px',
+                                background: isRowActive ? '#ffffff' : '#f8fafc',
+                                border: isRowActive ? '1.5px solid #3b82f6' : '1px solid #e2e8f0',
+                                boxShadow: isRowActive ? '0 2px 6px rgba(59, 130, 246, 0.08)' : 'none',
+                                opacity: isRowActive ? 1 : 0.65,
+                                transition: 'all 0.2s',
+                                flexWrap: 'wrap',
+                                gap: '10px'
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <div style={{
+                                  width: '32px', height: '32px', borderRadius: '8px',
+                                  background: isRowActive ? '#dbeafe' : '#f1f5f9',
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                  color: isRowActive ? '#1e40af' : '#94a3b8', fontSize: '14px', fontWeight: 800
+                                }}>
+                                  {idx + 1}
+                                </div>
+                                <div>
+                                  <div style={{ fontWeight: 700, color: isRowActive ? '#0f172a' : '#64748b', fontSize: '13.5px' }}>
+                                    {opt.course}
+                                    <span style={{ marginLeft: '8px', fontSize: '11px', padding: '2px 7px', borderRadius: '4px', background: '#dcfce7', color: '#15803d', fontWeight: 700 }}>
+                                      {opt.status || 'Active'}
+                                    </span>
+                                  </div>
+                                  <div style={{ fontSize: '11.5px', color: '#64748b', marginTop: '2px' }}>
+                                    Enrollment: <span style={{ fontFamily: 'monospace', color: '#475569' }}>{opt.enrollmentId || `ENR-${selectedStudent.studentId}-${idx+1}`}</span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                                <div style={{ textAlign: 'right' }}>
+                                  <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 500 }}>Targeted Ledger Due</div>
+                                  <div style={{ fontWeight: 800, fontSize: '15px', color: isRowActive ? '#1d4ed8' : '#64748b' }}>
+                                    ₹{rowTargetFee.toLocaleString('en-IN')}
+                                  </div>
+                                </div>
+
+                                <div>
+                                  {isRowActive ? (
+                                    <span style={{
+                                      background: '#ecfdf5', color: '#047857',
+                                      border: '1px solid #a7f3d0', padding: '5px 10px',
+                                      borderRadius: '6px', fontSize: '11.5px', fontWeight: 700,
+                                      display: 'inline-flex', alignItems: 'center', gap: '4px'
+                                    }}>
+                                      {isBulkPayment ? '✓ Included in Bulk' : '✓ Active'}
+                                    </span>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedCourse(opt.course);
+                                        setBatch(opt.course);
+                                        setSelectedEnrollmentId(opt.enrollmentId || '');
+                                      }}
+                                      style={{
+                                        border: '1px solid #cbd5e1', background: '#ffffff',
+                                        color: '#475569', padding: '5px 10px', borderRadius: '6px',
+                                        fontSize: '11.5px', cursor: 'pointer', fontWeight: 600
+                                      }}
+                                    >
+                                      Select this course
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Subtotal ledger bar */}
+                      <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        marginTop: '14px',
+                        paddingTop: '12px',
+                        borderTop: '1px dashed #cbd5e1',
+                        fontSize: '13px'
+                      }}>
+                        <span style={{ color: '#334155', fontWeight: 700 }}>
+                          {isBulkPayment 
+                            ? `Total Ledger Invoice Configuration (${studentCourseOptions.length} Active Courses Combined):` 
+                            : `Singular Active Course Invoice Configuration:`}
+                        </span>
+                        <span style={{ fontWeight: 800, fontSize: '16px', color: '#0f172a' }}>
+                          ₹{Number(totalCourseFeesDue).toLocaleString('en-IN')}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Particulars Breakdown Table — with UPI/Online column */}
                 <div className="fld full fee-breakdown-field">
@@ -1318,44 +1578,163 @@ export default function PaymentsSection({
                   </div>
                 </div>
 
-                {/* Total Calculated Amount — Strictly Read-Only */}
-                <div className="fld">
-                  <label htmlFor="fee-amount">Total amount (₹) <em>*</em></label>
-                  <input
-                    className="input"
-                    id="fee-amount"
-                    type="text"
-                    value={`₹ ${Number(totalAmount).toLocaleString("en-IN")}`}
-                    readOnly
-                    style={{ fontWeight: 700, fontSize: '18px', background: '#f0f9ff', color: '#0369a1', border: '2px solid #0ea5e9' }}
-                  />
-                  {parseFloat(totalAmount) > 0 && (
-                    <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px', fontStyle: 'italic' }}>
-                      {numberToIndianWords(parseFloat(totalAmount))}
+                {/* Financial Calculation Summary Fields Segment directly below particulars breakdown and above Notes */}
+                <div className="fld full" style={{ padding: 0, margin: '14px 0 10px' }}>
+                  <div style={{
+                    background: '#f8fafc',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '12px',
+                    padding: '18px 20px',
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.03)'
+                  }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
+                      {/* Metric 1: Total Course Fees Due (₹) */}
+                      <div style={{
+                        background: '#ffffff',
+                        border: '1.5px solid #cbd5e1',
+                        borderRadius: '10px',
+                        padding: '14px 16px'
+                      }}>
+                        <div style={{ fontSize: '12px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                          Total Course Fees Due (₹)
+                        </div>
+                        <input
+                          type="text"
+                          readOnly
+                          value={`₹ ${Number(totalCourseFeesDue).toLocaleString("en-IN")}`}
+                          style={{
+                            width: '100%',
+                            border: 'none',
+                            outline: 'none',
+                            background: 'transparent',
+                            fontWeight: 800,
+                            fontSize: '20px',
+                            color: '#1e293b',
+                            marginTop: '6px',
+                            padding: 0
+                          }}
+                        />
+                        <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
+                          {isBulkPayment 
+                            ? `Targeted ledger across all ${studentCourseOptions.length} active courses`
+                            : selectedCourse ? `Targeted ledger for ${selectedCourse}` : 'No course selected'}
+                        </div>
+                      </div>
+
+                      {/* Metric 2: Net Payment Received (₹) */}
+                      <div style={{
+                        background: '#ffffff',
+                        border: '1.5px solid #38bdf8',
+                        borderRadius: '10px',
+                        padding: '14px 16px'
+                      }}>
+                        <div style={{ fontSize: '12px', fontWeight: 700, color: '#0369a1', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                          Net Payment Received (₹)
+                        </div>
+                        <input
+                          type="text"
+                          readOnly
+                          value={`₹ ${Number(netPaymentReceived).toLocaleString("en-IN")}`}
+                          style={{
+                            width: '100%',
+                            border: 'none',
+                            outline: 'none',
+                            background: 'transparent',
+                            fontWeight: 800,
+                            fontSize: '20px',
+                            color: '#0284c7',
+                            marginTop: '6px',
+                            padding: 0
+                          }}
+                        />
+                        <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
+                          {parseFloat(totalAmount) > 0 ? (
+                            <span style={{ fontStyle: 'italic' }}>{numberToIndianWords(parseFloat(totalAmount))}</span>
+                          ) : (
+                            'Real-time sum of Cash + Cheque + UPI inputs'
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Metric 3: Outstanding Balance Remaining (₹) with Condition Logic */}
+                      <div style={{
+                        background: selectedStudent && outstandingBalance === 0 ? '#f0fdf4' : (outstandingBalance === 0 ? '#ffffff' : '#fffbeb'),
+                        border: `1.5px solid ${selectedStudent && outstandingBalance === 0 ? '#86efac' : (outstandingBalance === 0 ? '#cbd5e1' : '#fcd34d')}`,
+                        borderRadius: '10px',
+                        padding: '14px 16px'
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: '12px', fontWeight: 700, color: selectedStudent && outstandingBalance === 0 ? '#15803d' : '#92400e', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                            Outstanding Balance Remaining (₹)
+                          </span>
+                          {/* Dynamic Green Check Badge when exactly 0 */}
+                          {selectedStudent && outstandingBalance === 0 && (
+                            <span style={{
+                              background: '#dcfce7',
+                              color: '#15803d',
+                              border: '1px solid #86efac',
+                              padding: '2px 8px',
+                              borderRadius: '12px',
+                              fontSize: '11px',
+                              fontWeight: 700,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}>
+                              ✓ Balance Settled / Nil
+                            </span>
+                          )}
+                        </div>
+                        <input
+                          type="text"
+                          readOnly
+                          value={`₹ ${Number(outstandingBalance).toLocaleString("en-IN")}`}
+                          style={{
+                            width: '100%',
+                            border: 'none',
+                            outline: 'none',
+                            background: 'transparent',
+                            fontWeight: 800,
+                            fontSize: '20px',
+                            color: selectedStudent && outstandingBalance === 0 ? '#166534' : '#b45309',
+                            marginTop: '6px',
+                            padding: 0
+                          }}
+                        />
+                        <div style={{ fontSize: '11px', color: selectedStudent && outstandingBalance === 0 ? '#16a34a' : '#78350f', marginTop: '4px', fontWeight: 500 }}>
+                          {selectedStudent && outstandingBalance === 0 ? (
+                            '✓ Total ledger cleared in full. No outstanding balance.'
+                          ) : (
+                            `Absolute net difference ([Total Course Fees Due] - [Net Payment Received])`
+                          )}
+                        </div>
+                      </div>
                     </div>
-                  )}
+                  </div>
                 </div>
 
-                <div className="fld">
-                  <label htmlFor="fee-date">Payment date</label>
-                  <input
-                    className="input"
-                    id="fee-date"
-                    type="date"
-                    value={paymentDate}
-                    onChange={(e) => setPaymentDate(e.target.value)}
-                  />
-                </div>
+                <div className="fld full" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px', padding: 0 }}>
+                  <div className="fld" style={{ margin: 0 }}>
+                    <label htmlFor="fee-date">Payment date</label>
+                    <input
+                      className="input"
+                      id="fee-date"
+                      type="date"
+                      value={paymentDate}
+                      onChange={(e) => setPaymentDate(e.target.value)}
+                    />
+                  </div>
 
-                <div className="fld full">
-                  <label htmlFor="fee-notes">Notes</label>
-                  <input
-                    className="input"
-                    id="fee-notes"
-                    placeholder="e.g. First installment, admission fee"
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                  />
+                  <div className="fld" style={{ margin: 0 }}>
+                    <label htmlFor="fee-notes">Notes</label>
+                    <input
+                      className="input"
+                      id="fee-notes"
+                      placeholder="e.g. First installment, admission fee"
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                    />
+                  </div>
                 </div>
               </div>
             </div>
