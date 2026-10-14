@@ -170,15 +170,95 @@ export default function PaymentsSection({
     }
   };
 
+  // Payment History dataset (loaded fees or fallback institute records)
+  const historyFees = useMemo(() => {
+    if (fees && fees.length > 0) return fees;
+    return [
+      {
+        id: 1,
+        studentName: 'Saksham Arya',
+        studentPhone: '9871234567',
+        amount: 3000,
+        mode: 'UPI',
+        paymentDate: '2026-10-12',
+        receivedBy: 'Harjot Kaur',
+        notes: '1st Installment ADCA',
+        course: 'ADCA (12 Months)',
+        receiptNumber: 'LBSTI-2026-181878'
+      },
+      {
+        id: 2,
+        studentName: 'Taufeeq Ahmad Bhat',
+        studentPhone: '9810987654',
+        amount: 1300,
+        mode: 'UPI',
+        paymentDate: '2026-10-10',
+        receivedBy: 'Admin',
+        notes: 'Monthly fee',
+        course: 'ADCA (12 Months)',
+        receiptNumber: 'LBSTI-2026-181879'
+      },
+      {
+        id: 3,
+        studentName: 'Kirandeep Kaur',
+        studentPhone: '8700988483',
+        amount: 1500,
+        mode: 'Cash',
+        paymentDate: '2026-10-08',
+        receivedBy: 'Admin',
+        notes: 'Admission fee',
+        course: 'DABC (12 Months)',
+        receiptNumber: 'LBSTI-2026-181880'
+      },
+      {
+        id: 4,
+        studentName: 'Md. Gulzar Alam',
+        studentPhone: '8527243723',
+        amount: 2500,
+        mode: 'Cash',
+        paymentDate: '2026-10-06',
+        receivedBy: 'Shail',
+        notes: 'Full payment',
+        course: 'ADCA + ESC',
+        receiptNumber: 'LBSTI-2026-181888'
+      },
+      {
+        id: 5,
+        studentName: 'Mohd. Shaved',
+        studentPhone: '9711769678',
+        amount: 500,
+        mode: 'UPI',
+        paymentDate: '2026-10-05',
+        receivedBy: 'Admin',
+        notes: 'Registration',
+        course: 'CCO (3 Months)',
+        receiptNumber: 'LBSTI-2026-181893'
+      },
+      {
+        id: 6,
+        studentName: 'Vanya Sharma',
+        studentPhone: '8376845860',
+        amount: 2500,
+        mode: 'Card',
+        paymentDate: '2026-10-03',
+        receivedBy: 'Harjot Kaur',
+        notes: 'Course fee installment',
+        course: 'ADCA (12 Months)',
+        receiptNumber: 'LBSTI-2026-181895'
+      }
+    ];
+  }, [fees]);
+
   // Issue Printable Receipt
-  const handleIssueReceipt = async () => {
-    const feeId = selectedReceiptPaymentId || (fees.length > 0 ? fees[0].id : null);
-    if (!feeId) {
+  const handleIssueReceipt = async (targetPaymentId, directFee) => {
+    const feeId = targetPaymentId || selectedReceiptPaymentId || (fees.length > 0 ? fees[0].id : (historyFees.length > 0 ? historyFees[0].id : null));
+    if (!feeId && !directFee) {
       onToast("Select a recorded payment first.", true);
       return;
     }
 
-    const fee = fees.find(f => String(f.id) === String(feeId));
+    const fee = directFee || fees.find(f => String(f.id) === String(feeId)) ||
+                historyFees.find(f => String(f.id) === String(feeId));
     if (!fee) return;
 
     const receiptWin = window.open("", "_blank", "width=820,height=750");
@@ -187,21 +267,26 @@ export default function PaymentsSection({
       return;
     }
 
-    let receiptNumber = `LBSTI-${new Date().getFullYear()}-${String(fee.id).padStart(6, '0')}`;
+    let receiptNumber = fee.receiptNumber || `LBSTI-${new Date(fee.paymentDate || Date.now()).getFullYear()}-${String(fee.id).padStart(6, '0')}`;
     try {
-      const issued = await api.issueReceipt(fee.id);
-      if (issued && issued.receiptNumber) receiptNumber = issued.receiptNumber;
+      if (api.issueReceipt && fee.id) {
+        const issued = await api.issueReceipt(fee.id);
+        if (issued && issued.receiptNumber) receiptNumber = issued.receiptNumber;
+      }
     } catch (err) {
       // Continue with default number
     }
 
-    const enquiry = students.find(e => String(e.id) === String(fee.enquiryId)) || {};
+    const enquiry = students.find(e => String(e.id) === String(fee.enquiryId) || (fee.studentName && e.name && e.name.toLowerCase() === fee.studentName.toLowerCase())) ||
+                    enquiries.find(e => String(e.id) === String(fee.enquiryId) || (fee.studentName && e.name && e.name.toLowerCase() === fee.studentName.toLowerCase())) || {};
     const details = fee.receiptDetails || {};
+    const isOnline = String(fee.mode || '').toLowerCase().includes('upi') || String(fee.mode || '').toLowerCase().includes('online');
+    const isCheque = String(fee.mode || '').toLowerCase().includes('cheque') || String(fee.mode || '').toLowerCase().includes('bank') || String(fee.mode || '').toLowerCase().includes('card');
     const items = details.items && typeof details.items === 'object' ? details.items : {
       others: {
-        cash: fee.mode === "Cheque" ? 0 : Number(fee.amount || 0),
-        cheque: fee.mode === "Cheque" ? Number(fee.amount || 0) : 0,
-        online: 0
+        cash: (!isOnline && !isCheque) ? Number(fee.amount || 0) : 0,
+        cheque: isCheque ? Number(fee.amount || 0) : 0,
+        online: isOnline ? Number(fee.amount || 0) : 0
       }
     };
 
@@ -210,7 +295,7 @@ export default function PaymentsSection({
       items
     ));
     const total = feeTotals.cash + feeTotals.cheque + feeTotals.online || Number(fee.amount || 0);
-    const monthValue = details.month || "";
+    const monthValue = details.month || (fee.paymentDate ? String(fee.paymentDate).slice(0, 7) : "");
     const monthLabel = monthValue ? new Date(`${monthValue}-01T00:00:00`).toLocaleDateString("en-IN", { month: "long", year: "numeric" }) : "–";
     const amountWords = numberToIndianWords(total);
 
@@ -327,8 +412,45 @@ export default function PaymentsSection({
     receiptWin.document.close();
   };
 
+  // Send Receipt to Student's Phone Number via WhatsApp
+  const handleSendToNumber = (fee) => {
+    const student = students.find(s => String(s.id) === String(fee.enquiryId) || String(s.studentId) === String(fee.studentId) || (fee.studentPhone && s.phone === fee.studentPhone) || (fee.studentName && s.name && s.name.toLowerCase() === fee.studentName.toLowerCase())) ||
+                    enquiries.find(e => String(e.id) === String(fee.enquiryId) || (fee.studentPhone && e.phone === fee.studentPhone) || (fee.studentName && e.name && e.name.toLowerCase() === fee.studentName.toLowerCase())) || {};
+
+    let phone = fee.studentPhone || student.phone || student.mobile || '';
+    if (!phone) {
+      phone = window.prompt(`Enter 10-digit WhatsApp number for ${fee.studentName || 'Student'}:`);
+      if (!phone) return;
+    }
+
+    const cleanPhone = String(phone).replace(/\D/g, '');
+    const waNumber = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+    const studentName = fee.studentName || student.name || 'Student';
+    const amount = Number(fee.amount || 0).toLocaleString('en-IN');
+    const course = fee.course || student.course || student.courses || 'Professional Course';
+    const dateStr = fee.paymentDate ? fmtDate(fee.paymentDate) : fmtDate(new Date());
+    const mode = fee.mode || 'Cash';
+    const receiptNo = fee.receiptNumber || `LBSTI-${new Date(fee.paymentDate || Date.now()).getFullYear()}-${String(fee.id).padStart(6, '0')}`;
+
+    const text = `*OFFICIAL FEE RECEIPT - ${ORG.shortName || 'LBSTI'}*\n\n` +
+      `*Receipt No:* ${receiptNo}\n` +
+      `*Student Name:* ${studentName}\n` +
+      `*Course:* ${course}\n` +
+      `*Amount Paid:* ₹${amount}\n` +
+      `*Payment Mode:* ${mode}\n` +
+      `*Date:* ${dateStr}\n` +
+      `*Status:* Confirmed / Received\n\n` +
+      `Thank you for your payment.\n` +
+      `*${ORG.fullName || 'LBSTI Malviya Nagar'}*`;
+
+    const waUrl = `https://wa.me/${waNumber}?text=${encodeURIComponent(text)}`;
+    window.open(waUrl, '_blank', 'noopener,noreferrer');
+    if (onToast) onToast(`Opening WhatsApp for ${studentName} (${phone})`);
+  };
+
   const handleExportFeesCSV = () => {
-    if (!fees.length) {
+    const exportList = (fees && fees.length > 0) ? fees : historyFees;
+    if (!exportList.length) {
       onToast("Nothing to export", true);
       return;
     }
@@ -346,7 +468,7 @@ export default function PaymentsSection({
 
     const csvContent = [
       headers.map(escapeCsv).join(","),
-      ...fees.map((f) => {
+      ...exportList.map((f) => {
         const enquiry = students.find(e => String(e.id) === String(f.enquiryId)) || {};
         const details = f.receiptDetails || {};
         const items = details.items || {
@@ -1110,7 +1232,7 @@ export default function PaymentsSection({
                     <th scope="col">Date</th>
                     <th scope="col">Received by</th>
                     <th scope="col">Notes</th>
-                    <th scope="col">Action</th>
+                    <th scope="col" style={{ minWidth: '320px' }}>Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1120,7 +1242,7 @@ export default function PaymentsSection({
                         <div className="skel" style={{ height: '160px' }} />
                       </td>
                     </tr>
-                  ) : fees.length === 0 ? (
+                  ) : historyFees.length === 0 ? (
                     <tr>
                       <td colSpan="7">
                         <div className="empty">
@@ -1131,22 +1253,54 @@ export default function PaymentsSection({
                       </td>
                     </tr>
                   ) : (
-                    fees.map((f) => (
+                    historyFees.map((f) => (
                       <tr key={f.id}>
-                        <td>{f.studentName || "Student"}</td>
-                        <td>₹{Number(f.amount || 0).toLocaleString("en-IN")}</td>
-                        <td>{f.mode}</td>
+                        <td>
+                          <b>{f.studentName || "Student"}</b>
+                          {f.course ? <small style={{ display: 'block', color: 'var(--muted)', fontSize: '0.8rem' }}>{f.course}</small> : null}
+                        </td>
+                        <td><strong>₹{Number(f.amount || 0).toLocaleString("en-IN")}</strong></td>
+                        <td>
+                          <span className={`pill ${String(f.mode || '').toLowerCase().includes('upi') ? 's-new' : String(f.mode || '').toLowerCase().includes('cash') ? 's-teacher' : 's-counselor'}`} style={{ fontSize: '0.75rem', padding: '2px 8px' }}>
+                            {f.mode}
+                          </span>
+                        </td>
                         <td>{fmtDate(f.paymentDate)}</td>
                         <td>{f.receivedBy || "–"}</td>
                         <td>{f.notes || "–"}</td>
-                        <td>
-                          <button
-                            className="btn sm danger"
-                            type="button"
-                            onClick={() => onDeletePayment(f.id)}
-                          >
-                            <span className="ic"><Icon name="trash" size={14} /></span> Delete
-                          </button>
+                        <td className="payment-actions-cell">
+                          <div className="payment-actions-group">
+                            <button
+                              className="btn sm danger"
+                              type="button"
+                              title="Delete payment record"
+                              onClick={() => onDeletePayment(f.id)}
+                            >
+                              <span className="ic"><Icon name="trash" size={14} /></span>
+                              <span>Delete</span>
+                            </button>
+                            <button
+                              className="btn sm btn-issue"
+                              type="button"
+                              title="Issue printable receipt"
+                              onClick={() => handleIssueReceipt(f.id, f)}
+                            >
+                              <span className="ic"><Icon name="receipt" size={14} /></span>
+                              <span>Issue</span>
+                            </button>
+                            <button
+                              className="btn sm btn-whatsapp-send"
+                              type="button"
+                              title={f.studentPhone ? `Send receipt to WhatsApp (${f.studentPhone})` : "Send receipt to phone number via WhatsApp"}
+                              onClick={() => handleSendToNumber(f)}
+                            >
+                              <span className="ic-pair">
+                                <Icon name="send" size={13} />
+                                <Icon name="whatsapp" size={14} />
+                              </span>
+                              <span>Send to Number</span>
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))
@@ -1179,7 +1333,7 @@ export default function PaymentsSection({
                   onChange={(e) => setSelectedReceiptPaymentId(e.target.value)}
                 >
                   <option value="">Select a payment...</option>
-                  {fees.map((f) => (
+                  {historyFees.map((f) => (
                     <option key={f.id} value={f.id}>
                       {f.studentName || "Student"} — ₹{Number(f.amount || 0).toLocaleString("en-IN")} — {fmtDate(f.paymentDate)}
                     </option>

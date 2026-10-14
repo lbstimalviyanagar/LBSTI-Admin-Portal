@@ -2776,3 +2776,69 @@ td:has(.empty), td:has(.skel) {
   }
 }
 
+/* Payment History Table Action Buttons */
+.payment-actions-cell {
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.payment-actions-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.payment-actions-group .btn {
+  padding: 6px 11px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  border-radius: 8px;
+  line-height: 1.25;
+  transition: all 0.15s ease;
+}
+
+.payment-actions-group .btn.danger {
+  color: #dc2626;
+  border-color: #fecaca;
+  background: #ffffff;
+}
+
+.payment-actions-group .btn.danger:hover {
+  background: #fef2f2;
+  border-color: #f87171;
+  color: #b91c1c;
+}
+
+.payment-actions-group .btn.btn-issue {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #ffffff;
+}
+
+.payment-actions-group .btn.btn-issue:hover {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.25);
+}
+
+.payment-actions-group .btn.btn-whatsapp-send {
+  background: #16a34a;
+  border-color: #16a34a;
+  color: #ffffff;
+}
+
+.payment-actions-group .btn.btn-whatsapp-send:hover {
+  background: #15803d;
+  border-color: #15803d;
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(22, 163, 74, 0.25);
+}
+
+.payment-actions-group .ic-pair {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
