@@ -2762,3 +2762,17 @@ td:has(.empty), td:has(.skel) {
   visibility: visible;
   transform: translate(-50%, 4px);
 }
+
+/* Payments Dashboard Grid */
+.payments-dashboard-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.8fr) minmax(0, 1.2fr);
+  gap: 20px;
+  margin-top: 22px;
+}
+@media (max-width: 1024px) {
+  .payments-dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
