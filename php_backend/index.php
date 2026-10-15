@@ -235,6 +235,9 @@ if ($route === 'auth/login') {
     elseif ($method === "PUT" || $method === "PATCH") updateBatch($pdo, $user, $id, $body);
     elseif ($method === "DELETE") deleteBatch($pdo, $user, $id);
 } elseif ($route === "search-students") {
+    require_once 'controllers/StudentController.php';
+    ensureStudentsAndEnrollmentsTables($pdo);
+
     $user = requireAuth($authSecret);
 
     // Allow staff with 'students' OR 'payments' permission, or admin
@@ -268,7 +271,7 @@ if ($route === 'auth/login') {
             FROM students s
             LEFT JOIN enrollments e ON e.student_id = s.student_id
             WHERE s.name LIKE ? OR s.student_id LIKE ? OR s.phone LIKE ?
-            GROUP BY s.id
+            GROUP BY s.id, s.student_id, s.name, s.guardian_name, s.phone, s.email, s.balance, s.total_fees
             ORDER BY s.name ASC
             LIMIT 30";
     $stmt = $pdo->prepare($sql);
@@ -333,6 +336,53 @@ if ($route === 'auth/login') {
             "enrolledCourses" => $enrolledCourses
         ];
     }
+
+    // Also check enquiries for students or confirmed leads matching the criteria
+    try {
+        $enqSql = "SELECT id, name, phone, email, course, batch, notes FROM enquiries WHERE name LIKE ? OR phone LIKE ? LIMIT 15";
+        $enqStmt = $pdo->prepare($enqSql);
+        $enqStmt->execute([$like, $like]);
+        $existingKeys = [];
+        foreach ($results as $r) {
+            $existingKeys[strtolower(trim($r["name"]))] = true;
+            if (!empty($r["phone"])) $existingKeys[trim($r["phone"])] = true;
+            if (!empty($r["studentId"])) $existingKeys[strtolower(trim($r["studentId"]))] = true;
+        }
+
+        while ($er = $enqStmt->fetch()) {
+            $cleanN = strtolower(trim($er["name"]));
+            $cleanP = trim($er["phone"] ?? "");
+            if (!isset($existingKeys[$cleanN]) && (!empty($cleanP) && !isset($existingKeys[$cleanP]))) {
+                $enqId = (int)$er["id"];
+                $sId = "S" . (1000 + $enqId);
+                $courseName = trim($er["course"] ?: ($er["batch"] ?: ""));
+                $results[] = [
+                    "id" => $enqId,
+                    "studentId" => $sId,
+                    "name" => $er["name"],
+                    "guardianName" => "",
+                    "phone" => $er["phone"],
+                    "email" => $er["email"],
+                    "balance" => 0,
+                    "totalFees" => 0,
+                    "courses" => $courseName,
+                    "courseDetails" => $courseName ? "{$courseName} (Active)" : "",
+                    "lastEnrollmentDate" => null,
+                    "enrollmentCount" => $courseName ? 1 : 0,
+                    "enrolledCourses" => $courseName ? [[
+                        "id" => $enqId,
+                        "enrollmentId" => "ENR-{$sId}-1",
+                        "course" => $courseName,
+                        "status" => "Active",
+                        "doa" => null,
+                        "balance" => 0,
+                        "feeDue" => 0
+                    ]] : []
+                ];
+            }
+        }
+    } catch (Exception $e) {}
+
     echo json_encode($results);
 } else {
     http_response_code(404);

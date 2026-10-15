@@ -153,6 +153,63 @@ export const getCourseTargetFee = (courseName) => {
   return 10000;
 };
 
+// Helper to accurately calculate active courses count for any student record
+export const getActiveCoursesCount = (student, allEnrollments = []) => {
+  if (!student) return 0;
+  if (Array.isArray(student.enrolledCourses) && student.enrolledCourses.length > 0) {
+    const active = student.enrolledCourses.filter(c => !c.status || c.status.toLowerCase() === 'active');
+    if (active.length > 0) return active.length;
+    return student.enrolledCourses.length;
+  }
+  if (student.studentId && Array.isArray(allEnrollments) && allEnrollments.length > 0) {
+    const sid = String(student.studentId).trim();
+    const matches = allEnrollments.filter(e => String(e.studentId || '').trim() === sid);
+    if (matches.length > 0) {
+      const active = matches.filter(e => !e.status || e.status.toLowerCase() === 'active');
+      return active.length || matches.length;
+    }
+  }
+  if (student.enrollmentCount && Number(student.enrollmentCount) > 0) {
+    return Number(student.enrollmentCount);
+  }
+  if (student.courseDetails && typeof student.courseDetails === 'string') {
+    const parts = student.courseDetails.split(',').filter(Boolean);
+    const active = parts.filter(p => !p.toLowerCase().includes('dropped') && !p.toLowerCase().includes('inactive'));
+    return active.length || parts.length;
+  }
+  if (student.courses && typeof student.courses === 'string') {
+    return student.courses.split(',').filter(Boolean).length;
+  }
+  if (student.course && typeof student.course === 'string') {
+    return 1;
+  }
+  return 1;
+};
+
+// Global matcher across: Student Name, Student ID, and Phone Number
+export const matchStudentCriteria = (s, term) => {
+  if (!s || !term) return false;
+  const q = term.toLowerCase().trim();
+  if (!q) return false;
+  const digits = q.replace(/\D/g, '');
+
+  // 1. Student Name
+  const nameMatch = s.name && s.name.toLowerCase().includes(q);
+
+  // 2. Student ID (e.g. S1144, 1144, S1001, etc.)
+  const idMatch = (s.studentId && s.studentId.toLowerCase().includes(q)) ||
+                  (s.id && String(s.id).includes(q)) ||
+                  (`s${s.id}`.toLowerCase().includes(q));
+
+  // 3. Phone Number
+  const phoneStr = String(s.phone || '');
+  const phoneDigits = phoneStr.replace(/\D/g, '');
+  const phoneMatch = phoneStr.toLowerCase().includes(q) ||
+                     (digits.length >= 2 && phoneDigits.includes(digits));
+
+  return !!(nameMatch || idMatch || phoneMatch);
+};
+
 export default function PaymentsSection({
   fees = [],
   enquiries = [],
@@ -230,31 +287,95 @@ export default function PaymentsSection({
   // Outstanding Balance Remaining calculation: evaluates absolute net difference ([Total Course Fees Due] minus [Net Payment Received])
   const outstandingBalance = Math.max(0, totalCourseFeesDue - netPaymentReceived);
 
-  // ── Smart Student Search ──
-  const debouncedQuery = useDebounce(searchQuery, 350);
+  // ── Smart Student Search: Live Trigger & Global Matching ──
+  const searchAbortRef = useRef(null);
 
-  useEffect(() => {
-    if (!debouncedQuery || debouncedQuery.trim().length < 1) {
+  const handleSearchChange = useCallback((value) => {
+    setSearchQuery(value);
+
+    // If a student was previously chosen, reset selection on typing to allow searching for another student
+    if (selectedStudent) {
+      setSelectedStudent(null);
+      setStudentCourseOptions([]);
+      setSelectedCourse('');
+      setSelectedEnrollmentId('');
+      setBatch('');
+    }
+
+    const trimmed = value.trim();
+    if (trimmed.length < 1) {
       setSearchResults([]);
+      setShowDropdown(false);
+      setSearching(false);
       return;
     }
-    let cancelled = false;
-    (async () => {
-      setSearching(true);
-      try {
-        const results = await api.searchStudents(debouncedQuery);
-        if (!cancelled) {
-          setSearchResults(results);
+
+    // 1. Instant local matching across loaded students and enquiries
+    const resultMap = new Map();
+    const addCandidate = (cand) => {
+      const k = cand.studentId || `id-${cand.id}`;
+      if (k && !resultMap.has(k)) {
+        resultMap.set(k, cand);
+      }
+    };
+
+    (students || []).forEach(s => {
+      if (matchStudentCriteria(s, trimmed)) addCandidate(s);
+    });
+
+    (enquiries || []).forEach(e => {
+      if (matchStudentCriteria(e, trimmed)) {
+        addCandidate({
+          ...e,
+          studentId: e.studentId || `S${e.id}`,
+          courses: e.course || e.courses || '',
+          enrollmentCount: 1
+        });
+      }
+    });
+
+    const instantList = Array.from(resultMap.values());
+    setSearchResults(instantList);
+    setShowDropdown(true);
+
+    // 2. Real-time query to backend database (/search-students)
+    if (searchAbortRef.current) {
+      searchAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    searchAbortRef.current = controller;
+
+    setSearching(true);
+    api.searchStudents(trimmed)
+      .then((dbResults) => {
+        if (controller.signal.aborted) return;
+        if (Array.isArray(dbResults) && dbResults.length > 0) {
+          setSearchResults(prev => {
+            const combinedMap = new Map();
+            // Database records have latest enrolledCourses & balance
+            dbResults.forEach(item => {
+              const key = item.studentId || `id-${item.id}`;
+              combinedMap.set(key, item);
+            });
+            prev.forEach(item => {
+              const key = item.studentId || `id-${item.id}`;
+              if (!combinedMap.has(key)) combinedMap.set(key, item);
+            });
+            return Array.from(combinedMap.values());
+          });
           setShowDropdown(true);
         }
-      } catch {
-        if (!cancelled) setSearchResults([]);
-      } finally {
-        if (!cancelled) setSearching(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [debouncedQuery]);
+      })
+      .catch((err) => {
+        if (controller.signal.aborted) return;
+        // Silent catch for network cancel / offline
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setSearching(false);
+        }
+      });
+  }, [students, enquiries, selectedStudent]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -271,6 +392,8 @@ export default function PaymentsSection({
     setSelectedStudent(student);
     setSearchQuery(student.name);
     setShowDropdown(false);
+    setSearchResults([]);
+    setSearching(false);
     // Auto-fill guardian name
     setRelation(student.guardianName || '');
 
@@ -321,6 +444,8 @@ export default function PaymentsSection({
     setSelectedStudent(null);
     setSearchQuery('');
     setSearchResults([]);
+    setShowDropdown(false);
+    setSearching(false);
     setStudentCourseOptions([]);
     setSelectedCourse('');
     setSelectedEnrollmentId('');
@@ -1184,65 +1309,101 @@ export default function PaymentsSection({
                     id="fee-student-search"
                     placeholder="Type student name, ID (e.g. S1001), or phone number..."
                     value={searchQuery}
-                    onChange={(e) => {
-                      setSearchQuery(e.target.value);
-                      if (selectedStudent) setSelectedStudent(null);
+                    onChange={(e) => handleSearchChange(e.target.value)}
+                    onFocus={() => {
+                      if (!selectedStudent && searchResults.length > 0) {
+                        setShowDropdown(true);
+                      } else if (!selectedStudent && searchQuery.trim().length >= 1) {
+                        handleSearchChange(searchQuery);
+                      }
                     }}
-                    onFocus={() => { if (searchResults.length) setShowDropdown(true); }}
                     autoComplete="off"
-                    style={selectedStudent ? { borderColor: '#00C49F', background: '#f0fdf4' } : {}}
+                    style={selectedStudent ? { borderColor: '#10b981', background: '#f0fdf4' } : {}}
                   />
                   {searching && (
-                    <div style={{ position: 'absolute', right: '12px', top: '38px', color: '#64748b', fontSize: '13px' }}>
+                    <div style={{ position: 'absolute', right: '12px', top: '38px', color: '#2563eb', fontSize: '13px', fontWeight: 600 }}>
                       Searching...
                     </div>
                   )}
 
-                  {/* Dropdown Results */}
+                  {/* Floating Suggestion Overlay */}
                   {showDropdown && searchResults.length > 0 && !selectedStudent && (
-                    <div style={{
-                      position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 50,
-                      background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px',
-                      boxShadow: '0 10px 25px rgba(0,0,0,0.12)', maxHeight: '280px', overflowY: 'auto',
-                      marginTop: '4px'
-                    }}>
-                      {searchResults.map((s) => (
-                        <button
-                          key={s.id}
-                          type="button"
-                          onClick={() => handleSelectStudent(s)}
-                          style={{
-                            display: 'block', width: '100%', padding: '12px 16px', textAlign: 'left',
-                            border: 'none', borderBottom: '1px solid #f1f5f9', background: 'none',
-                            cursor: 'pointer', fontSize: '14px', transition: 'background 0.15s'
-                          }}
-                          onMouseEnter={(e) => e.currentTarget.style.background = '#f8fafc'}
-                          onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
-                        >
-                          <div style={{ fontWeight: 600, color: '#1e293b' }}>
-                            {s.name}
-                            <span style={{ fontWeight: 400, color: '#64748b', marginLeft: '8px', fontSize: '13px' }}>
-                              {s.studentId}
-                            </span>
-                          </div>
-                          <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
-                            📞 {s.phone || 'N/A'}
-                            {s.courses && <> &nbsp;·&nbsp; 📚 {s.courses}</>}
-                            {s.guardianName && <> &nbsp;·&nbsp; 👤 {s.guardianName}</>}
-                          </div>
-                        </button>
-                      ))}
+                    <div
+                      id="student-search-suggestions"
+                      style={{
+                        position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 100,
+                        background: '#ffffff', border: '1.5px solid #3b82f6', borderRadius: '8px',
+                        boxShadow: '0 10px 25px rgba(0,0,0,0.15)', maxHeight: '300px', overflowY: 'auto'
+                      }}
+                    >
+                      {searchResults.map((s, idx) => {
+                        const activeCount = getActiveCoursesCount(s, enrollments);
+                        const sIdDisplay = s.studentId || `S${String(s.id).padStart(4, '0')}`;
+                        return (
+                          <button
+                            key={s.studentId || s.id || idx}
+                            type="button"
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              handleSelectStudent(s);
+                            }}
+                            onClick={() => handleSelectStudent(s)}
+                            style={{
+                              display: 'block', width: '100%', padding: '12px 16px', textAlign: 'left',
+                              border: 'none', borderBottom: '1px solid #f1f5f9', background: 'none',
+                              cursor: 'pointer', fontSize: '14px', transition: 'background 0.15s'
+                            }}
+                            onMouseEnter={(e) => (e.currentTarget.style.background = '#f8fafc')}
+                            onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                              <div style={{ fontWeight: 700, color: '#1e293b', fontSize: '14px' }}>
+                                {s.name}
+                                <span style={{
+                                  marginLeft: '8px',
+                                  fontWeight: 700,
+                                  color: '#1d4ed8',
+                                  fontSize: '12px',
+                                  background: '#dbeafe',
+                                  padding: '2px 8px',
+                                  borderRadius: '4px',
+                                  border: '1px solid #bfdbfe'
+                                }}>
+                                  {sIdDisplay}
+                                </span>
+                              </div>
+                              <span style={{
+                                fontSize: '11px',
+                                fontWeight: 700,
+                                color: '#15803d',
+                                background: '#dcfce7',
+                                border: '1px solid #bbf7d0',
+                                padding: '2px 8px',
+                                borderRadius: '12px',
+                                whiteSpace: 'nowrap'
+                              }}>
+                                {activeCount} Active Course{activeCount === 1 ? '' : 's'}
+                              </span>
+                            </div>
+                            <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                              <span>📞 {s.phone || 'N/A'}</span>
+                              {s.courses && <span>&bull; 📚 {s.courses}</span>}
+                              {s.guardianName && <span>&bull; 👤 {s.guardianName}</span>}
+                            </div>
+                          </button>
+                        );
+                      })}
                     </div>
                   )}
 
-                  {showDropdown && searchResults.length === 0 && searchQuery.length >= 2 && !searching && !selectedStudent && (
+                  {showDropdown && searchResults.length === 0 && searchQuery.trim().length >= 1 && !searching && !selectedStudent && (
                     <div style={{
-                      position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 50,
+                      position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 100,
                       background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px',
                       boxShadow: '0 10px 25px rgba(0,0,0,0.12)', padding: '16px', textAlign: 'center',
-                      color: '#94a3b8', marginTop: '4px'
+                      color: '#94a3b8'
                     }}>
-                      No students found matching "{searchQuery}"
+                      No students found matching "{searchQuery}" (searched Name, Student ID, Phone)
                     </div>
                   )}
                 </div>
@@ -1256,16 +1417,19 @@ export default function PaymentsSection({
                       borderRadius: '10px', padding: '14px 18px', gap: '16px'
                     }}>
                       <div>
-                        <div style={{ fontWeight: 700, fontSize: '15px', color: '#166534' }}>
-                          ✅ {selectedStudent.name}
-                          <span style={{ fontWeight: 400, color: '#4ade80', marginLeft: '8px', fontSize: '13px' }}>
-                            {selectedStudent.studentId}
+                        <div style={{ fontWeight: 700, fontSize: '15px', color: '#166534', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                          <span>✅ {selectedStudent.name}</span>
+                          <span style={{ fontWeight: 700, color: '#1d4ed8', marginLeft: '4px', fontSize: '12.5px', background: '#dbeafe', padding: '2px 8px', borderRadius: '4px', border: '1px solid #bfdbfe' }}>
+                            {selectedStudent.studentId || `S${selectedStudent.id}`}
+                          </span>
+                          <span style={{ fontSize: '11px', background: '#dcfce7', color: '#15803d', fontWeight: 700, padding: '2px 8px', borderRadius: '10px', border: '1px solid #86efac' }}>
+                            {getActiveCoursesCount(selectedStudent, enrollments)} Active Course{getActiveCoursesCount(selectedStudent, enrollments) === 1 ? '' : 's'}
                           </span>
                         </div>
                         <div style={{ fontSize: '12px', color: '#4b5563', marginTop: '4px' }}>
                           📞 {selectedStudent.phone || 'N/A'}
                           {selectedStudent.courseDetails && <> &nbsp;·&nbsp; 📚 {selectedStudent.courseDetails}</>}
-                          {selectedStudent.enrollmentCount > 0 && <> &nbsp;·&nbsp; {selectedStudent.enrollmentCount} enrollment(s)</>}
+                          {selectedStudent.guardianName && <> &nbsp;·&nbsp; 👤 {selectedStudent.guardianName}</>}
                         </div>
                       </div>
                       <button type="button" onClick={handleClearForm}
