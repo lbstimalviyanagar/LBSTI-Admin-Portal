@@ -303,9 +303,23 @@ export const api = {
   },
 
   // Batches
-  async getBatches(dateStr = "") {
-    const query = dateStr ? `?date=${dateStr}` : "";
+  async getBatches(dateStr = "", filters = {}) {
+    const params = new URLSearchParams();
+    if (dateStr) params.append("date", dateStr);
+    if (filters.course && filters.course !== "All") params.append("course", filters.course);
+    if (filters.faculty && filters.faculty !== "All") params.append("instructor_id", filters.faculty);
+    if (filters.status && filters.status !== "All") params.append("status", filters.status);
+    if (filters.q) params.append("q", filters.q);
+    const qs = params.toString();
+    const query = qs ? `?${qs}` : "";
     return request(`/batches${query}`, { method: "GET" });
+  },
+  async getBatchFilterOptions() {
+    try {
+      return await request("/batches/options", { method: "GET" });
+    } catch (e) {
+      return { courses: [], faculty: [] };
+    }
   },
   async createBatch(data) {
     return request("/batches", {

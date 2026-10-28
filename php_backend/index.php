@@ -230,7 +230,8 @@ if ($route === 'auth/login') {
     requireMenuPermission($user, 'batches', $pdo);
     $parts = explode("/", $route);
     $id = isset($parts[1]) ? $parts[1] : null;
-    if ($method === "GET") getBatches($pdo);
+    if ($method === "GET" && ($id === "options" || $id === "filters")) getBatchFilterOptions($pdo);
+    elseif ($method === "GET") getBatches($pdo);
     elseif ($method === "POST") createBatch($pdo, $user, $body);
     elseif ($method === "PUT" || $method === "PATCH") updateBatch($pdo, $user, $id, $body);
     elseif ($method === "DELETE") deleteBatch($pdo, $user, $id);

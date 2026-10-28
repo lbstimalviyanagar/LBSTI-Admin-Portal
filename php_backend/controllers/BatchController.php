@@ -3,26 +3,111 @@
 function getBatches($pdo) {
     try {
         $date = $_GET['date'] ?? null;
-        
+        $course = $_GET['course'] ?? null;
+        $instructorId = $_GET['instructor_id'] ?? null;
+        $status = $_GET['status'] ?? null;
+        $q = $_GET['q'] ?? null;
+
+        $conditions = [];
+        $params = [];
+
         if (!empty($date)) {
-            $stmt = $pdo->prepare("
-                SELECT b.*, u.full_name as instructor_name 
-                FROM institute_batches b 
-                LEFT JOIN portal_users u ON u.id = b.instructor_id 
-                WHERE b.`date` = ? 
-                ORDER BY b.batch_time ASC, b.id ASC
-            ");
-            $stmt->execute([$date]);
-        } else {
-            $stmt = $pdo->prepare("
-                SELECT b.*, u.full_name as instructor_name 
-                FROM institute_batches b 
-                LEFT JOIN portal_users u ON u.id = b.instructor_id 
-                ORDER BY b.batch_time ASC, b.id ASC
-            ");
-            $stmt->execute();
+            $conditions[] = "b.`date` = ?";
+            $params[] = $date;
         }
+
+        if (!empty($course) && strtolower($course) !== 'all') {
+            $conditions[] = "LOWER(TRIM(b.course_name)) = LOWER(TRIM(?))";
+            $params[] = $course;
+        }
+
+        if ($instructorId !== null && $instructorId !== '' && strtolower($instructorId) !== 'all') {
+            if (strtolower($instructorId) === 'unassigned' || $instructorId === '0') {
+                $conditions[] = "(b.instructor_id IS NULL OR b.instructor_id = 0)";
+            } else {
+                $conditions[] = "b.instructor_id = ?";
+                $params[] = $instructorId;
+            }
+        }
+
+        if (!empty($status) && strtolower($status) !== 'all') {
+            $conditions[] = "LOWER(TRIM(b.status)) = LOWER(TRIM(?))";
+            $params[] = $status;
+        }
+
+        if (!empty($q)) {
+            $like = "%" . trim($q) . "%";
+            $conditions[] = "(b.course_name LIKE ? OR b.topic LIKE ? OR u.full_name LIKE ? OR b.batch_time LIKE ? OR b.status LIKE ?)";
+            $params[] = $like;
+            $params[] = $like;
+            $params[] = $like;
+            $params[] = $like;
+            $params[] = $like;
+        }
+
+        $whereClause = !empty($conditions) ? "WHERE " . implode(" AND ", $conditions) : "";
+
+        $stmt = $pdo->prepare("
+            SELECT b.*, u.full_name as instructor_name 
+            FROM institute_batches b 
+            LEFT JOIN portal_users u ON u.id = b.instructor_id 
+            {$whereClause}
+            ORDER BY b.batch_time ASC, b.id ASC
+        ");
+        $stmt->execute($params);
         echo json_encode($stmt->fetchAll());
+    } catch (PDOException $e) {
+        http_response_code(500);
+        echo json_encode(["message" => "Database error: " . $e->getMessage()]);
+    }
+}
+
+function getBatchFilterOptions($pdo) {
+    try {
+        $courses = [];
+        try {
+            $stmt = $pdo->query("SELECT DISTINCT course_name FROM institute_batches WHERE course_name IS NOT NULL AND TRIM(course_name) != '' ORDER BY course_name ASC");
+            while ($row = $stmt->fetchColumn()) {
+                if ($row) $courses[] = trim($row);
+            }
+        } catch (Exception $e) {}
+
+        try {
+            $stmt = $pdo->query("SELECT DISTINCT course FROM enrollments WHERE course IS NOT NULL AND TRIM(course) != '' ORDER BY course ASC");
+            while ($row = $stmt->fetchColumn()) {
+                if ($row) $courses[] = trim($row);
+            }
+        } catch (Exception $e) {}
+
+        try {
+            $stmt = $pdo->query("SELECT DISTINCT course FROM enquiries WHERE course IS NOT NULL AND TRIM(course) != '' ORDER BY course ASC");
+            while ($row = $stmt->fetchColumn()) {
+                if ($row) $courses[] = trim($row);
+            }
+        } catch (Exception $e) {}
+
+        $courses = array_values(array_unique(array_filter($courses)));
+        sort($courses, SORT_NATURAL | SORT_FLAG_CASE);
+
+        $faculty = [];
+        try {
+            $stmt = $pdo->query("SELECT id, full_name, username, role FROM portal_users WHERE (full_name IS NOT NULL AND TRIM(full_name) != '') OR (username IS NOT NULL AND TRIM(username) != '') ORDER BY full_name ASC");
+            while ($row = $stmt->fetch()) {
+                $name = trim($row['full_name'] ?: $row['username']);
+                if ($name && strtolower($name) !== 'unassigned') {
+                    $faculty[] = [
+                        'id' => (int)$row['id'],
+                        'name' => $name,
+                        'role' => $row['role'] ?? 'teacher'
+                    ];
+                }
+            }
+        } catch (Exception $e) {}
+
+        echo json_encode([
+            "courses" => $courses,
+            "faculty" => $faculty
+        ]);
     } catch (PDOException $e) {
         http_response_code(500);
         echo json_encode(["message" => "Database error: " . $e->getMessage()]);
