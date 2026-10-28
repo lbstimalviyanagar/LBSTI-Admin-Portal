@@ -1212,6 +1212,44 @@ th[aria-sort="ascending"] .arr, th[aria-sort="descending"] .arr {
   color: var(--navy-700);
 }
 
+th.sortable-th {
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+th.sortable-th:hover {
+  background-color: rgba(37, 99, 235, 0.06);
+  color: #1d4ed8;
+}
+
+th.sortable-th.sorted {
+  color: #1d4ed8;
+}
+
+th.sortable-th:hover .sort-caret.muted {
+  opacity: 0.75;
+}
+
+.sort-arrows {
+  display: inline-flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  margin-left: 6px;
+  vertical-align: middle;
+  gap: 2px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.sort-header-content {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+}
+
 tbody tr {
   transition: background .12s;
 }

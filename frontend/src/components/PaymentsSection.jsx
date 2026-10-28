@@ -12,6 +12,8 @@ import {
   ORG
 } from '../utils/helpers';
 import api from '../services/api';
+import { useTableSort } from '../hooks/useTableSort';
+import { SortableTh } from './SortableHeader';
 
 // Debounce helper
 function useDebounce(value, delay) {
@@ -1037,6 +1039,30 @@ export default function PaymentsSection({
     ];
   }, [fees, students, enquiries]);
 
+  // Sorting state for Recent Transactions
+  const {
+    sortKey: recentSortKey,
+    sortDirection: recentSortDir,
+    handleSort: handleRecentSort,
+    sortList: sortRecentTx
+  } = useTableSort({ key: 'date', direction: 'desc' });
+
+  const sortedRecentTx = useMemo(() => {
+    return sortRecentTx(recentTransactions);
+  }, [recentTransactions, sortRecentTx]);
+
+  // Sorting state for Payment History
+  const {
+    sortKey: historySortKey,
+    sortDirection: historySortDir,
+    handleSort: handleHistorySort,
+    sortList: sortHistoryFees
+  } = useTableSort({ key: 'paymentDate', direction: 'desc' });
+
+  const sortedHistoryFees = useMemo(() => {
+    return sortHistoryFees(historyFees);
+  }, [historyFees, sortHistoryFees]);
+
   return (
     <section>
       <div className="page-head">
@@ -1174,17 +1200,17 @@ export default function PaymentsSection({
                 <table>
                   <thead>
                     <tr>
-                      <th scope="col">Receipt No.</th>
-                      <th scope="col">Student Name</th>
-                      <th scope="col">Date</th>
-                      <th scope="col">Course</th>
-                      <th scope="col">Amount Paid</th>
-                      <th scope="col">Payment Mode</th>
-                      <th scope="col">Status</th>
+                      <SortableTh colKey="receiptNo" label="Receipt No." sortKey={recentSortKey} sortDirection={recentSortDir} onSort={handleRecentSort} />
+                      <SortableTh colKey="studentName" label="Student Name" sortKey={recentSortKey} sortDirection={recentSortDir} onSort={handleRecentSort} />
+                      <SortableTh colKey="date" label="Date" sortKey={recentSortKey} sortDirection={recentSortDir} onSort={handleRecentSort} />
+                      <SortableTh colKey="course" label="Course" sortKey={recentSortKey} sortDirection={recentSortDir} onSort={handleRecentSort} />
+                      <SortableTh colKey="amount" label="Amount Paid" sortKey={recentSortKey} sortDirection={recentSortDir} onSort={handleRecentSort} />
+                      <SortableTh colKey="mode" label="Payment Mode" sortKey={recentSortKey} sortDirection={recentSortDir} onSort={handleRecentSort} />
+                      <SortableTh colKey="status" label="Status" sortKey={recentSortKey} sortDirection={recentSortDir} onSort={handleRecentSort} />
                     </tr>
                   </thead>
                   <tbody>
-                    {recentTransactions.map((tx) => (
+                    {sortedRecentTx.map((tx) => (
                       <tr key={tx.id}>
                         <td>
                           <span style={{ fontFamily: 'monospace', fontWeight: 600, color: 'var(--navy-700)', fontSize: '0.82rem' }}>
@@ -1963,12 +1989,12 @@ export default function PaymentsSection({
               <table>
                 <thead>
                   <tr>
-                    <th scope="col">Student</th>
-                    <th scope="col">Amount</th>
-                    <th scope="col">Mode</th>
-                    <th scope="col">Date</th>
-                    <th scope="col">Received by</th>
-                    <th scope="col">Notes</th>
+                    <SortableTh colKey="studentName" label="Student" sortKey={historySortKey} sortDirection={historySortDir} onSort={handleHistorySort} />
+                    <SortableTh colKey="amount" label="Amount" sortKey={historySortKey} sortDirection={historySortDir} onSort={handleHistorySort} />
+                    <SortableTh colKey="mode" label="Mode" sortKey={historySortKey} sortDirection={historySortDir} onSort={handleHistorySort} />
+                    <SortableTh colKey="paymentDate" label="Date" sortKey={historySortKey} sortDirection={historySortDir} onSort={handleHistorySort} />
+                    <SortableTh colKey="receivedBy" label="Received by" sortKey={historySortKey} sortDirection={historySortDir} onSort={handleHistorySort} />
+                    <SortableTh colKey="notes" label="Notes" sortKey={historySortKey} sortDirection={historySortDir} onSort={handleHistorySort} />
                     <th scope="col" style={{ minWidth: '320px' }}>Action</th>
                   </tr>
                 </thead>
@@ -1979,7 +2005,7 @@ export default function PaymentsSection({
                         <div className="skel" style={{ height: '160px' }} />
                       </td>
                     </tr>
-                  ) : historyFees.length === 0 ? (
+                  ) : sortedHistoryFees.length === 0 ? (
                     <tr>
                       <td colSpan="7">
                         <div className="empty">
@@ -1990,7 +2016,7 @@ export default function PaymentsSection({
                       </td>
                     </tr>
                   ) : (
-                    historyFees.map((f) => (
+                    sortedHistoryFees.map((f) => (
                       <tr key={f.id}>
                         <td>
                           <b>{f.studentName || "Student"}</b>

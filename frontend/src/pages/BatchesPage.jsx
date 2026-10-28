@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import api from '../services/api';
 import Icon from '../components/Icons';
+import { useTableSort } from '../hooks/useTableSort';
+import { SortableTh } from '../components/SortableHeader';
 
 // Fixed master daily schedule for the institute
 const DEFAULT_BATCHES = [
@@ -308,23 +310,46 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
     });
   }, [batches, courseFilter, facultyFilter, searchQuery, users]);
 
-  // Clear all filters
-  const clearFilters = () => {
-    setSearchQuery('');
-    setCourseFilter('All');
-    setFacultyFilter('All');
-    setPage(1);
-  };
-
   // Determine all time slots (including custom batch times not in fixed grid)
   const allTimeSlots = useMemo(() => {
     const customSlots = Array.from(new Set(batches.map(b => b.batch_time).filter(t => t && !timeSlots.includes(t))));
     return [...timeSlots, ...customSlots];
   }, [batches, timeSlots]);
 
+  // Sorting state for Batches table
+  const {
+    sortKey: batchSortKey,
+    sortDirection: batchSortDir,
+    handleSort: handleBatchSort,
+    resetSort: resetBatchSort,
+    sortList: sortBatches
+  } = useTableSort({ key: null, direction: null });
+
+  const isSortingActive = Boolean(batchSortKey && batchSortDir);
+  const isCustomView = hasActiveFilters || isSortingActive;
+
+  // Custom getters for special field matching
+  const batchCustomGetters = useMemo(() => ({
+    student_count: (b) => (b.student_count != null ? Number(b.student_count) : 0),
+    instructor_name: (b) => b.instructor_name || 'Unassigned'
+  }), []);
+
+  const sortedBatches = useMemo(() => {
+    return sortBatches(filteredBatches, batchCustomGetters);
+  }, [filteredBatches, sortBatches, batchCustomGetters]);
+
+  // Clear all filters & sorting
+  const clearFilters = () => {
+    setSearchQuery('');
+    setCourseFilter('All');
+    setFacultyFilter('All');
+    resetBatchSort();
+    setPage(1);
+  };
+
   // Pagination calculations
-  const totalCount = hasActiveFilters
-    ? filteredBatches.length
+  const totalCount = isCustomView
+    ? sortedBatches.length
     : (showUnscheduled ? allTimeSlots.length : batches.length);
 
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
@@ -520,12 +545,12 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
             </div>
 
             {/* Clear Filters Button */}
-            {hasActiveFilters && (
+            {(hasActiveFilters || isSortingActive) && (
               <button
                 className="btn"
                 type="button"
                 onClick={clearFilters}
-                title="Clear all search and filters"
+                title="Clear all search, filters, and sorting"
                 style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
               >
                 <span className="ic"><Icon name="x" size={15} /></span>
@@ -534,7 +559,7 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
             )}
 
             {/* Routine Empty Slots Checkbox Toggle (when unfiltered) */}
-            {!hasActiveFilters && (
+            {!isCustomView && (
               <label
                 style={{
                   display: 'inline-flex',
@@ -564,8 +589,8 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
           {/* Result Count and Add Batch Action */}
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
             <span style={{ fontSize: '0.86rem', color: 'var(--muted)', fontWeight: '600' }}>
-              {hasActiveFilters
-                ? `${filteredBatches.length} ${filteredBatches.length === 1 ? 'batch' : 'batches'} found (of ${batches.length})`
+              {isCustomView
+                ? `${sortedBatches.length} ${sortedBatches.length === 1 ? 'batch' : 'batches'} found (of ${batches.length})`
                 : `${batches.length} ${batches.length === 1 ? 'batch' : 'batches'} total`}
             </span>
 
@@ -590,17 +615,17 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
           <table className="table" style={{ minWidth: '850px', width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr>
-                <th style={{ width: '220px' }}>Time Slot</th>
-                <th>Course & Topic</th>
-                <th>Instructor</th>
-                <th>Students</th>
-                <th>Status</th>
+                <SortableTh colKey="batch_time" label="Time Slot" sortKey={batchSortKey} sortDirection={batchSortDir} onSort={handleBatchSort} style={{ width: '220px' }} />
+                <SortableTh colKey="course_name" label="Course & Topic" sortKey={batchSortKey} sortDirection={batchSortDir} onSort={handleBatchSort} />
+                <SortableTh colKey="instructor_name" label="Instructor" sortKey={batchSortKey} sortDirection={batchSortDir} onSort={handleBatchSort} />
+                <SortableTh colKey="student_count" label="Students" sortKey={batchSortKey} sortDirection={batchSortDir} onSort={handleBatchSort} />
+                <SortableTh colKey="status" label="Status" sortKey={batchSortKey} sortDirection={batchSortDir} onSort={handleBatchSort} />
                 <th style={{ width: '120px' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {/* When search or filters yield 0 results */}
-              {hasActiveFilters && filteredBatches.length === 0 ? (
+              {isCustomView && sortedBatches.length === 0 ? (
                 <tr>
                   <td colSpan={6} style={{ padding: 0 }}>
                     <div className="empty" style={{ padding: '48px 16px', textAlign: 'center' }}>
@@ -609,7 +634,7 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
                       </div>
                       <b style={{ fontSize: '1.05rem', color: 'var(--text)' }}>No batches match</b>
                       <span style={{ color: 'var(--muted)', display: 'block', marginTop: '4px' }}>
-                        No batches match your current search and filter criteria.
+                        No batches match your current search, filter, or sorting criteria.
                       </span>
                       <button
                         className="btn"
@@ -623,10 +648,10 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
                     </div>
                   </td>
                 </tr>
-              ) : hasActiveFilters ? (
-                /* Filtered view: Group matching batches by time slot and render paginated slice */
+              ) : isCustomView ? (
+                /* Filtered or sorted view: Group matching batches by time slot and render paginated slice */
                 (() => {
-                  const paginatedBatches = filteredBatches.slice(startIndex, startIndex + pageSize);
+                  const paginatedBatches = sortedBatches.slice(startIndex, startIndex + pageSize);
                   
                   // Group consecutive batches with the same batch_time for rowSpan presentation
                   const slotGroups = [];

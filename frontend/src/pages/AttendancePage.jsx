@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import api from '../services/api';
 import Icon from '../components/Icons';
+import { useTableSort } from '../hooks/useTableSort';
+import { SortableTh } from '../components/SortableHeader';
+import { parseSortableDate } from '../utils/tableSort';
 
 // Helper to slugify status strings for pill styling
 const slugify = (str) => String(str || '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -340,12 +343,31 @@ export default function AttendancePage({ user, users = [], onToast }) {
     setPage(1);
   }, [searchQuery, staffFilter, dateFilter, customDate, statusFilter, pageSize]);
 
+  // Sorting state for Attendance table
+  const {
+    sortKey: attendanceSortKey,
+    sortDirection: attendanceSortDir,
+    handleSort: handleAttendanceSort,
+    sortList: sortAttendance
+  } = useTableSort({ key: 'date', direction: 'desc' });
+
+  // Custom getters for safe time/hours comparison
+  const attendanceCustomGetters = useMemo(() => ({
+    clock_in: (r) => (r.clock_in ? parseSortableDate(r.clock_in) : null),
+    clock_out: (r) => (r.clock_out ? parseSortableDate(r.clock_out) : null),
+    total_hours: (r) => (r.total_hours != null && r.total_hours !== '' ? parseFloat(r.total_hours) : null)
+  }), []);
+
+  const sortedRecords = useMemo(() => {
+    return sortAttendance(filteredRecords, attendanceCustomGetters);
+  }, [filteredRecords, sortAttendance, attendanceCustomGetters]);
+
   // Pagination calculations
-  const totalRecords = filteredRecords.length;
+  const totalRecords = sortedRecords.length;
   const totalPages = Math.max(1, Math.ceil(totalRecords / pageSize));
   const currentPage = Math.min(Math.max(1, page), totalPages);
   const startIndex = (currentPage - 1) * pageSize;
-  const paginatedRecords = filteredRecords.slice(startIndex, startIndex + pageSize);
+  const paginatedRecords = sortedRecords.slice(startIndex, startIndex + pageSize);
 
   return (
     <div className="page-section">
@@ -520,12 +542,14 @@ export default function AttendancePage({ user, users = [], onToast }) {
             <table className="table">
               <thead>
                 <tr>
-                  {user?.role === 'admin' && <th>Staff Member</th>}
-                  <th>Date</th>
-                  <th>Clock In</th>
-                  <th>Clock Out</th>
-                  <th>Total Hours</th>
-                  <th>Status</th>
+                  {user?.role === 'admin' && (
+                    <SortableTh colKey="staff_name" label="Staff Member" sortKey={attendanceSortKey} sortDirection={attendanceSortDir} onSort={handleAttendanceSort} />
+                  )}
+                  <SortableTh colKey="date" label="Date" sortKey={attendanceSortKey} sortDirection={attendanceSortDir} onSort={handleAttendanceSort} />
+                  <SortableTh colKey="clock_in" label="Clock In" sortKey={attendanceSortKey} sortDirection={attendanceSortDir} onSort={handleAttendanceSort} />
+                  <SortableTh colKey="clock_out" label="Clock Out" sortKey={attendanceSortKey} sortDirection={attendanceSortDir} onSort={handleAttendanceSort} />
+                  <SortableTh colKey="total_hours" label="Total Hours" sortKey={attendanceSortKey} sortDirection={attendanceSortDir} onSort={handleAttendanceSort} />
+                  <SortableTh colKey="status" label="Status" sortKey={attendanceSortKey} sortDirection={attendanceSortDir} onSort={handleAttendanceSort} />
                 </tr>
               </thead>
               <tbody>

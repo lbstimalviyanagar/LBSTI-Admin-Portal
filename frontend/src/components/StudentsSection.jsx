@@ -2,6 +2,8 @@ import React, { useState, useMemo } from "react";
 import Icon from "./Icons";
 import api from "../services/api";
 import { useToast } from "../hooks/useToast";
+import { useTableSort } from "../hooks/useTableSort";
+import { SortableTh } from "./SortableHeader";
 import { SOURCES, COURSES, rangeOf, parseDate } from "../utils/helpers";
 import { PieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend } from "recharts";
 
@@ -151,6 +153,34 @@ export default function StudentsSection({ students = [], enrollments = [], loadi
     enrollmentCustomTo,
     studentMap
   ]);
+
+  // Sorting state for Students List tab
+  const {
+    sortKey: studentSortKey,
+    sortDirection: studentSortDir,
+    handleSort: handleStudentSort,
+    sortList: sortStudents
+  } = useTableSort({ key: 'studentId', direction: 'asc' });
+
+  const sortedStudents = useMemo(() => {
+    return sortStudents(filteredStudents);
+  }, [filteredStudents, sortStudents]);
+
+  // Sorting state for Enrollments tab
+  const {
+    sortKey: enrSortKey,
+    sortDirection: enrSortDir,
+    handleSort: handleEnrSort,
+    sortList: sortEnrollments
+  } = useTableSort({ key: 'doa', direction: 'desc' });
+
+  const enrCustomGetters = useMemo(() => ({
+    studentName: (en) => en.studentName || studentMap.get(String(en.studentId || '').toLowerCase())?.name || ''
+  }), [studentMap]);
+
+  const sortedEnrollments = useMemo(() => {
+    return sortEnrollments(filteredEnrollments, enrCustomGetters);
+  }, [filteredEnrollments, sortEnrollments, enrCustomGetters]);
 
   const handleCreateStudent = async (e) => {
     e.preventDefault();
@@ -641,17 +671,17 @@ export default function StudentsSection({ students = [], enrollments = [], loadi
             <table>
               <thead>
                 <tr>
-                  <th>Student ID</th>
-                  <th>Name</th>
-                  <th>Guardian Name</th>
-                  <th>Phone</th>
-                  <th>Email</th>
-                  <th>Remarks</th>
+                  <SortableTh colKey="studentId" label="Student ID" sortKey={studentSortKey} sortDirection={studentSortDir} onSort={handleStudentSort} />
+                  <SortableTh colKey="name" label="Name" sortKey={studentSortKey} sortDirection={studentSortDir} onSort={handleStudentSort} />
+                  <SortableTh colKey="guardianName" label="Guardian Name" sortKey={studentSortKey} sortDirection={studentSortDir} onSort={handleStudentSort} />
+                  <SortableTh colKey="phone" label="Phone" sortKey={studentSortKey} sortDirection={studentSortDir} onSort={handleStudentSort} />
+                  <SortableTh colKey="email" label="Email" sortKey={studentSortKey} sortDirection={studentSortDir} onSort={handleStudentSort} />
+                  <SortableTh colKey="remarks" label="Remarks" sortKey={studentSortKey} sortDirection={studentSortDir} onSort={handleStudentSort} />
                   <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredStudents.length === 0 ? (
+                {sortedStudents.length === 0 ? (
                   <tr>
                     <td colSpan="7" style={{ textAlign: "center", padding: "2.5rem 1rem", color: "var(--muted)" }}>
                       {studentSearchQuery ? (
@@ -667,7 +697,7 @@ export default function StudentsSection({ students = [], enrollments = [], loadi
                     </td>
                   </tr>
                 ) : (
-                  filteredStudents.map(st => (
+                  sortedStudents.map(st => (
                     <tr key={st.id}>
                       {editingStudent?.id === st.id ? (
                         <td colSpan="7">
@@ -854,17 +884,17 @@ export default function StudentsSection({ students = [], enrollments = [], loadi
             <table>
               <thead>
                 <tr>
-                  <th>Enrollment ID</th>
-                  <th>Student ID</th>
-                  <th>Student Name</th>
-                  <th>DOA</th>
-                  <th>Course</th>
-                  <th>Status</th>
+                  <SortableTh colKey="enrollmentId" label="Enrollment ID" sortKey={enrSortKey} sortDirection={enrSortDir} onSort={handleEnrSort} />
+                  <SortableTh colKey="studentId" label="Student ID" sortKey={enrSortKey} sortDirection={enrSortDir} onSort={handleEnrSort} />
+                  <SortableTh colKey="studentName" label="Student Name" sortKey={enrSortKey} sortDirection={enrSortDir} onSort={handleEnrSort} />
+                  <SortableTh colKey="doa" label="DOA" sortKey={enrSortKey} sortDirection={enrSortDir} onSort={handleEnrSort} />
+                  <SortableTh colKey="course" label="Course" sortKey={enrSortKey} sortDirection={enrSortDir} onSort={handleEnrSort} />
+                  <SortableTh colKey="status" label="Status" sortKey={enrSortKey} sortDirection={enrSortDir} onSort={handleEnrSort} />
                   <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredEnrollments.length === 0 ? (
+                {sortedEnrollments.length === 0 ? (
                   <tr>
                     <td colSpan="7" style={{ textAlign: "center", padding: "2.5rem 1rem", color: "var(--muted)" }}>
                       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}>
@@ -877,7 +907,7 @@ export default function StudentsSection({ students = [], enrollments = [], loadi
                     </td>
                   </tr>
                 ) : (
-                  filteredEnrollments.map(en => {
+                  sortedEnrollments.map(en => {
                     const st = studentMap.get(String(en.studentId || "").toLowerCase());
                     const displayName = en.studentName || st?.name || "–";
                     return (
