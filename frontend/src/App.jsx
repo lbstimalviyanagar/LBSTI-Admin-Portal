@@ -578,6 +578,7 @@ export default function App() {
             <BatchesPage
               user={user}
               users={usersList}
+              enrollments={enrollments}
               enquiries={enquiries}
               onToast={addToast}
             />
