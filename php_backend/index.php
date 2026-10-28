@@ -211,7 +211,8 @@ if ($route === 'auth/login') {
     requireMenuPermission($user, 'attendance', $pdo);
     $parts = explode("/", $route);
     $action = isset($parts[1]) ? $parts[1] : null;
-    if ($method === "GET") getAttendance($pdo, $user);
+    if ($method === "GET" && ($action === "options" || $action === "filters")) getAttendanceFilterOptions($pdo, $user);
+    elseif ($method === "GET") getAttendance($pdo, $user);
     elseif ($method === "POST" && $action === "clock-in") clockIn($pdo, $user);
     elseif ($method === "PUT" && $action === "clock-out") clockOut($pdo, $user, $body);
 } elseif (strpos($route, "tasks") === 0) {

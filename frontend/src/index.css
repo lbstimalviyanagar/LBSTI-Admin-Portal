@@ -1300,8 +1300,12 @@ tbody tr:last-child td {
 .s-admin { --c: #0f172a; }
 .s-counselor { --c: #7c3aed; }
 .s-teacher { --c: #059669; }
-.s-receptionist { --c: #d97706; }
 .s-user, .s-staff { --c: #475569; }
+.s-present { --c: #059669; }
+.s-halfday, .s-half-day { --c: #d97706; }
+.s-leave { --c: #2563eb; }
+.s-absent { --c: #dc2626; }
+.s-active, .s-clockedin, .s-inprogress { --c: #0284c7; }
 
 .toolbar {
   display: flex;

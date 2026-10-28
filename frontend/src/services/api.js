@@ -272,8 +272,22 @@ export const api = {
   },
 
   // Attendance
-  async getAttendance() {
-    return request("/attendance", { method: "GET" });
+  async getAttendance(filters = {}) {
+    const params = new URLSearchParams();
+    if (filters.staff_id && filters.staff_id !== "All") params.append("staff_id", filters.staff_id);
+    if (filters.date && filters.date !== "All") params.append("date", filters.date);
+    if (filters.status && filters.status !== "All") params.append("status", filters.status);
+    if (filters.q) params.append("q", filters.q);
+    const qs = params.toString();
+    const query = qs ? `?${qs}` : "";
+    return request(`/attendance${query}`, { method: "GET" });
+  },
+  async getAttendanceFilterOptions() {
+    try {
+      return await request("/attendance/options", { method: "GET" });
+    } catch (e) {
+      return { staff: [], statuses: ['Present', 'Half Day', 'Leave', 'Absent'], dates: [] };
+    }
   },
   async clockIn() {
     return request("/attendance/clock-in", { method: "POST" });

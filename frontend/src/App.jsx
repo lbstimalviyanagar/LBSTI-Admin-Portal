@@ -562,6 +562,7 @@ export default function App() {
           {tab === 'attendance' && (
             <AttendancePage
               user={user}
+              users={usersList}
               onToast={addToast}
             />
           )}
