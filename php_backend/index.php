@@ -220,7 +220,8 @@ if ($route === 'auth/login') {
     requireMenuPermission($user, 'tasks', $pdo);
     $parts = explode("/", $route);
     $id = isset($parts[1]) ? $parts[1] : null;
-    if ($method === "GET") getTasks($pdo, $user);
+    if ($method === "GET" && ($id === "options" || $id === "filters")) getTaskFilterOptions($pdo);
+    elseif ($method === "GET") getTasks($pdo, $user);
     elseif ($method === "POST") createTask($pdo, $user, $body);
     elseif ($method === "PUT" || $method === "PATCH") updateTask($pdo, $user, $id, $body);
     elseif ($method === "DELETE") deleteTask($pdo, $user, $id);

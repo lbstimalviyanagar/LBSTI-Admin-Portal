@@ -2,27 +2,80 @@
 
 function getTasks($pdo, $user) {
     try {
-        if ($user['role'] === 'admin') {
-            $stmt = $pdo->prepare("
-                SELECT t.*, u1.full_name as assigned_to_name, u1.profile_photo as assigned_to_photo, u2.full_name as assigned_by_name 
-                FROM staff_tasks t 
-                LEFT JOIN portal_users u1 ON u1.id = t.assigned_to 
-                LEFT JOIN portal_users u2 ON u2.id = t.assigned_by 
-                ORDER BY t.created_at DESC
-            ");
-            $stmt->execute();
+        $assignedTo = $_GET['assigned_to'] ?? null;
+        $status = $_GET['status'] ?? null;
+        $q = $_GET['q'] ?? null;
+
+        $conditions = [];
+        $params = [];
+
+        if ($user['role'] !== 'admin') {
+            $conditions[] = "t.assigned_to = ?";
+            $params[] = $user['sub'];
         } else {
-            $stmt = $pdo->prepare("
-                SELECT t.*, u1.full_name as assigned_to_name, u1.profile_photo as assigned_to_photo, u2.full_name as assigned_by_name 
-                FROM staff_tasks t 
-                LEFT JOIN portal_users u1 ON u1.id = t.assigned_to 
-                LEFT JOIN portal_users u2 ON u2.id = t.assigned_by 
-                WHERE t.assigned_to = ? 
-                ORDER BY t.created_at DESC
-            ");
-            $stmt->execute([$user['sub']]);
+            if (!empty($assignedTo) && strtolower($assignedTo) !== 'all') {
+                $conditions[] = "t.assigned_to = ?";
+                $params[] = $assignedTo;
+            }
         }
+
+        if (!empty($status) && strtolower($status) !== 'all') {
+            $conditions[] = "LOWER(TRIM(t.status)) = LOWER(TRIM(?))";
+            $params[] = $status;
+        }
+
+        if (!empty($q)) {
+            $like = "%" . trim($q) . "%";
+            $conditions[] = "(t.title LIKE ? OR t.description LIKE ? OR t.due_date LIKE ? OR t.status LIKE ? OR t.remarks LIKE ? OR u1.full_name LIKE ? OR u2.full_name LIKE ?)";
+            $params[] = $like;
+            $params[] = $like;
+            $params[] = $like;
+            $params[] = $like;
+            $params[] = $like;
+            $params[] = $like;
+            $params[] = $like;
+        }
+
+        $whereClause = !empty($conditions) ? "WHERE " . implode(" AND ", $conditions) : "";
+
+        $stmt = $pdo->prepare("
+            SELECT t.*, u1.full_name as assigned_to_name, u1.profile_photo as assigned_to_photo, u2.full_name as assigned_by_name 
+            FROM staff_tasks t 
+            LEFT JOIN portal_users u1 ON u1.id = t.assigned_to 
+            LEFT JOIN portal_users u2 ON u2.id = t.assigned_by 
+            {$whereClause}
+            ORDER BY t.created_at DESC
+        ");
+        $stmt->execute($params);
         echo json_encode($stmt->fetchAll());
+    } catch (PDOException $e) {
+        http_response_code(500);
+        echo json_encode(["message" => "Database error: " . $e->getMessage()]);
+    }
+}
+
+function getTaskFilterOptions($pdo) {
+    try {
+        $faculty = [];
+        try {
+            $stmt = $pdo->query("SELECT id, full_name, username, role, profile_photo FROM portal_users WHERE (full_name IS NOT NULL AND TRIM(full_name) != '') OR (username IS NOT NULL AND TRIM(username) != '') ORDER BY full_name ASC");
+            while ($row = $stmt->fetch()) {
+                $name = trim($row['full_name'] ?: $row['username']);
+                if ($name) {
+                    $faculty[] = [
+                        'id' => (int)$row['id'],
+                        'name' => $name,
+                        'fullName' => $name,
+                        'role' => $row['role'] ?? 'staff',
+                        'profilePhotoUrl' => $row['profile_photo'] ?? null
+                    ];
+                }
+            }
+        } catch (Exception $e) {}
+
+        echo json_encode([
+            "faculty" => $faculty
+        ]);
     } catch (PDOException $e) {
         http_response_code(500);
         echo json_encode(["message" => "Database error: " . $e->getMessage()]);

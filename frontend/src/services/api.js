@@ -283,8 +283,21 @@ export const api = {
   },
 
   // Tasks
-  async getTasks() {
-    return request("/tasks", { method: "GET" });
+  async getTasks(filters = {}) {
+    const params = new URLSearchParams();
+    if (filters.assignedTo && filters.assignedTo !== "All") params.append("assigned_to", filters.assignedTo);
+    if (filters.status && filters.status !== "All") params.append("status", filters.status);
+    if (filters.q) params.append("q", filters.q);
+    const qs = params.toString();
+    const query = qs ? `?${qs}` : "";
+    return request(`/tasks${query}`, { method: "GET" });
+  },
+  async getTaskFilterOptions() {
+    try {
+      return await request("/tasks/options", { method: "GET" });
+    } catch (e) {
+      return { faculty: [] };
+    }
   },
   async createTask(data) {
     return request("/tasks", {

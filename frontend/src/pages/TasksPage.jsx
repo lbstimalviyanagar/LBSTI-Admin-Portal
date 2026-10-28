@@ -1,12 +1,17 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import api from '../services/api';
 import Icon from '../components/Icons';
 
-export default function TasksPage({ user, users, onToast }) {
+export default function TasksPage({ user, users = [], onToast }) {
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
+  const [filterOptions, setFilterOptions] = useState({ faculty: [] });
+
+  // Search & Filter state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [facultyFilter, setFacultyFilter] = useState('All');
   
   const [formData, setFormData] = useState({
     title: '', description: '', assignedTo: '', dueDate: '', status: 'Pending', remarks: ''
@@ -27,6 +32,103 @@ export default function TasksPage({ user, users, onToast }) {
   useEffect(() => {
     loadTasks();
   }, [loadTasks]);
+
+  // Load filter options dynamically from backend API on mount
+  useEffect(() => {
+    let isMounted = true;
+    if (typeof api.getTaskFilterOptions === 'function') {
+      api.getTaskFilterOptions()
+        .then(res => {
+          if (isMounted && res && Array.isArray(res.faculty)) {
+            setFilterOptions(res);
+          }
+        })
+        .catch(() => {});
+    }
+    return () => { isMounted = false; };
+  }, []);
+
+  // Dynamically extract unique faculty/staff options from API, users prop, and loaded tasks
+  const facultyOptions = useMemo(() => {
+    const map = new Map();
+
+    // 1. From API options
+    if (Array.isArray(filterOptions?.faculty)) {
+      filterOptions.faculty.forEach(f => {
+        const name = (f.name || f.fullName || f.username || '').trim();
+        if (name) {
+          map.set(name.toLowerCase(), { id: f.id, name });
+        }
+      });
+    }
+
+    // 2. From users prop
+    if (Array.isArray(users)) {
+      users.forEach(u => {
+        const name = (u.fullName || u.full_name || u.username || '').trim();
+        if (name) {
+          map.set(name.toLowerCase(), { id: u.id, name });
+        }
+      });
+    }
+
+    // 3. From loaded tasks
+    tasks.forEach(t => {
+      const assignedUser = users?.find(u => String(u.id) === String(t.assigned_to));
+      const name = (t.assigned_to_name || assignedUser?.fullName || assignedUser?.full_name || assignedUser?.username || '').trim();
+      if (name) {
+        map.set(name.toLowerCase(), { id: t.assigned_to, name });
+      }
+    });
+
+    return Array.from(map.values()).sort((a, b) => 
+      a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+    );
+  }, [tasks, users, filterOptions]);
+
+  // Detect whether any filter is active
+  const hasActiveFilters = Boolean(searchQuery.trim() || facultyFilter !== 'All');
+
+  // Filter tasks dynamically based on search query and faculty filter
+  const filteredTasks = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
+    const tokens = q ? q.split(/\s+/).filter(Boolean) : [];
+
+    return tasks.filter(task => {
+      const assignedUser = users?.find(u => String(u.id) === String(task.assigned_to));
+      const assignedName = (task.assigned_to_name || assignedUser?.fullName || assignedUser?.full_name || assignedUser?.username || '').trim();
+
+      // 1. Faculty Filter
+      if (facultyFilter !== 'All') {
+        const selLower = facultyFilter.trim().toLowerCase();
+        const matchesName = assignedName.toLowerCase() === selLower;
+        const matchesId = String(task.assigned_to) === String(facultyFilter);
+        if (!matchesName && !matchesId) return false;
+      }
+
+      // 2. Search Query Filter (Title, Description, Faculty/Staff, Due Date, Status, Remarks)
+      if (tokens.length > 0) {
+        const title = String(task.title || '').toLowerCase();
+        const description = String(task.description || '').toLowerCase();
+        const staff = assignedName.toLowerCase();
+        const dueDate = String(task.due_date || '').toLowerCase();
+        const status = String(task.status || '').toLowerCase();
+        const remarks = String(task.remarks || '').toLowerCase();
+        const searchableText = `${title} ${description} ${staff} ${dueDate} ${status} ${remarks}`;
+
+        const allTokensMatch = tokens.every(token => searchableText.includes(token));
+        if (!allTokensMatch) return false;
+      }
+
+      return true;
+    });
+  }, [tasks, facultyFilter, searchQuery, users]);
+
+  // Clear all filters
+  const clearFilters = () => {
+    setSearchQuery('');
+    setFacultyFilter('All');
+  };
 
   const openNewTask = () => {
     setEditingTask(null);
@@ -163,7 +265,7 @@ export default function TasksPage({ user, users, onToast }) {
             <strong>Remarks:</strong> {task.remarks}
           </div>
         )}
-        <div style={{ marginTop: '0.75rem', display: 'flex', gap: '0.5rem' }}>
+        <div style={{ marginTop: '0.75rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
           {task.status !== 'Pending' && <button className="btn btn-sm" onClick={() => updateStatus(task.id, 'Pending')}>Set Pending</button>}
           {task.status !== 'In Progress' && <button className="btn btn-sm" onClick={() => updateStatus(task.id, 'In Progress')}>Set In Progress</button>}
           {task.status !== 'Completed' && <button className="btn btn-sm" onClick={() => updateStatus(task.id, 'Completed')}>Set Completed</button>}
@@ -174,6 +276,7 @@ export default function TasksPage({ user, users, onToast }) {
 
   return (
     <div className="page-section">
+      {/* Page Header */}
       <div className="page-head">
         <div>
           <h2>Task Management</h2>
@@ -189,29 +292,124 @@ export default function TasksPage({ user, users, onToast }) {
         )}
       </div>
 
-      {loading ? (
-        <div style={{ padding: '2rem', textAlign: 'center' }}>Loading tasks...</div>
-      ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem' }}>
-          {['Pending', 'In Progress', 'Completed'].map(status => (
-            <div 
-              key={status} 
-              style={{ background: '#f8fafc', padding: '1rem', borderRadius: '8px' }}
-              onDragOver={handleDragOver}
-              onDrop={(e) => handleDrop(e, status)}
+      {/* Dynamic Search & Filtering Toolbar */}
+      <div className="card" style={{ marginBottom: '1.5rem', padding: '14px 18px' }}>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* Search Bar */}
+          <div className="search" style={{ minWidth: '220px', flex: '1 1 240px' }}>
+            <span className="si"><Icon name="search" size={18} /></span>
+            <input
+              className="input"
+              type="search"
+              placeholder="Search title, description, staff, date, status..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              autoComplete="off"
+              aria-label="Search tasks"
+            />
+          </div>
+
+          {/* Faculty Dropdown Filter */}
+          <div className="fl">
+            <select
+              className="select"
+              value={facultyFilter}
+              onChange={(e) => setFacultyFilter(e.target.value)}
+              aria-label="Filter by faculty"
+              title="Filter by faculty"
+              style={{ minWidth: '160px' }}
             >
-              <h3 style={{ marginTop: 0, marginBottom: '1rem', fontSize: '1.1rem', color: '#334155' }}>{status}</h3>
-              <div className="kanban-column" style={{ minHeight: '150px' }}>
-                {tasks.filter(t => t.status === status).map(renderTaskCard)}
-                {tasks.filter(t => t.status === status).length === 0 && (
-                  <p className="muted" style={{ fontSize: '0.9rem' }}>No tasks in this list. Drop tasks here.</p>
-                )}
+              <option value="All">All Faculties</option>
+              {facultyOptions.map(f => (
+                <option key={f.id || f.name} value={f.name}>{f.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Clear Filters Button */}
+          {hasActiveFilters && (
+            <button
+              className="btn"
+              type="button"
+              onClick={clearFilters}
+              title="Clear all filters"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+            >
+              <span className="ic"><Icon name="x" size={15} /></span>
+              Clear Filters
+            </button>
+          )}
+
+          {/* Result Count and Actions */}
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '0.86rem', color: 'var(--muted)', fontWeight: '600' }}>
+              {hasActiveFilters
+                ? `${filteredTasks.length} ${filteredTasks.length === 1 ? 'task' : 'tasks'} found (of ${tasks.length})`
+                : `${tasks.length} ${tasks.length === 1 ? 'task' : 'tasks'} total`}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {loading ? (
+        <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--muted)' }}>Loading tasks...</div>
+      ) : hasActiveFilters && filteredTasks.length === 0 ? (
+        /* Helpful empty message when search / filter matches 0 tasks */
+        <div className="card" style={{ padding: '48px 16px', textAlign: 'center' }}>
+          <div className="ei" style={{ margin: '0 auto 12px' }}>
+            <Icon name="search" size={26} />
+          </div>
+          <b style={{ fontSize: '1.05rem', color: 'var(--text)', display: 'block', marginBottom: '4px' }}>
+            No tasks match
+          </b>
+          <span style={{ color: 'var(--muted)', display: 'block', maxWidth: '440px', margin: '0 auto 16px', fontSize: '0.9rem' }}>
+            No tasks match your current search and faculty filter. Try adjusting your search query or clearing the filters.
+          </span>
+          <button className="btn" type="button" onClick={clearFilters}>
+            <span className="ic"><Icon name="x" size={15} /></span>
+            Clear Filters
+          </button>
+        </div>
+      ) : (
+        /* Kanban Columns: Pending, In Progress, Completed */
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem' }}>
+          {['Pending', 'In Progress', 'Completed'].map(status => {
+            const colTasks = filteredTasks.filter(t => t.status === status);
+            return (
+              <div 
+                key={status} 
+                style={{ background: '#f8fafc', padding: '1rem', borderRadius: '8px' }}
+                onDragOver={handleDragOver}
+                onDrop={(e) => handleDrop(e, status)}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                  <h3 style={{ margin: 0, fontSize: '1.05rem', color: '#334155', fontWeight: '700' }}>{status}</h3>
+                  <span style={{ 
+                    fontSize: '0.78rem', 
+                    fontWeight: '700', 
+                    padding: '2px 8px', 
+                    borderRadius: '10px', 
+                    background: status === 'Completed' ? '#dcfce7' : status === 'In Progress' ? '#dbeafe' : '#fef3c7',
+                    color: status === 'Completed' ? '#15803d' : status === 'In Progress' ? '#1d4ed8' : '#b45309'
+                  }}>
+                    {colTasks.length}
+                  </span>
+                </div>
+                <div className="kanban-column" style={{ minHeight: '150px' }}>
+                  {colTasks.map(renderTaskCard)}
+                  {colTasks.length === 0 && (
+                    <p className="muted" style={{ fontSize: '0.88rem', textAlign: 'center', padding: '2rem 1rem' }}>
+                      {hasActiveFilters ? 'No matching tasks in this list.' : 'No tasks in this list. Drop tasks here.'}
+                    </p>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
+      {/* Task Modal (Create / Edit) */}
       {isModalOpen && (
         <div className="overlay" id="taskOverlay" onMouseDown={(e) => { if (e.target.id === 'taskOverlay') setIsModalOpen(false); }}>
           <div className="modal" role="dialog" aria-modal="true" style={{ maxWidth: '500px', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
