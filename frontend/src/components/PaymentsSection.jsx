@@ -262,30 +262,12 @@ export default function PaymentsSection({
 
   const totals = feeBreakdownTotals(breakdown);
   const totalAmount = (totals.cash + totals.cheque + totals.online).toFixed(2);
-  const netPaymentReceived = totals.cash + totals.cheque + totals.online;
+  // Manually editable summary boxes (no auto-calculation or auto-overwriting)
+  const [totalCourseFeesDue, setTotalCourseFeesDue] = useState('');
+  const [netPaymentReceived, setNetPaymentReceived] = useState('');
+  const [outstandingBalance, setOutstandingBalance] = useState('');
 
   const isBulkPayment = selectedCourse === 'ALL_COURSES' || selectedCourse === 'All Enrolled Courses (Bulk Payment)';
-
-  // Total Course Fees Due calculation: evaluates the targeted ledger invoice structure configuration for active selection
-  const totalCourseFeesDue = useMemo(() => {
-    if (!selectedStudent || studentCourseOptions.length === 0) return 0;
-    if (isBulkPayment) {
-      return studentCourseOptions.reduce((sum, opt) => {
-        const fee = courseFeeDues[opt.course] !== undefined ? courseFeeDues[opt.course] : getCourseTargetFee(opt.course);
-        return sum + fee;
-      }, 0);
-    }
-    if (selectedCourse && selectedCourse !== 'ALL_COURSES') {
-      return courseFeeDues[selectedCourse] !== undefined ? courseFeeDues[selectedCourse] : getCourseTargetFee(selectedCourse);
-    }
-    return studentCourseOptions.reduce((sum, opt) => {
-      const fee = courseFeeDues[opt.course] !== undefined ? courseFeeDues[opt.course] : getCourseTargetFee(opt.course);
-      return sum + fee;
-    }, 0);
-  }, [selectedStudent, selectedCourse, isBulkPayment, studentCourseOptions, courseFeeDues]);
-
-  // Outstanding Balance Remaining calculation: evaluates absolute net difference ([Total Course Fees Due] minus [Net Payment Received])
-  const outstandingBalance = Math.max(0, totalCourseFeesDue - netPaymentReceived);
 
   // ── Smart Student Search: Live Trigger & Global Matching ──
   const searchAbortRef = useRef(null);
@@ -456,6 +438,9 @@ export default function PaymentsSection({
     setPaymentDate(isoDay(new Date()));
     setNotes('');
     setBreakdown(Object.fromEntries(FEE_ITEMS.map(([key]) => [key, { cash: 0, cheque: 0, online: 0 }])));
+    setTotalCourseFeesDue('');
+    setNetPaymentReceived('');
+    setOutstandingBalance('');
   };
 
   const handleSubmitPayment = async (e) => {
@@ -468,8 +453,13 @@ export default function PaymentsSection({
       onToast("Please select a course or Bulk Payment option.", true);
       return;
     }
-    if (!(parseFloat(totalAmount) > 0)) {
-      onToast("Enter at least one fee amount in the breakdown table.", true);
+
+    const enteredNet = netPaymentReceived !== '' ? parseFloat(netPaymentReceived) : NaN;
+    const breakdownTotal = parseFloat(totalAmount) || 0;
+    const finalAmount = !isNaN(enteredNet) && enteredNet > 0 ? enteredNet : (breakdownTotal > 0 ? breakdownTotal : 0);
+
+    if (finalAmount <= 0) {
+      onToast("Please enter the payment amount in Net Payment Received or in the fee breakdown table.", true);
       return;
     }
 
@@ -483,6 +473,9 @@ export default function PaymentsSection({
     const isBulk = selectedCourse === 'ALL_COURSES' || selectedCourse === 'All Enrolled Courses (Bulk Payment)';
     const finalCourseName = isBulk ? "All Enrolled Courses (Bulk Payment)" : selectedCourse.trim();
 
+    const parsedDue = totalCourseFeesDue !== '' ? (parseFloat(totalCourseFeesDue) || 0) : 0;
+    const parsedOutstanding = outstandingBalance !== '' ? (parseFloat(outstandingBalance) || 0) : 0;
+
     const payload = {
       enquiryId: Number(selectedStudent.id),
       studentId: selectedStudent.studentId,
@@ -492,10 +485,10 @@ export default function PaymentsSection({
       enrollmentId: isBulk ? studentCourseOptions.map(c => c.enrollmentId).filter(Boolean).join(',') : (selectedEnrollmentId || undefined),
       courseId: isBulk ? "BULK" : (selectedEnrollmentId || undefined),
       billingMonth: feeMonth,
-      amount: parseFloat(totalAmount),
-      totalCourseFeesDue,
-      outstandingBalance,
-      balance: outstandingBalance,
+      amount: finalAmount,
+      totalCourseFeesDue: parsedDue,
+      outstandingBalance: parsedOutstanding,
+      balance: parsedOutstanding,
       paymentDate: paymentDate || isoDay(new Date()),
       mode,
       notes: notes.trim(),
@@ -504,10 +497,10 @@ export default function PaymentsSection({
         course: finalCourseName,
         isBulkPayment: isBulk,
         courses: isBulk ? studentCourseOptions.map(c => c.course) : [selectedCourse.trim()],
-        totalCourseFeesDue,
-        netPaymentReceived: parseFloat(totalAmount),
-        outstandingBalance,
-        isSettled: outstandingBalance === 0,
+        totalCourseFeesDue: parsedDue,
+        netPaymentReceived: finalAmount,
+        outstandingBalance: parsedOutstanding,
+        isSettled: outstandingBalance !== '' && parsedOutstanding === 0,
         enrollmentId: isBulk ? "BULK" : (selectedEnrollmentId || undefined),
         month: feeMonth,
         relation: relation.trim(),
@@ -1759,29 +1752,37 @@ export default function PaymentsSection({
                         borderRadius: '10px',
                         padding: '14px 16px'
                       }}>
-                        <div style={{ fontSize: '12px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        <label
+                          htmlFor="summary-total-course-fees-due"
+                          style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}
+                        >
                           Total Course Fees Due (₹)
+                        </label>
+                        <div style={{ display: 'flex', alignItems: 'center', marginTop: '6px' }}>
+                          <span style={{ fontSize: '18px', fontWeight: 800, color: '#1e293b', marginRight: '6px' }}>₹</span>
+                          <input
+                            id="summary-total-course-fees-due"
+                            type="number"
+                            min="0"
+                            step="any"
+                            placeholder="0"
+                            value={totalCourseFeesDue}
+                            onChange={(e) => setTotalCourseFeesDue(e.target.value)}
+                            style={{
+                              width: '100%',
+                              border: '1px solid #cbd5e1',
+                              borderRadius: '6px',
+                              outline: 'none',
+                              background: '#ffffff',
+                              fontWeight: 800,
+                              fontSize: '20px',
+                              color: '#1e293b',
+                              padding: '6px 10px'
+                            }}
+                          />
                         </div>
-                        <input
-                          type="text"
-                          readOnly
-                          value={`₹ ${Number(totalCourseFeesDue).toLocaleString("en-IN")}`}
-                          style={{
-                            width: '100%',
-                            border: 'none',
-                            outline: 'none',
-                            background: 'transparent',
-                            fontWeight: 800,
-                            fontSize: '20px',
-                            color: '#1e293b',
-                            marginTop: '6px',
-                            padding: 0
-                          }}
-                        />
-                        <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
-                          {isBulkPayment 
-                            ? `Targeted ledger across all ${studentCourseOptions.length} active courses`
-                            : selectedCourse ? `Targeted ledger for ${selectedCourse}` : 'No course selected'}
+                        <div style={{ fontSize: '11px', color: '#64748b', marginTop: '6px' }}>
+                          Enter total course fee due amount
                         </div>
                       </div>
 
@@ -1792,47 +1793,59 @@ export default function PaymentsSection({
                         borderRadius: '10px',
                         padding: '14px 16px'
                       }}>
-                        <div style={{ fontSize: '12px', fontWeight: 700, color: '#0369a1', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        <label
+                          htmlFor="summary-net-payment-received"
+                          style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#0369a1', textTransform: 'uppercase', letterSpacing: '0.5px' }}
+                        >
                           Net Payment Received (₹)
+                        </label>
+                        <div style={{ display: 'flex', alignItems: 'center', marginTop: '6px' }}>
+                          <span style={{ fontSize: '18px', fontWeight: 800, color: '#0284c7', marginRight: '6px' }}>₹</span>
+                          <input
+                            id="summary-net-payment-received"
+                            type="number"
+                            min="0"
+                            step="any"
+                            placeholder="0"
+                            value={netPaymentReceived}
+                            onChange={(e) => setNetPaymentReceived(e.target.value)}
+                            style={{
+                              width: '100%',
+                              border: '1px solid #7dd3fc',
+                              borderRadius: '6px',
+                              outline: 'none',
+                              background: '#ffffff',
+                              fontWeight: 800,
+                              fontSize: '20px',
+                              color: '#0284c7',
+                              padding: '6px 10px'
+                            }}
+                          />
                         </div>
-                        <input
-                          type="text"
-                          readOnly
-                          value={`₹ ${Number(netPaymentReceived).toLocaleString("en-IN")}`}
-                          style={{
-                            width: '100%',
-                            border: 'none',
-                            outline: 'none',
-                            background: 'transparent',
-                            fontWeight: 800,
-                            fontSize: '20px',
-                            color: '#0284c7',
-                            marginTop: '6px',
-                            padding: 0
-                          }}
-                        />
-                        <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
-                          {parseFloat(totalAmount) > 0 ? (
-                            <span style={{ fontStyle: 'italic' }}>{numberToIndianWords(parseFloat(totalAmount))}</span>
+                        <div style={{ fontSize: '11px', color: '#64748b', marginTop: '6px' }}>
+                          {parseFloat(netPaymentReceived) > 0 ? (
+                            <span style={{ fontStyle: 'italic' }}>{numberToIndianWords(parseFloat(netPaymentReceived))}</span>
                           ) : (
-                            'Real-time sum of Cash + Cheque + UPI inputs'
+                            'Enter net payment received amount'
                           )}
                         </div>
                       </div>
 
                       {/* Metric 3: Outstanding Balance Remaining (₹) with Condition Logic */}
                       <div style={{
-                        background: selectedStudent && outstandingBalance === 0 ? '#f0fdf4' : (outstandingBalance === 0 ? '#ffffff' : '#fffbeb'),
-                        border: `1.5px solid ${selectedStudent && outstandingBalance === 0 ? '#86efac' : (outstandingBalance === 0 ? '#cbd5e1' : '#fcd34d')}`,
+                        background: outstandingBalance !== '' && parseFloat(outstandingBalance) === 0 ? '#f0fdf4' : '#ffffff',
+                        border: `1.5px solid ${outstandingBalance !== '' && parseFloat(outstandingBalance) === 0 ? '#86efac' : '#cbd5e1'}`,
                         borderRadius: '10px',
                         padding: '14px 16px'
                       }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ fontSize: '12px', fontWeight: 700, color: selectedStudent && outstandingBalance === 0 ? '#15803d' : '#92400e', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                          <label
+                            htmlFor="summary-outstanding-balance"
+                            style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: outstandingBalance !== '' && parseFloat(outstandingBalance) === 0 ? '#15803d' : '#92400e', textTransform: 'uppercase', letterSpacing: '0.5px' }}
+                          >
                             Outstanding Balance Remaining (₹)
-                          </span>
-                          {/* Dynamic Green Check Badge when exactly 0 */}
-                          {selectedStudent && outstandingBalance === 0 && (
+                          </label>
+                          {outstandingBalance !== '' && parseFloat(outstandingBalance) === 0 && (
                             <span style={{
                               background: '#dcfce7',
                               color: '#15803d',
@@ -1849,27 +1862,34 @@ export default function PaymentsSection({
                             </span>
                           )}
                         </div>
-                        <input
-                          type="text"
-                          readOnly
-                          value={`₹ ${Number(outstandingBalance).toLocaleString("en-IN")}`}
-                          style={{
-                            width: '100%',
-                            border: 'none',
-                            outline: 'none',
-                            background: 'transparent',
-                            fontWeight: 800,
-                            fontSize: '20px',
-                            color: selectedStudent && outstandingBalance === 0 ? '#166534' : '#b45309',
-                            marginTop: '6px',
-                            padding: 0
-                          }}
-                        />
-                        <div style={{ fontSize: '11px', color: selectedStudent && outstandingBalance === 0 ? '#16a34a' : '#78350f', marginTop: '4px', fontWeight: 500 }}>
-                          {selectedStudent && outstandingBalance === 0 ? (
+                        <div style={{ display: 'flex', alignItems: 'center', marginTop: '6px' }}>
+                          <span style={{ fontSize: '18px', fontWeight: 800, color: outstandingBalance !== '' && parseFloat(outstandingBalance) === 0 ? '#166534' : '#b45309', marginRight: '6px' }}>₹</span>
+                          <input
+                            id="summary-outstanding-balance"
+                            type="number"
+                            min="0"
+                            step="any"
+                            placeholder="0"
+                            value={outstandingBalance}
+                            onChange={(e) => setOutstandingBalance(e.target.value)}
+                            style={{
+                              width: '100%',
+                              border: `1px solid ${outstandingBalance !== '' && parseFloat(outstandingBalance) === 0 ? '#86efac' : '#cbd5e1'}`,
+                              borderRadius: '6px',
+                              outline: 'none',
+                              background: '#ffffff',
+                              fontWeight: 800,
+                              fontSize: '20px',
+                              color: outstandingBalance !== '' && parseFloat(outstandingBalance) === 0 ? '#166534' : '#b45309',
+                              padding: '6px 10px'
+                            }}
+                          />
+                        </div>
+                        <div style={{ fontSize: '11px', color: outstandingBalance !== '' && parseFloat(outstandingBalance) === 0 ? '#16a34a' : '#78350f', marginTop: '6px', fontWeight: 500 }}>
+                          {outstandingBalance !== '' && parseFloat(outstandingBalance) === 0 ? (
                             '✓ Total ledger cleared in full. No outstanding balance.'
                           ) : (
-                            `Absolute net difference ([Total Course Fees Due] - [Net Payment Received])`
+                            'Enter outstanding balance remaining amount'
                           )}
                         </div>
                       </div>
