@@ -289,7 +289,7 @@ export default function EditLeadModal({
     }
   };
 
-  const isConfirmed = formData.status === "Confirmed";
+  const isConfirmed = formData.status === "Confirmed" || lead?.status === "Confirmed";
 
   return (
     <div

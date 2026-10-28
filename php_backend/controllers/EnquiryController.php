@@ -1,4 +1,5 @@
 <?php
+
 function normalizeEnquiry($row) {
     return [
         "id" => (int)$row['id'],
@@ -18,27 +19,30 @@ function normalizeEnquiry($row) {
     ];
 }
 
+function ensureRemarksTable($pdo) {
+    try {
+        $pdo->exec("CREATE TABLE IF NOT EXISTS `remarks` (
+          `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+          `enquiry_id` BIGINT UNSIGNED NOT NULL,
+          `text` TEXT NOT NULL,
+          `author` VARCHAR(190) DEFAULT 'Admin',
+          `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (`id`),
+          KEY `idx_remarks_enquiry_id` (`enquiry_id`),
+          KEY `idx_remarks_created_at` (`created_at`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
+    } catch (Exception $e) {}
+}
+
 function getEnquiries($pdo, $id = null, $resource = null) {
     if ($id && $resource === 'remarks') {
-        $stmt = $pdo->prepare("SELECT * FROM remarks WHERE enquiry_id = ? ORDER BY created_at ASC");
-        $stmt->execute([$id]);
-        $remarks = [];
-        while($row = $stmt->fetch()) {
-            $remarks[] = [
-                "id" => (int)$row['id'],
-                "enquiryId" => (int)$row['enquiry_id'],
-                "text" => $row['text'],
-                "author" => $row['author'],
-                "createdAt" => $row['created_at']
-            ];
-        }
-        echo json_encode($remarks);
+        getRemarks($pdo, $id);
         return;
     }
     
     if ($id) {
         $stmt = $pdo->prepare("SELECT * FROM enquiries WHERE id = ?");
-        $stmt->execute([$id]);
+        $stmt->execute([(int)$id]);
         $row = $stmt->fetch();
         if (!$row) {
             http_response_code(404);
@@ -54,6 +58,200 @@ function getEnquiries($pdo, $id = null, $resource = null) {
         $enquiries[] = normalizeEnquiry($row);
     }
     echo json_encode($enquiries);
+}
+
+function confirmEnquiry($pdo, $id, $user = null) {
+    try {
+        $id = (int)$id;
+        if (!$id) {
+            http_response_code(400);
+            echo json_encode(["message" => "Valid enquiry ID is required."]);
+            return;
+        }
+
+        $stmt = $pdo->prepare("SELECT * FROM enquiries WHERE id = ?");
+        $stmt->execute([$id]);
+        $enquiry = $stmt->fetch();
+
+        if (!$enquiry) {
+            http_response_code(404);
+            echo json_encode(["message" => "Enquiry not found."]);
+            return;
+        }
+
+        $now = date('Y-m-d H:i:s');
+
+        // Permanently persist Confirmed status in database
+        $updateStmt = $pdo->prepare("UPDATE enquiries SET status = 'Confirmed', updated_at = ? WHERE id = ?");
+        $updateStmt->execute([$now, $id]);
+
+        // Add confirmation activity to remarks history
+        ensureRemarksTable($pdo);
+        try {
+            $author = !empty($user['name']) ? $user['name'] : (!empty($user['username']) ? $user['username'] : 'Admin');
+            $remStmt = $pdo->prepare("INSERT INTO remarks (enquiry_id, text, author, created_at) VALUES (?, 'Admission confirmed.', ?, ?)");
+            $remStmt->execute([$id, $author, $now]);
+        } catch (Exception $e) {}
+
+        // Fetch fresh saved record directly from DB to verify persistence
+        $freshStmt = $pdo->prepare("SELECT * FROM enquiries WHERE id = ?");
+        $freshStmt->execute([$id]);
+        $updated = $freshStmt->fetch();
+
+        echo json_encode(normalizeEnquiry($updated));
+    } catch (PDOException $e) {
+        http_response_code(500);
+        echo json_encode(["message" => "Database error: " . $e->getMessage()]);
+    }
+}
+
+function updateEnquiry($pdo, $id, $body) {
+    try {
+        $id = (int)$id;
+        if (!$id) {
+            http_response_code(400);
+            echo json_encode(["message" => "Valid enquiry ID is required."]);
+            return;
+        }
+
+        $stmt = $pdo->prepare("SELECT * FROM enquiries WHERE id = ?");
+        $stmt->execute([$id]);
+        $existing = $stmt->fetch();
+
+        if (!$existing) {
+            http_response_code(404);
+            echo json_encode(["message" => "Enquiry not found."]);
+            return;
+        }
+
+        $fields = [];
+        $params = [];
+
+        if (isset($body['name'])) {
+            $fields[] = "name = ?";
+            $params[] = trim($body['name']);
+        }
+        if (isset($body['phone'])) {
+            $fields[] = "phone = ?";
+            $params[] = trim($body['phone']);
+        }
+        if (array_key_exists('email', $body)) {
+            $fields[] = "email = ?";
+            $params[] = $body['email'] !== null ? trim($body['email']) : null;
+        }
+        if (array_key_exists('city', $body)) {
+            $fields[] = "city = ?";
+            $params[] = $body['city'] !== null ? trim($body['city']) : null;
+        }
+        if (array_key_exists('course', $body)) {
+            $fields[] = "course = ?";
+            $params[] = $body['course'] !== null ? trim($body['course']) : null;
+        }
+        if (array_key_exists('batch', $body)) {
+            $fields[] = "batch = ?";
+            $params[] = $body['batch'] !== null ? trim($body['batch']) : null;
+        }
+        if (array_key_exists('source', $body)) {
+            $fields[] = "source = ?";
+            $params[] = $body['source'] !== null ? trim($body['source']) : null;
+        }
+        if (isset($body['status'])) {
+            $fields[] = "status = ?";
+            $params[] = trim($body['status']);
+        }
+        if (array_key_exists('assignedTo', $body) || array_key_exists('assigned_to', $body)) {
+            $val = $body['assignedTo'] ?? $body['assigned_to'] ?? null;
+            $fields[] = "assigned_to = ?";
+            $params[] = $val !== null ? trim($val) : null;
+        }
+        if (array_key_exists('followUpDate', $body) || array_key_exists('follow_up_date', $body)) {
+            $val = $body['followUpDate'] ?? $body['follow_up_date'] ?? null;
+            $fields[] = "follow_up_date = ?";
+            $params[] = !empty($val) ? trim($val) : null;
+        }
+        if (array_key_exists('notes', $body)) {
+            $fields[] = "notes = ?";
+            $params[] = $body['notes'] !== null ? trim($body['notes']) : null;
+        }
+
+        if (empty($fields)) {
+            echo json_encode(normalizeEnquiry($existing));
+            return;
+        }
+
+        $now = date('Y-m-d H:i:s');
+        $fields[] = "updated_at = ?";
+        $params[] = $now;
+
+        $params[] = $id;
+
+        $sql = "UPDATE enquiries SET " . implode(", ", $fields) . " WHERE id = ?";
+        $updateStmt = $pdo->prepare($sql);
+        $updateStmt->execute($params);
+
+        $freshStmt = $pdo->prepare("SELECT * FROM enquiries WHERE id = ?");
+        $freshStmt->execute([$id]);
+        $updated = $freshStmt->fetch();
+
+        echo json_encode(normalizeEnquiry($updated));
+    } catch (PDOException $e) {
+        http_response_code(500);
+        echo json_encode(["message" => "Database error: " . $e->getMessage()]);
+    }
+}
+
+function getRemarks($pdo, $id) {
+    try {
+        ensureRemarksTable($pdo);
+        $id = (int)$id;
+        $stmt = $pdo->prepare("SELECT * FROM remarks WHERE enquiry_id = ? ORDER BY created_at ASC");
+        $stmt->execute([$id]);
+        $remarks = [];
+        while($row = $stmt->fetch()) {
+            $remarks[] = [
+                "id" => (int)$row['id'],
+                "enquiryId" => (int)$row['enquiry_id'],
+                "text" => $row['text'],
+                "author" => $row['author'],
+                "createdAt" => $row['created_at']
+            ];
+        }
+        echo json_encode($remarks);
+    } catch (PDOException $e) {
+        http_response_code(500);
+        echo json_encode(["message" => "Database error: " . $e->getMessage()]);
+    }
+}
+
+function addRemark($pdo, $id, $body, $user = null) {
+    try {
+        ensureRemarksTable($pdo);
+        $id = (int)$id;
+        $text = trim($body['text'] ?? ($body['remark'] ?? ''));
+        if (!$text) {
+            http_response_code(400);
+            echo json_encode(["message" => "Remark text is required."]);
+            return;
+        }
+
+        $author = trim($body['author'] ?? (!empty($user['name']) ? $user['name'] : (!empty($user['username']) ? $user['username'] : 'Admin')));
+        $now = date('Y-m-d H:i:s');
+
+        $stmt = $pdo->prepare("INSERT INTO remarks (enquiry_id, text, author, created_at) VALUES (?, ?, ?, ?)");
+        $stmt->execute([$id, $text, $author, $now]);
+        $remId = $pdo->lastInsertId();
+
+        echo json_encode([
+            "id" => (int)$remId,
+            "enquiryId" => $id,
+            "text" => $text,
+            "author" => $author,
+            "createdAt" => $now
+        ]);
+    } catch (PDOException $e) {
+        http_response_code(500);
+        echo json_encode(["message" => "Database error: " . $e->getMessage()]);
+    }
 }
 
 function createEnquiry($pdo, $body) {
@@ -85,13 +283,12 @@ function createEnquiry($pdo, $body) {
     getEnquiries($pdo, $id);
 }
 
-function updateEnquiry($pdo, $id, $body) {
-    // Implementation placeholder for updates and remarks...
-    http_response_code(501);
-    echo json_encode(["message" => "Not fully implemented in this preview."]);
-}
-
 function deleteEnquiry($pdo, $id) {
+    $id = (int)$id;
+    ensureRemarksTable($pdo);
+    try {
+        $pdo->prepare("DELETE FROM remarks WHERE enquiry_id = ?")->execute([$id]);
+    } catch (Exception $e) {}
     $stmt = $pdo->prepare("DELETE FROM enquiries WHERE id = ?");
     $stmt->execute([$id]);
     echo json_encode(["message" => "Enquiry deleted."]);

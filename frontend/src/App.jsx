@@ -251,8 +251,8 @@ export default function App() {
       success: true,
       onConfirm: async () => {
         try {
-          await api.confirmEnquiry(id);
-          setEnquiries(prev => prev.map(e => (String(e.id) === String(id) ? { ...e, status: "Confirmed" } : e)));
+          const res = await api.confirmEnquiry(id);
+          setEnquiries(prev => prev.map(e => (String(e.id) === String(id) ? { ...e, ...(res || {}), status: "Confirmed" } : e)));
           addToast(`Admission confirmed for ${lead.name || 'student'}`);
         } catch (err) {
           addToast(err.message || "Failed to confirm admission.", true);

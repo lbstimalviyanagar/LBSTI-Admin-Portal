@@ -137,15 +137,37 @@ if ($route === 'auth/login') {
     $user = requireAuth($authSecret);
     requireMenuPermission($user, 'enquiries', $pdo);
     
-    $parts = explode('/', $route);
-    $id = isset($parts[1]) ? $parts[1] : null;
-    $resource = isset($_GET['resource']) ? $_GET['resource'] : null;
+    $parts = explode('/', trim($route, '/'));
+    $id = isset($parts[1]) && $parts[1] !== '' ? $parts[1] : (isset($_GET['id']) ? $_GET['id'] : null);
+    $subAction = isset($parts[2]) && $parts[2] !== '' ? $parts[2] : (isset($_GET['resource']) ? $_GET['resource'] : null);
     
-    if ($id === 'bulk' && $method === 'POST') bulkCreateEnquiries($pdo, $body);
-    elseif ($method === 'GET') getEnquiries($pdo, $id, $resource);
-    elseif ($method === 'POST') createEnquiry($pdo, $body);
-    elseif ($method === 'PUT') updateEnquiry($pdo, $id, $body);
-    elseif ($method === 'DELETE') deleteEnquiry($pdo, $id);
+    if ($id === 'bulk' && $method === 'POST') {
+        bulkCreateEnquiries($pdo, $body);
+    } elseif ($id && $subAction === 'confirm' && $method === 'POST') {
+        confirmEnquiry($pdo, $id, $user);
+    } elseif ($id && $subAction === 'remarks') {
+        if ($method === 'GET') {
+            getRemarks($pdo, $id);
+        } elseif ($method === 'POST') {
+            addRemark($pdo, $id, $body, $user);
+        } else {
+            http_response_code(405);
+            echo json_encode(["message" => "Method not allowed"]);
+        }
+    } elseif ($id && ($method === 'PUT' || $method === 'PATCH')) {
+        updateEnquiry($pdo, $id, $body);
+    } elseif ($id && $method === 'DELETE') {
+        deleteEnquiry($pdo, $id);
+    } elseif ($id && $method === 'GET') {
+        getEnquiries($pdo, $id, $subAction);
+    } elseif (!$id && $method === 'POST') {
+        createEnquiry($pdo, $body);
+    } elseif (!$id && $method === 'GET') {
+        getEnquiries($pdo);
+    } else {
+        http_response_code(405);
+        echo json_encode(["message" => "Method not allowed"]);
+    }
 } elseif (strpos($route, 'users') === 0) {
     require 'controllers/UserController.php';
     $user = requireAuth($authSecret);
