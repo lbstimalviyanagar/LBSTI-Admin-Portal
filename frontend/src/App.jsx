@@ -590,6 +590,7 @@ export default function App() {
             <TasksPage
               user={user}
               users={usersList}
+              students={students}
               onToast={addToast}
             />
           )}

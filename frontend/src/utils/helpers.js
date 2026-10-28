@@ -128,6 +128,120 @@ export const fmtDateTime = (v) => {
   return `${d.getDate()} ${MON[d.getMonth()]} ${d.getFullYear()}, ${displayHour}:${m} ${ampm}`;
 };
 
+export const formatDeadline = (v) => {
+  if (!v) return "No deadline";
+  let d = null;
+  const raw = String(v).trim();
+  const isoLike = raw.includes('T') ? raw : raw.replace(' ', 'T');
+  d = new Date(isoLike);
+  if (isNaN(d.getTime())) d = new Date(raw);
+  if (isNaN(d.getTime())) return String(v);
+
+  const now = new Date();
+  const h = d.getHours();
+  const m = String(d.getMinutes()).padStart(2, "0");
+  const ampm = h < 12 ? "AM" : "PM";
+  const displayHour = h % 12 || 12;
+  const timeStr = `${displayHour}:${m} ${ampm}`;
+
+  const isToday = d.toDateString() === now.toDateString();
+  const tomorrow = new Date(now);
+  tomorrow.setDate(now.getDate() + 1);
+  const isTomorrow = d.toDateString() === tomorrow.toDateString();
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  const isYesterday = d.toDateString() === yesterday.toDateString();
+
+  if (isToday) return `Today at ${timeStr}`;
+  if (isTomorrow) return `Tomorrow at ${timeStr}`;
+  if (isYesterday) return `Yesterday at ${timeStr}`;
+  return `${d.getDate()} ${MON[d.getMonth()]} ${d.getFullYear()} at ${timeStr}`;
+};
+
+export const getTimeLeft = (deadlineInput, status = "") => {
+  if (!deadlineInput) return null;
+  const s = String(status || '').toLowerCase().trim();
+  if (s === 'submitted' || s === 'completed') {
+    return {
+      text: s === 'submitted' ? 'Submitted' : 'Completed',
+      color: 'green',
+      isOverdue: false,
+      isApproaching: false,
+      isCompleted: true,
+      diffMs: 0
+    };
+  }
+
+  let deadlineDate = null;
+  if (deadlineInput instanceof Date) {
+    deadlineDate = deadlineInput;
+  } else {
+    const raw = String(deadlineInput).trim();
+    const isoLike = raw.includes('T') ? raw : raw.replace(' ', 'T');
+    const parsed = new Date(isoLike);
+    if (!isNaN(parsed.getTime())) {
+      deadlineDate = parsed;
+    } else {
+      deadlineDate = new Date(raw);
+    }
+  }
+
+  if (!deadlineDate || isNaN(deadlineDate.getTime())) return null;
+
+  const now = new Date();
+  const diffMs = deadlineDate.getTime() - now.getTime();
+
+  if (diffMs < 0) {
+    const absDiff = Math.abs(diffMs);
+    const mins = Math.floor(absDiff / 60000);
+    const hrs = Math.floor(absDiff / 3600000);
+    const days = Math.floor(hrs / 24);
+
+    let text = "";
+    if (mins < 60) {
+      const m = Math.max(1, mins);
+      text = `Overdue by ${m} minute${m === 1 ? '' : 's'}`;
+    } else if (hrs < 24) {
+      text = `Overdue by ${hrs} hour${hrs === 1 ? '' : 's'}`;
+    } else {
+      text = `Overdue by ${days} day${days === 1 ? '' : 's'}`;
+    }
+
+    return {
+      text,
+      color: 'red',
+      isOverdue: true,
+      isApproaching: false,
+      diffMs
+    };
+  }
+
+  const mins = Math.floor(diffMs / 60000);
+  const hrs = Math.floor(diffMs / 3600000);
+  const days = Math.floor(hrs / 24);
+
+  let text = "";
+  if (mins < 60) {
+    const m = Math.max(1, mins);
+    text = `Due in ${m} minute${m === 1 ? '' : 's'}`;
+  } else if (hrs < 24) {
+    text = `${hrs} hour${hrs === 1 ? '' : 's'} left`;
+  } else {
+    text = `${days} day${days === 1 ? '' : 's'} left`;
+  }
+
+  const isWithin24Hours = diffMs <= 24 * 3600 * 1000;
+  const isApproaching = diffMs <= 2 * 3600 * 1000;
+
+  return {
+    text,
+    color: isWithin24Hours ? 'orange' : 'green',
+    isOverdue: false,
+    isApproaching,
+    diffMs
+  };
+};
+
 export const isoDay = (d) => {
   const x = new Date(d);
   const m = String(x.getMonth() + 1).padStart(2, "0");

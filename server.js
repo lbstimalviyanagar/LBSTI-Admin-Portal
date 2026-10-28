@@ -212,6 +212,47 @@ db.serialize(() => {
     )
   `);
 
+  db.run(`
+    CREATE TABLE IF NOT EXISTS staff_tasks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      assigned_to INTEGER,
+      assigned_by INTEGER,
+      title TEXT NOT NULL,
+      description TEXT,
+      due_date TEXT,
+      status TEXT DEFAULT 'Pending',
+      remarks TEXT,
+      assignee_type TEXT DEFAULT 'user',
+      assignee_name TEXT,
+      assignee_email TEXT,
+      assignee_phone TEXT,
+      assignee_student_id TEXT,
+      approaching_alert_sent INTEGER DEFAULT 0,
+      overdue_alert_sent INTEGER DEFAULT 0,
+      submitted_at TEXT,
+      submission_notes TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS task_notifications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      task_id INTEGER NOT NULL,
+      recipient_name TEXT,
+      recipient_email TEXT,
+      recipient_phone TEXT,
+      alert_type TEXT,
+      channel TEXT,
+      title TEXT,
+      message TEXT,
+      status TEXT DEFAULT 'sent',
+      response_payload TEXT,
+      created_at TEXT NOT NULL
+    )
+  `);
+
   db.run('ALTER TABLE portal_users ADD COLUMN profile_photo TEXT', (err) => {
     if (err && !/duplicate column name/i.test(err.message)) console.error('Unable to add portal_users.profile_photo:', err.message);
   });
@@ -651,6 +692,16 @@ app.post("/api/students", async (req, res) => {
       "INSERT INTO students (student_id, name, guardian_name, phone, email, remarks, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
       [body.studentId || "", body.name || "", body.guardianName || "", body.phone || "", body.email || "", body.remarks || "", now, now]
     );
+
+    if (body.course) {
+      const enrId = "ENR-" + (body.studentId || result.id) + "-" + Date.now().toString().slice(-4);
+      const doa = body.enrollmentDate || body.doa || now.split('T')[0];
+      await runSql(
+        "INSERT INTO enrollments (enrollment_id, student_id, doa, course, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [enrId, body.studentId || String(result.id), doa, body.course, "Active", now, now]
+      );
+    }
+
     const rows = await getSql("SELECT * FROM students WHERE id = ?", [result.id]);
     res.status(201).json(rows[0]);
   } catch (error) {
@@ -799,6 +850,199 @@ app.delete("/api/enrollments/:id", async (req, res) => {
     res.status(204).send();
   } catch (error) {
     res.status(500).json({ message: "Unable to delete enrollment." });
+  }
+});
+
+// Tasks Endpoints
+app.get('/api/tasks/options', async (req, res) => {
+  try {
+    const faculty = await getSql('SELECT id, full_name as name, username, role, profile_photo as profilePhotoUrl FROM portal_users ORDER BY full_name ASC');
+    const studentsList = await getSql('SELECT id, student_id as studentId, name, phone, email FROM students ORDER BY name ASC LIMIT 300');
+    res.json({ faculty, students: studentsList });
+  } catch (err) {
+    res.json({ faculty: [], students: [] });
+  }
+});
+
+app.post('/api/tasks/check-deadlines', async (req, res) => {
+  try {
+    const activeTasks = await getSql("SELECT * FROM staff_tasks WHERE due_date IS NOT NULL AND status NOT IN ('Submitted', 'Completed')");
+    const now = Date.now();
+    let triggeredCount = 0;
+    const alerts = [];
+
+    for (const t of activeTasks) {
+      const deadline = new Date(t.due_date).getTime();
+      if (!deadline) continue;
+      const diffMs = deadline - now;
+      const recipientName = t.assignee_name || 'Assignee';
+
+      // 1. Approaching (<= 2 hours)
+      if (diffMs > 0 && diffMs <= 2 * 3600 * 1000 && !t.approaching_alert_sent) {
+        triggeredCount++;
+        const minsLeft = Math.max(1, Math.round(diffMs / 60000));
+        const timeLeftStr = minsLeft < 60 ? `${minsLeft} minutes left` : `${Math.round(minsLeft/60)} hour(s) left`;
+        const title = `Approaching Deadline: ${t.title}`;
+        const msg = `Task '${t.title}' is due in ${timeLeftStr}. Please submit on time!`;
+
+        await runSql('INSERT INTO task_notifications (task_id, recipient_name, recipient_email, recipient_phone, alert_type, channel, title, message, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          [t.id, recipientName, t.assignee_email || null, t.assignee_phone || null, 'approaching', 'in_app', title, msg, 'sent', new Date().toISOString()]);
+        await runSql('UPDATE staff_tasks SET approaching_alert_sent = 1 WHERE id = ?', [t.id]);
+        alerts.push({ taskId: t.id, title: t.title, type: 'approaching' });
+      }
+
+      // 2. Overdue
+      if (diffMs <= 0 && !t.overdue_alert_sent) {
+        triggeredCount++;
+        const title = `Overdue Alert: ${t.title}`;
+        const msg = `Task '${t.title}' has passed its deadline and is not yet marked as submitted!`;
+
+        await runSql('INSERT INTO task_notifications (task_id, recipient_name, recipient_email, recipient_phone, alert_type, channel, title, message, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          [t.id, recipientName, t.assignee_email || null, t.assignee_phone || null, 'overdue', 'in_app', title, msg, 'sent', new Date().toISOString()]);
+        await runSql('UPDATE staff_tasks SET overdue_alert_sent = 1 WHERE id = ?', [t.id]);
+        alerts.push({ taskId: t.id, title: t.title, type: 'overdue' });
+      }
+    }
+
+    res.json({ success: true, triggeredCount, alerts });
+  } catch (err) {
+    res.status(500).json({ message: 'Unable to check deadlines', error: err.message });
+  }
+});
+
+app.get('/api/tasks/notifications', async (req, res) => {
+  try {
+    const taskId = req.query.task_id;
+    let rows;
+    if (taskId) {
+      rows = await getSql('SELECT * FROM task_notifications WHERE task_id = ? ORDER BY id DESC LIMIT 50', [taskId]);
+    } else {
+      rows = await getSql('SELECT * FROM task_notifications ORDER BY id DESC LIMIT 50');
+    }
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ message: 'Unable to fetch notifications', error: err.message });
+  }
+});
+
+app.post('/api/tasks/:id/submit', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const now = new Date().toISOString();
+    const notes = req.body?.submissionNotes || req.body?.remarks || '';
+    await runSql('UPDATE staff_tasks SET status = ?, submitted_at = ?, submission_notes = ? WHERE id = ?', ['Submitted', now, notes, id]);
+    const rows = await getSql('SELECT * FROM staff_tasks WHERE id = ?', [id]);
+    res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ message: 'Unable to submit task', error: err.message });
+  }
+});
+
+app.get('/api/tasks', async (req, res) => {
+  try {
+    const rows = await getSql(`
+      SELECT t.*, 
+             COALESCE(t.assignee_name, u.full_name, u.username, 'Assignee') as assigned_to_name,
+             u.profile_photo as assigned_to_photo
+      FROM staff_tasks t
+      LEFT JOIN portal_users u ON u.id = t.assigned_to
+      ORDER BY t.created_at DESC
+    `);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ message: 'Unable to fetch tasks', error: err.message });
+  }
+});
+
+app.post('/api/tasks', async (req, res) => {
+  try {
+    const b = camelCase(req.body || {});
+    const now = new Date().toISOString();
+    const result = await runSql(`
+      INSERT INTO staff_tasks 
+      (assigned_to, assigned_by, title, description, due_date, status, remarks, assignee_type, assignee_name, assignee_email, assignee_phone, assignee_student_id, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      b.assignedTo || 0,
+      1,
+      b.title || '',
+      b.description || '',
+      b.submissionDeadline || b.dueDate || null,
+      b.status || 'Pending',
+      b.remarks || '',
+      b.assigneeType || 'user',
+      b.assigneeName || '',
+      b.assigneeEmail || '',
+      b.assigneePhone || '',
+      b.assigneeStudentId || '',
+      now,
+      now
+    ]);
+    const rows = await getSql('SELECT * FROM staff_tasks WHERE id = ?', [result.id]);
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ message: 'Unable to create task', error: err.message });
+  }
+});
+
+app.patch('/api/tasks/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const b = camelCase(req.body || {});
+    const now = new Date().toISOString();
+    const setClauses = [];
+    const values = [];
+
+    const fieldMap = {
+      title: 'title',
+      description: 'description',
+      status: 'status',
+      remarks: 'remarks',
+      assignedTo: 'assigned_to',
+      assigneeType: 'assignee_type',
+      assigneeName: 'assignee_name',
+      assigneeEmail: 'assignee_email',
+      assigneePhone: 'assignee_phone',
+      assigneeStudentId: 'assignee_student_id'
+    };
+
+    if (b.submissionDeadline || b.dueDate) {
+      setClauses.push('due_date = ?');
+      values.push(b.submissionDeadline || b.dueDate);
+      setClauses.push('approaching_alert_sent = 0');
+      setClauses.push('overdue_alert_sent = 0');
+    }
+
+    for (const [k, col] of Object.entries(fieldMap)) {
+      if (b[k] !== undefined) {
+        setClauses.push(`${col} = ?`);
+        values.push(b[k]);
+      }
+    }
+
+    if (b.status === 'Submitted') {
+      setClauses.push('submitted_at = ?');
+      values.push(now);
+    }
+
+    setClauses.push('updated_at = ?');
+    values.push(now);
+    values.push(id);
+
+    await runSql(`UPDATE staff_tasks SET ${setClauses.join(', ')} WHERE id = ?`, values);
+    const rows = await getSql('SELECT * FROM staff_tasks WHERE id = ?', [id]);
+    res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ message: 'Unable to update task', error: err.message });
+  }
+});
+
+app.delete('/api/tasks/:id', async (req, res) => {
+  try {
+    await runSql('DELETE FROM staff_tasks WHERE id = ?', [Number(req.params.id)]);
+    res.status(204).send();
+  } catch (err) {
+    res.status(500).json({ message: 'Unable to delete task' });
   }
 });
 

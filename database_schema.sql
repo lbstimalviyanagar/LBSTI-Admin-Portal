@@ -107,21 +107,48 @@ CREATE TABLE IF NOT EXISTS `staff_attendance` (
   FOREIGN KEY (`staff_id`) REFERENCES `portal_users`(`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Module 2: Staff Task Management
+-- Module 2: Staff & Student Task Management with Deadline Tracking & Notifications
 CREATE TABLE IF NOT EXISTS `staff_tasks` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  `assigned_to` BIGINT UNSIGNED NOT NULL,
+  `assigned_to` BIGINT UNSIGNED DEFAULT 0,
   `assigned_by` BIGINT UNSIGNED NOT NULL,
   `title` VARCHAR(255) NOT NULL,
   `description` TEXT DEFAULT NULL,
-  `status` ENUM('Pending', 'In Progress', 'Completed') DEFAULT 'Pending',
+  `status` VARCHAR(50) NOT NULL DEFAULT 'Pending',
   `remarks` TEXT DEFAULT NULL,
-  `due_date` DATE DEFAULT NULL,
+  `due_date` DATETIME DEFAULT NULL,
+  `assignee_type` VARCHAR(20) DEFAULT 'user',
+  `assignee_name` VARCHAR(255) DEFAULT NULL,
+  `assignee_email` VARCHAR(255) DEFAULT NULL,
+  `assignee_phone` VARCHAR(50) DEFAULT NULL,
+  `assignee_student_id` VARCHAR(50) DEFAULT NULL,
+  `approaching_alert_sent` TINYINT(1) DEFAULT 0,
+  `overdue_alert_sent` TINYINT(1) DEFAULT 0,
+  `submitted_at` DATETIME DEFAULT NULL,
+  `submission_notes` TEXT DEFAULT NULL,
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  FOREIGN KEY (`assigned_to`) REFERENCES `portal_users`(`id`) ON DELETE CASCADE,
   FOREIGN KEY (`assigned_by`) REFERENCES `portal_users`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Module 2b: Automated Task Deadline Notifications Log
+CREATE TABLE IF NOT EXISTS `task_notifications` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `task_id` BIGINT UNSIGNED NOT NULL,
+  `recipient_name` VARCHAR(255) DEFAULT NULL,
+  `recipient_email` VARCHAR(255) DEFAULT NULL,
+  `recipient_phone` VARCHAR(50) DEFAULT NULL,
+  `alert_type` ENUM('approaching', 'overdue', 'assigned', 'submitted') NOT NULL,
+  `channel` ENUM('in_app', 'email', 'whatsapp') NOT NULL,
+  `title` VARCHAR(255) NOT NULL,
+  `message` TEXT NOT NULL,
+  `status` ENUM('sent', 'failed', 'logged') DEFAULT 'sent',
+  `response_payload` TEXT DEFAULT NULL,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  INDEX `idx_task` (`task_id`),
+  INDEX `idx_created` (`created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Module 3: Daily Batch Management

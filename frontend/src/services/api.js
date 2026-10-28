@@ -326,6 +326,19 @@ export const api = {
       body: data
     });
   },
+  async submitTask(id, data = {}) {
+    return request(`/tasks/${id}/submit`, {
+      method: "POST",
+      body: data
+    });
+  },
+  async checkTaskDeadlines() {
+    return request("/tasks/check-deadlines", { method: "POST" });
+  },
+  async getTaskNotifications(taskId = null) {
+    const q = taskId ? `?task_id=${taskId}` : "";
+    return request(`/tasks/notifications${q}`, { method: "GET" });
+  },
   async updateTask(id, patch) {
     return request(`/tasks/${id}`, {
       method: "PATCH",

@@ -14,7 +14,7 @@ export function hasMenuAccess(user, menuId) {
   }
 
   // Base role defaults if not explicitly configured:
-  if (role === 'teacher') {
+  if (role === 'teacher' || role === 'faculty') {
     return ['attendance', 'batches', 'tasks'].includes(menuId);
   }
 

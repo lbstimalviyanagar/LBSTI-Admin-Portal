@@ -243,7 +243,11 @@ if ($route === 'auth/login') {
     requireMenuPermission($user, 'tasks', $pdo);
     $parts = explode("/", $route);
     $id = isset($parts[1]) ? $parts[1] : null;
+    $subAction = isset($parts[2]) ? $parts[2] : null;
     if ($method === "GET" && ($id === "options" || $id === "filters")) getTaskFilterOptions($pdo);
+    elseif (($method === "GET" || $method === "POST") && $id === "check-deadlines") checkTaskDeadlines($pdo, $user);
+    elseif ($method === "GET" && $id === "notifications") getTaskNotifications($pdo, $user);
+    elseif ($method === "POST" && $id && $subAction === "submit") submitTask($pdo, $user, $id, $body);
     elseif ($method === "GET") getTasks($pdo, $user);
     elseif ($method === "POST") createTask($pdo, $user, $body);
     elseif ($method === "PUT" || $method === "PATCH") updateTask($pdo, $user, $id, $body);

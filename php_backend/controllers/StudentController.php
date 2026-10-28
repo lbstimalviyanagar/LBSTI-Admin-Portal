@@ -176,7 +176,7 @@ function createStudent($pdo, $body) {
             // If different "Course Selection" -> ALLOW: Add new course registration under the same student identity
             $now = date("Y-m-d H:i:s");
             $newEnrId = generateNextEnrollmentId($pdo);
-            $doa = !empty($body["doa"]) ? $body["doa"] : date("Y-m-d");
+            $doa = !empty($body["enrollmentDate"]) ? $body["enrollmentDate"] : (!empty($body["doa"]) ? $body["doa"] : date("Y-m-d"));
             $insertEnr = $pdo->prepare("INSERT INTO enrollments (enrollment_id, student_id, doa, course, status, created_at, updated_at) VALUES (?, ?, ?, ?, 'Active', ?, ?)");
             $insertEnr->execute([$newEnrId, $existingStudentId, $doa, $course, $now, $now]);
 
@@ -222,7 +222,7 @@ function createStudent($pdo, $body) {
     // Create enrollment for the course if selected
     if (!empty($course)) {
         $newEnrId = generateNextEnrollmentId($pdo);
-        $doa = !empty($body["doa"]) ? $body["doa"] : date("Y-m-d");
+        $doa = !empty($body["enrollmentDate"]) ? $body["enrollmentDate"] : (!empty($body["doa"]) ? $body["doa"] : date("Y-m-d"));
         $insertEnr = $pdo->prepare("INSERT INTO enrollments (enrollment_id, student_id, doa, course, status, created_at, updated_at) VALUES (?, ?, ?, ?, 'Active', ?, ?)");
         $insertEnr->execute([$newEnrId, $finalStudentId, $doa, $course, $now, $now]);
     }

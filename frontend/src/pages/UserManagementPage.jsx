@@ -52,7 +52,7 @@ export default function UserManagementPage({ currentUser, onUpdateUser }) {
       setEditingUser(user);
       const existingPerms = user.menuPermissions && user.menuPermissions.length > 0
         ? user.menuPermissions
-        : user.role === 'teacher'
+        : (user.role === 'teacher' || user.role === 'faculty')
           ? ['attendance', 'batches', 'tasks']
           : ['enquiries', 'payments', 'students', 'attendance', 'tasks', 'batches'];
 
@@ -311,9 +311,10 @@ export default function UserManagementPage({ currentUser, onUpdateUser }) {
                     onChange={e => setFormData({...formData, role: e.target.value})}
                   >
                     <option value="admin">Admin</option>
+                    <option value="faculty">Faculty</option>
+                    <option value="teacher">Teacher</option>
                     <option value="receptionist">Receptionist</option>
                     <option value="counselor">Counselor</option>
-                    <option value="teacher">Teacher</option>
                   </select>
                 </div>
                 {formData.role !== 'admin' && (

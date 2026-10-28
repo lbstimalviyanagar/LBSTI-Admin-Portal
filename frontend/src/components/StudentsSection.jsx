@@ -44,7 +44,8 @@ export default function StudentsSection({ students = [], enrollments = [], loadi
     phone: "",
     email: "",
     course: "",
-    remarks: ""
+    remarks: "",
+    enrollmentDate: new Date().toISOString().split('T')[0]
   });
   const [duplicateError, setDuplicateError] = useState("");
 
@@ -231,6 +232,8 @@ export default function StudentsSection({ students = [], enrollments = [], loadi
     try {
       const res = await api.createStudent({
         ...newStudent,
+        doa: newStudent.enrollmentDate,
+        enrollmentDate: newStudent.enrollmentDate,
         studentId: existingMatch ? existingMatch.studentId : (newStudent.studentId || "Autofilled")
       });
       if (res && res.isExistingStudent) {
@@ -238,7 +241,16 @@ export default function StudentsSection({ students = [], enrollments = [], loadi
       } else {
         addToast("Enrollment created successfully!");
       }
-      setNewStudent({ studentId: "", name: "", guardianName: "", phone: "", email: "", course: "", remarks: "" });
+      setNewStudent({
+        studentId: "",
+        name: "",
+        guardianName: "",
+        phone: "",
+        email: "",
+        course: "",
+        remarks: "",
+        enrollmentDate: new Date().toISOString().split('T')[0]
+      });
       setDuplicateError("");
       onRefresh();
     } catch (err) {
@@ -627,6 +639,17 @@ export default function StudentsSection({ students = [], enrollments = [], loadi
                   placeholder="Any additional remarks..."
                   value={newStudent.remarks}
                   onChange={e => setNewStudent({...newStudent, remarks: e.target.value})}
+                />
+              </div>
+              <div className="fld">
+                <label htmlFor="st-enrollment-date">Enrollment Date <em>*</em></label>
+                <input
+                  id="st-enrollment-date"
+                  type="date"
+                  className="input"
+                  value={newStudent.enrollmentDate || ""}
+                  onChange={e => setNewStudent({...newStudent, enrollmentDate: e.target.value})}
+                  required
                 />
               </div>
             </div>
