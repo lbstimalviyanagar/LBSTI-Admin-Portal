@@ -305,6 +305,24 @@ export default function App() {
     }
   };
 
+  // Update Fee Payment Handler
+  const handleUpdatePayment = async (id, payload) => {
+    try {
+      const updated = await api.updateFee(id, payload);
+      if (updated) {
+        setFees(prev => prev.map(f => String(f.id) === String(id) ? updated : f));
+      } else {
+        const freshFees = await api.getFees();
+        setFees(freshFees || []);
+      }
+      addToast("Fee payment updated successfully.");
+      return updated;
+    } catch (err) {
+      addToast(err.message || "Failed to update payment.", true);
+      throw err;
+    }
+  };
+
   // Delete Fee Payment Handler
   const handleDeletePayment = (id) => {
     setConfirmDialogState({
@@ -545,6 +563,7 @@ export default function App() {
               enrollments={enrollments}
               loading={loading}
               onSavePayment={handleSavePayment}
+              onUpdatePayment={handleUpdatePayment}
               onDeletePayment={handleDeletePayment}
               onToast={addToast}
             />

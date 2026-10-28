@@ -8,6 +8,7 @@ export default function PaymentsPage({
   enrollments,
   loading,
   onSavePayment,
+  onUpdatePayment,
   onDeletePayment,
   onToast
 }) {
@@ -19,6 +20,7 @@ export default function PaymentsPage({
       enrollments={enrollments}
       loading={loading}
       onSavePayment={onSavePayment}
+      onUpdatePayment={onUpdatePayment}
       onDeletePayment={onDeletePayment}
       onToast={onToast}
     />

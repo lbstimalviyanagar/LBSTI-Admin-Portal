@@ -193,7 +193,7 @@ if ($route === 'auth/login') {
     
     if ($method === 'GET') getFees($pdo, $id);
     elseif ($method === 'POST') createFee($pdo, $body, $user);
-    elseif ($method === 'PUT') updateFee($pdo, $id, $body);
+    elseif ($method === 'PUT' || $method === 'PATCH') updateFee($pdo, $id, $body);
     elseif ($method === 'DELETE') deleteFee($pdo, $id);
 } elseif (strpos($route, 'receipts') === 0) {
     require 'controllers/ReceiptController.php';

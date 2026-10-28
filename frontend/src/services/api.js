@@ -173,6 +173,13 @@ export const api = {
     });
   },
 
+  async updateFee(id, patch) {
+    return request(`/fees/${id}`, {
+      method: "PATCH",
+      body: patch
+    });
+  },
+
   async deleteFee(id) {
     return request(`/fees/${id}`, {
       method: "DELETE"

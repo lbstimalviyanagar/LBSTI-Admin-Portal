@@ -219,6 +219,7 @@ export default function PaymentsSection({
   enrollments = [],
   loading = false,
   onSavePayment,
+  onUpdatePayment,
   onDeletePayment,
   onToast
 }) {
@@ -243,6 +244,8 @@ export default function PaymentsSection({
   const [relation, setRelation] = useState('');
   const [paymentDate, setPaymentDate] = useState(isoDay(new Date()));
   const [notes, setNotes] = useState('');
+  const [othersDescription, setOthersDescription] = useState('');
+  const [editingPayment, setEditingPayment] = useState(null);
   const [selectedReceiptPaymentId, setSelectedReceiptPaymentId] = useState('');
   const [savingPayment, setSavingPayment] = useState(false);
 
@@ -439,10 +442,83 @@ export default function PaymentsSection({
     setRelation('');
     setPaymentDate(isoDay(new Date()));
     setNotes('');
+    setOthersDescription('');
+    setEditingPayment(null);
     setBreakdown(Object.fromEntries(FEE_ITEMS.map(([key]) => [key, { cash: 0, cheque: 0, online: 0 }])));
     setTotalCourseFeesDue('');
     setNetPaymentReceived('');
     setOutstandingBalance('');
+  };
+
+  const handleStartEditPayment = (fee) => {
+    setEditingPayment(fee);
+    setFeeTab('payment');
+
+    const matchedStudent = students.find(s =>
+      String(s.id) === String(fee.enquiryId) ||
+      (fee.studentId && String(s.studentId) === String(fee.studentId)) ||
+      (fee.studentName && s.name && s.name.toLowerCase() === fee.studentName.toLowerCase())
+    ) || enquiries.find(e =>
+      String(e.id) === String(fee.enquiryId) ||
+      (fee.studentName && e.name && e.name.toLowerCase() === fee.studentName.toLowerCase())
+    );
+
+    if (matchedStudent) {
+      setSelectedStudent(matchedStudent);
+      setSearchQuery(matchedStudent.name || fee.studentName || '');
+      const courses = extractStudentCourses(matchedStudent, enrollments);
+      setStudentCourseOptions(courses);
+    } else {
+      setSelectedStudent({
+        id: fee.enquiryId || fee.id,
+        name: fee.studentName || 'Student',
+        studentId: fee.studentId || ''
+      });
+      setSearchQuery(fee.studentName || '');
+    }
+
+    const details = fee.receiptDetails || {};
+    setSelectedCourse(fee.course || details.course || '');
+    if (fee.enrollmentId) setSelectedEnrollmentId(fee.enrollmentId);
+
+    setPaymentDate(fee.paymentDate ? isoDay(parseDate(fee.paymentDate)) : isoDay(new Date()));
+    setFeeMonth(fee.billingMonth || details.month || isoDay(new Date()).slice(0, 7));
+    setRelation(details.relation || '');
+    setNotes(fee.notes || '');
+
+    const items = details.items && typeof details.items === 'object' ? details.items : {
+      others: {
+        cash: String(fee.mode || '').toLowerCase().includes('cash') ? Number(fee.amount || 0) : 0,
+        cheque: String(fee.mode || '').toLowerCase().includes('cheque') ? Number(fee.amount || 0) : 0,
+        online: (String(fee.mode || '').toLowerCase().includes('upi') || String(fee.mode || '').toLowerCase().includes('online')) ? Number(fee.amount || 0) : 0
+      }
+    };
+    const initialBreakdown = Object.fromEntries(
+      FEE_ITEMS.map(([k]) => [
+        k,
+        {
+          cash: Number((items[k] || {}).cash) || 0,
+          cheque: Number((items[k] || {}).cheque) || 0,
+          online: Number((items[k] || {}).online) || 0
+        }
+      ])
+    );
+    setBreakdown(initialBreakdown);
+
+    const desc = fee.othersDescription || details.othersDescription || '';
+    setOthersDescription(desc);
+
+    setTotalCourseFeesDue(
+      fee.totalDue != null ? String(fee.totalDue) : (details.totalCourseFeesDue != null ? String(details.totalCourseFeesDue) : '')
+    );
+    setNetPaymentReceived(fee.amount != null ? String(fee.amount) : '');
+    setOutstandingBalance(
+      fee.balance != null ? String(fee.balance) : (details.outstandingBalance != null ? String(details.outstandingBalance) : '')
+    );
+
+    if (onToast) {
+      onToast(`Editing payment record #${fee.id} for ${fee.studentName || 'Student'}`);
+    }
   };
 
   const handleSubmitPayment = async (e) => {
@@ -494,6 +570,7 @@ export default function PaymentsSection({
       paymentDate: paymentDate || isoDay(new Date()),
       mode,
       notes: notes.trim(),
+      othersDescription: othersDescription.trim(),
       receiptDetails: {
         batch: isBulk ? "All Enrolled Courses (Bulk)" : selectedCourse.trim(),
         course: finalCourseName,
@@ -506,12 +583,22 @@ export default function PaymentsSection({
         enrollmentId: isBulk ? "BULK" : (selectedEnrollmentId || undefined),
         month: feeMonth,
         relation: relation.trim(),
+        othersDescription: othersDescription.trim(),
         items: breakdown
       }
     };
 
     try {
-      await onSavePayment(payload);
+      if (editingPayment && editingPayment.id) {
+        if (onUpdatePayment) {
+          await onUpdatePayment(editingPayment.id, payload);
+        } else {
+          await api.updateFee(editingPayment.id, payload);
+          onToast("Payment record updated successfully.");
+        }
+      } else {
+        await onSavePayment(payload);
+      }
       handleClearForm();
       setFeeTab('history');
     } catch (err) {
@@ -649,17 +736,20 @@ export default function PaymentsSection({
     const monthValue = details.month || (fee.paymentDate ? String(fee.paymentDate).slice(0, 7) : "");
     const monthLabel = monthValue ? new Date(`${monthValue}-01T00:00:00`).toLocaleDateString("en-IN", { month: "long", year: "numeric" }) : "–";
     const amountWords = numberToIndianWords(total);
-
+    const othersDesc = fee.othersDescription || details.othersDescription || '';
     const rowsHtml = FEE_ITEMS.map(([key, label], index) => {
       const item = items[key] || {};
       const cash = Number(item.cash) || 0;
       const cheque = Number(item.cheque) || 0;
       const online = Number(item.online) || 0;
       const itemTotal = cash + cheque + online;
+      const displayLabel = (key === 'others' && othersDesc)
+        ? `${label} (${othersDesc})`
+        : label;
       return `
         <tr>
           <td>${index + 1}.</td>
-          <th scope="row">${label}</th>
+          <th scope="row">${displayLabel}</th>
           <td>${cash ? `₹${cash.toLocaleString("en-IN")}` : ''}</td>
           <td>${cheque ? `₹${cheque.toLocaleString("en-IN")}` : ''}</td>
           <td>${online ? `₹${online.toLocaleString("en-IN")}` : ''}</td>
@@ -781,12 +871,14 @@ export default function PaymentsSection({
     const course = fee.course || student.course || student.courses || 'Professional Course';
     const dateStr = fee.paymentDate ? fmtDate(fee.paymentDate) : fmtDate(new Date());
     const mode = fee.mode || 'Cash';
-    const receiptNo = fee.receiptNumber || `LBSTI-${new Date(fee.paymentDate || Date.now()).getFullYear()}-${String(fee.id).padStart(6, '0')}`;
+    const othersDesc = fee.othersDescription || (fee.receiptDetails && fee.receiptDetails.othersDescription) || '';
+    const descLine = othersDesc ? `*Description:* ${othersDesc}\n` : '';
 
     const text = `*OFFICIAL FEE RECEIPT - ${ORG.shortName || 'LBSTI'}*\n\n` +
       `*Receipt No:* ${receiptNo}\n` +
       `*Student Name:* ${studentName}\n` +
       `*Course:* ${course}\n` +
+      descLine +
       `*Amount Paid:* ₹${amount}\n` +
       `*Payment Mode:* ${mode}\n` +
       `*Date:* ${dateStr}\n` +
@@ -813,6 +905,7 @@ export default function PaymentsSection({
     const headers = [
       "Form No.", "Student", "Course", "Batch", "Fee month", "Relation",
       ...itemColumns.map(([, label]) => label),
+      "Others Description",
       "Total", "Mode", "Date", "Received by", "Notes"
     ];
     const escapeCsv = (v) => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;
@@ -844,6 +937,7 @@ export default function PaymentsSection({
           details.month || "",
           details.relation || "",
           ...breakdownValues,
+          f.othersDescription || details.othersDescription || "",
           f.amount,
           f.mode,
           f.paymentDate ? isoDay(parseDate(f.paymentDate)) : "",
@@ -953,7 +1047,8 @@ export default function PaymentsSection({
           course,
           amount,
           mode,
-          status
+          status,
+          othersDescription: f.othersDescription || f.receiptDetails?.othersDescription || ''
         };
       });
     }
@@ -1222,7 +1317,14 @@ export default function PaymentsSection({
                           {tx.studentPhone && <small style={{ color: 'var(--muted)', fontSize: '0.78rem' }}>{tx.studentPhone}</small>}
                         </td>
                         <td>{tx.date}</td>
-                        <td>{tx.course}</td>
+                        <td>
+                          <div>{tx.course}</div>
+                          {tx.othersDescription ? (
+                            <small style={{ display: 'block', color: 'var(--muted)', fontSize: '0.78rem' }}>
+                              For: {tx.othersDescription}
+                            </small>
+                          ) : null}
+                        </td>
                         <td>
                           <strong style={{ color: '#0f172a' }}>₹{Number(tx.amount || 0).toLocaleString('en-IN')}</strong>
                         </td>
@@ -1316,8 +1418,36 @@ export default function PaymentsSection({
         <section>
           <form className="card form-card" onSubmit={handleSubmitPayment} noValidate>
             <div className="form-body">
-              <h3>Record a payment</h3>
-              <p className="lead">Search for an enrolled student by Name, Student ID, or Phone number.</p>
+              {editingPayment && (
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '12px 16px',
+                  marginBottom: '16px',
+                  backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                  border: '1px solid #f59e0b',
+                  borderRadius: '8px',
+                  color: '#b45309'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600 }}>
+                    <Icon name="edit" size={18} />
+                    <span>
+                      Editing payment record #{editingPayment.id} for {editingPayment.studentName || 'Student'}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn sm"
+                    onClick={handleClearForm}
+                    style={{ padding: '4px 12px', fontSize: '0.8rem' }}
+                  >
+                    Cancel edit
+                  </button>
+                </div>
+              )}
+              <h3>{editingPayment ? `Edit Payment #${editingPayment.id}` : 'Record a payment'}</h3>
+              <p className="lead">{editingPayment ? 'Update payment particulars, amounts, and custom descriptions.' : 'Search for an enrolled student by Name, Student ID, or Phone number.'}</p>
 
               <div className="fgrid">
                 {/* Smart Student Search */}
@@ -1714,9 +1844,34 @@ export default function PaymentsSection({
                       </thead>
                       <tbody>
                         {FEE_ITEMS.map(([key, label]) => (
-                          <tr key={key}>
-                            <th scope="row">{label}</th>
-                            <td>
+                          <tr key={key} className={key === 'others' ? 'particulars-row-others' : ''}>
+                            <th scope="row" style={{ verticalAlign: key === 'others' ? 'top' : 'middle' }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                <span style={{ fontWeight: 600 }}>{label}</span>
+                                {key === 'others' && (
+                                  <input
+                                    id="others-payment-description"
+                                    className="input"
+                                    type="text"
+                                    placeholder="Enter payment description (e.g., Transport Fee, Exam Fee, ID Card Fee)"
+                                    value={othersDescription}
+                                    onChange={(e) => setOthersDescription(e.target.value)}
+                                    style={{
+                                      fontSize: '0.8125rem',
+                                      fontWeight: 'normal',
+                                      padding: '7px 10px',
+                                      width: '100%',
+                                      minWidth: '240px',
+                                      color: 'var(--txt)',
+                                      backgroundColor: 'var(--bg-elevated, var(--card-bg, #fff))',
+                                      border: '1px solid var(--border)',
+                                      borderRadius: '6px'
+                                    }}
+                                  />
+                                )}
+                              </div>
+                            </th>
+                            <td style={{ verticalAlign: key === 'others' ? 'top' : 'middle' }}>
                               <input
                                 className="input"
                                 type="number"
@@ -1726,7 +1881,7 @@ export default function PaymentsSection({
                                 onChange={(e) => handleBreakdownChange(key, 'cash', e.target.value)}
                               />
                             </td>
-                            <td>
+                            <td style={{ verticalAlign: key === 'others' ? 'top' : 'middle' }}>
                               <input
                                 className="input"
                                 type="number"
@@ -1736,7 +1891,7 @@ export default function PaymentsSection({
                                 onChange={(e) => handleBreakdownChange(key, 'cheque', e.target.value)}
                               />
                             </td>
-                            <td>
+                            <td style={{ verticalAlign: key === 'others' ? 'top' : 'middle' }}>
                               <input
                                 className="input"
                                 type="number"
@@ -1958,7 +2113,7 @@ export default function PaymentsSection({
                 type="submit"
                 disabled={savingPayment}
               >
-                {savingPayment ? 'Saving…' : 'Save payment'}
+                {savingPayment ? (editingPayment ? 'Updating…' : 'Saving…') : (editingPayment ? 'Update payment' : 'Save payment')}
               </button>
             </div>
           </form>
@@ -2030,9 +2185,27 @@ export default function PaymentsSection({
                         </td>
                         <td>{fmtDate(f.paymentDate)}</td>
                         <td>{f.receivedBy || "–"}</td>
-                        <td>{f.notes || "–"}</td>
+                        <td>
+                          {f.othersDescription || f.receiptDetails?.othersDescription ? (
+                            <div style={{ marginBottom: f.notes ? '4px' : 0 }}>
+                              <span className="pill s-confirmed" style={{ fontSize: '0.75rem', padding: '1px 7px', display: 'inline-block' }}>
+                                For: {f.othersDescription || f.receiptDetails?.othersDescription}
+                              </span>
+                            </div>
+                          ) : null}
+                          <span>{f.notes || (!f.othersDescription && !f.receiptDetails?.othersDescription ? "–" : "")}</span>
+                        </td>
                         <td className="payment-actions-cell">
                           <div className="payment-actions-group">
+                            <button
+                              className="btn sm"
+                              type="button"
+                              title="Edit payment"
+                              onClick={() => handleStartEditPayment(f)}
+                            >
+                              <span className="ic"><Icon name="edit" size={14} /></span>
+                              <span>Edit</span>
+                            </button>
                             <button
                               className="btn sm danger"
                               type="button"
@@ -2098,7 +2271,7 @@ export default function PaymentsSection({
                   <option value="">Select a payment...</option>
                   {historyFees.map((f) => (
                     <option key={f.id} value={f.id}>
-                      {f.studentName || "Student"} — ₹{Number(f.amount || 0).toLocaleString("en-IN")} — {fmtDate(f.paymentDate)}
+                      {f.studentName || "Student"} — ₹{Number(f.amount || 0).toLocaleString("en-IN")} — {fmtDate(f.paymentDate)}{(f.othersDescription || f.receiptDetails?.othersDescription) ? ` (${f.othersDescription || f.receiptDetails?.othersDescription})` : ''}
                     </option>
                   ))}
                 </select>

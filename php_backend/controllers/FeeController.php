@@ -12,6 +12,7 @@ function ensureFeesTable($pdo) {
             mode VARCHAR(100),
             received_by VARCHAR(255) DEFAULT 'Admin',
             notes TEXT,
+            others_description VARCHAR(255) DEFAULT NULL,
             receipt_details TEXT,
             receipt_number VARCHAR(100),
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -26,17 +27,18 @@ function ensureFeesTable($pdo) {
     // Each ALTER is in its own try-catch so one failure doesn't block others.
     // ---------------------------------------------------------------
     $columnsToAdd = [
-        "student_name"    => "VARCHAR(255) DEFAULT NULL",
-        "course"          => "VARCHAR(255) DEFAULT NULL",
-        "enrollment_id"   => "VARCHAR(50) DEFAULT NULL",
-        "course_id"       => "VARCHAR(50) DEFAULT NULL",
-        "billing_month"   => "VARCHAR(50) DEFAULT NULL",
-        "balance"         => "DECIMAL(12,2) DEFAULT 0",
-        "total_due"       => "DECIMAL(12,2) DEFAULT 0",
-        "is_bulk"         => "TINYINT(1) DEFAULT 0",
-        "receipt_details" => "TEXT DEFAULT NULL",
-        "receipt_number"  => "VARCHAR(100) DEFAULT NULL",
-        "updated_at"      => "DATETIME DEFAULT CURRENT_TIMESTAMP",
+        "student_name"       => "VARCHAR(255) DEFAULT NULL",
+        "course"             => "VARCHAR(255) DEFAULT NULL",
+        "enrollment_id"      => "VARCHAR(50) DEFAULT NULL",
+        "course_id"          => "VARCHAR(50) DEFAULT NULL",
+        "billing_month"      => "VARCHAR(50) DEFAULT NULL",
+        "balance"            => "DECIMAL(12,2) DEFAULT 0",
+        "total_due"          => "DECIMAL(12,2) DEFAULT 0",
+        "is_bulk"            => "TINYINT(1) DEFAULT 0",
+        "others_description" => "VARCHAR(255) DEFAULT NULL",
+        "receipt_details"    => "TEXT DEFAULT NULL",
+        "receipt_number"     => "VARCHAR(100) DEFAULT NULL",
+        "updated_at"         => "DATETIME DEFAULT CURRENT_TIMESTAMP",
     ];
 
     // Fetch existing column names
@@ -90,6 +92,8 @@ function createFee($pdo, $body, $user) {
     $mode           = isset($body["mode"])            ? $body["mode"]                : "Cash";
     $notes          = isset($body["notes"])           ? $body["notes"]               : "";
     $receiptDetails = isset($body["receiptDetails"])  ? $body["receiptDetails"]      : null;
+    $othersDescription = isset($body["othersDescription"]) ? trim($body["othersDescription"]) : (!empty($receiptDetails["othersDescription"]) ? trim($receiptDetails["othersDescription"]) : null);
+    if ($othersDescription === '') $othersDescription = null;
 
     // Course selection
     $selectedCourse = "";
@@ -174,6 +178,7 @@ function createFee($pdo, $body, $user) {
         $receiptDetails["totalCourseFeesDue"] = $totalCourseFeesDue;
         $receiptDetails["outstandingBalance"] = $outstandingBalance;
         $receiptDetails["isSettled"] = $outstandingBalance <= 0;
+        if ($othersDescription) $receiptDetails["othersDescription"] = $othersDescription;
         if ($enrollmentId) $receiptDetails["enrollmentId"] = $enrollmentId;
         if ($courseId) $receiptDetails["courseId"] = $courseId;
         if ($billingMonth) $receiptDetails["month"] = $billingMonth;
@@ -185,14 +190,14 @@ function createFee($pdo, $body, $user) {
     // NOTE: created_at and updated_at are set automatically via DEFAULT CURRENT_TIMESTAMP.
     $stmt = $pdo->prepare(
         "INSERT INTO fees
-            (enquiry_id, student_name, course, enrollment_id, course_id, billing_month, amount, balance, total_due, is_bulk, payment_date, mode, received_by, notes, receipt_details)
+            (enquiry_id, student_name, course, enrollment_id, course_id, billing_month, amount, balance, total_due, is_bulk, payment_date, mode, received_by, notes, others_description, receipt_details)
          VALUES
-            (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     );
     $stmt->execute([
         $enquiryId, $studentName, $selectedCourse, $enrollmentId, $courseId, $billingMonth,
         $amount, $outstandingBalance, $totalCourseFeesDue, ($isBulk ? 1 : 0),
-        $paymentDate, $mode, $receivedBy, $notes,
+        $paymentDate, $mode, $receivedBy, $notes, $othersDescription,
         $receiptDetailsJson
     ]);
 
@@ -233,21 +238,25 @@ function createFee($pdo, $body, $user) {
 }
 
 function updateFee($pdo, $id, $body) {
+    ensureFeesTable($pdo);
+
     $updates = [];
     $params  = [];
 
     $fields = [
-        "amount"       => "amount",
-        "paymentDate"  => "payment_date",
-        "mode"         => "mode",
-        "notes"        => "notes",
-        "course"       => "course",
-        "enrollmentId" => "enrollment_id",
-        "courseId"     => "course_id",
-        "billingMonth" => "billing_month",
-        "balance"      => "balance",
-        "totalDue"     => "total_due",
-        "isBulk"       => "is_bulk"
+        "amount"            => "amount",
+        "paymentDate"       => "payment_date",
+        "mode"              => "mode",
+        "notes"             => "notes",
+        "course"            => "course",
+        "enrollmentId"      => "enrollment_id",
+        "courseId"          => "course_id",
+        "billingMonth"      => "billing_month",
+        "balance"           => "balance",
+        "totalDue"          => "total_due",
+        "isBulk"            => "is_bulk",
+        "othersDescription" => "others_description",
+        "others_description"=> "others_description"
     ];
 
     foreach ($fields as $jsonKey => $dbKey) {
@@ -258,8 +267,26 @@ function updateFee($pdo, $id, $body) {
     }
 
     if (array_key_exists("receiptDetails", $body)) {
+        $rd = $body["receiptDetails"];
+        if (is_array($rd) && array_key_exists("othersDescription", $body) && !isset($rd["othersDescription"])) {
+            $rd["othersDescription"] = $body["othersDescription"];
+        }
         $updates[] = "receipt_details = ?";
-        $params[]  = json_encode($body["receiptDetails"]);
+        $params[]  = json_encode($rd);
+    } elseif (array_key_exists("othersDescription", $body)) {
+        try {
+            $s = $pdo->prepare("SELECT receipt_details FROM fees WHERE id = ?");
+            $s->execute([$id]);
+            $r = $s->fetch();
+            if ($r && !empty($r["receipt_details"])) {
+                $dec = json_decode($r["receipt_details"], true);
+                if (is_array($dec)) {
+                    $dec["othersDescription"] = $body["othersDescription"];
+                    $updates[] = "receipt_details = ?";
+                    $params[]  = json_encode($dec);
+                }
+            }
+        } catch (Exception $e) {}
     }
 
     if (count($updates) > 0) {
@@ -294,24 +321,25 @@ function normalizeFee($row) {
         }
     }
     return [
-        "id"             => (int)$row["id"],
-        "enquiryId"      => (int)($row["enquiry_id"]   ?? 0),
-        "studentName"    => $row["student_name"]        ?? "Student",
-        "course"         => $row["course"]              ?? "",
-        "enrollmentId"   => $row["enrollment_id"]       ?? null,
-        "courseId"       => $row["course_id"]           ?? null,
-        "billingMonth"   => $row["billing_month"]       ?? ($receiptDetails["month"] ?? null),
-        "amount"         => (float)($row["amount"]      ?? 0),
-        "balance"        => (float)($row["balance"]     ?? 0),
-        "totalDue"       => (float)($row["total_due"]   ?? 0),
-        "isBulk"         => (bool)($row["is_bulk"]      ?? 0),
-        "paymentDate"    => $row["payment_date"]        ?? "",
-        "mode"           => $row["mode"]                ?? "Cash",
-        "receivedBy"     => $row["received_by"]         ?? "Admin",
-        "notes"          => $row["notes"]               ?? "",
-        "receiptDetails" => $receiptDetails,
-        "receiptNumber"  => $row["receipt_number"]      ?? null,
-        "createdAt"      => $row["created_at"]          ?? "",
-        "updatedAt"      => $row["updated_at"]          ?? ""
+        "id"                => (int)$row["id"],
+        "enquiryId"         => (int)($row["enquiry_id"]   ?? 0),
+        "studentName"       => $row["student_name"]        ?? "Student",
+        "course"            => $row["course"]              ?? "",
+        "enrollmentId"      => $row["enrollment_id"]       ?? null,
+        "courseId"          => $row["course_id"]           ?? null,
+        "billingMonth"      => $row["billing_month"]       ?? ($receiptDetails["month"] ?? null),
+        "amount"            => (float)($row["amount"]      ?? 0),
+        "balance"           => (float)($row["balance"]     ?? 0),
+        "totalDue"          => (float)($row["total_due"]   ?? 0),
+        "isBulk"            => (bool)($row["is_bulk"]      ?? 0),
+        "paymentDate"       => $row["payment_date"]        ?? "",
+        "mode"              => $row["mode"]                ?? "Cash",
+        "receivedBy"        => $row["received_by"]         ?? "Admin",
+        "notes"             => $row["notes"]               ?? "",
+        "othersDescription" => $row["others_description"]  ?? ($receiptDetails["othersDescription"] ?? ""),
+        "receiptDetails"    => $receiptDetails,
+        "receiptNumber"     => $row["receipt_number"]      ?? null,
+        "createdAt"         => $row["created_at"]          ?? "",
+        "updatedAt"         => $row["updated_at"]          ?? ""
     ];
 }
