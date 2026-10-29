@@ -2447,6 +2447,25 @@ td:has(.empty), td:has(.skel) {
   font-variant-numeric: tabular-nums;
 }
 
+/* Interactive Donut filtering */
+.donut-svg-wrap.has-active .seg.dimmed {
+  opacity: 0.22 !important;
+}
+
+.donut-svg-wrap.has-active .seg.active {
+  opacity: 1 !important;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+}
+
+.legend li.active {
+  background: #eff6ff !important;
+  border-color: #93c5fd !important;
+}
+
+.legend.has-active li:not(.active) {
+  opacity: 0.45;
+}
+
 /* ---------- New Enquiry / Edit lead: extra fields ---------- */
 .new-lead-grid {
   grid-template-columns: repeat(4, minmax(0, 1fr));

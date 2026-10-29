@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import Icon from './Icons';
 import DonutChart from './Charts/DonutChart';
 import { useResponsive } from '../hooks/useResponsive';
@@ -46,6 +46,16 @@ export default function EnquiryDashboard({
 }) {
   const { width: windowWidth, isMobile, isTablet } = useResponsive();
   const [courseViewMode, setCourseViewMode] = useState('auto'); // 'auto' | 'bars' (horizontal rows) | 'columns' (vertical bars)
+  const [activeSourceFilter, setActiveSourceFilter] = useState(null);
+
+  const handleSourceClick = (sourceName) => {
+    setActiveSourceFilter(prev => {
+      if (prev && String(prev).trim().toLowerCase() === String(sourceName).trim().toLowerCase()) {
+        return null;
+      }
+      return sourceName;
+    });
+  };
 
   const r = rangeOf(dashRangeKind, dashFrom, dashTo);
   const list = enquiries.filter(e => inRange(e, r));
@@ -169,11 +179,24 @@ export default function EnquiryDashboard({
     }))
     .sort((a, b) => b.v - a.v);
 
-  // Recent 8 leads
-  const recentLeads = enquiries
-    .slice()
-    .sort((a, b) => (+parseDate(b.createdAt) || 0) - (+parseDate(a.createdAt) || 0))
-    .slice(0, 8);
+  // Filtered recent leads (filtered by activeSourceFilter when clicked on chart)
+  const displayedLeads = useMemo(() => {
+    const pool = list.length > 0 ? list : enquiries;
+    let filteredList = pool;
+
+    if (activeSourceFilter) {
+      const target = String(activeSourceFilter).trim().toLowerCase();
+      filteredList = pool.filter(e => {
+        const s = String(e.source || "Other").trim().toLowerCase();
+        return s === target;
+      });
+    }
+
+    return filteredList
+      .slice()
+      .sort((a, b) => (+parseDate(b.createdAt) || 0) - (+parseDate(a.createdAt) || 0))
+      .slice(0, activeSourceFilter ? 25 : 8);
+  }, [enquiries, list, activeSourceFilter]);
 
   const rangeLabels = {
     all: "All Time",
@@ -252,39 +275,135 @@ export default function EnquiryDashboard({
       </div>
 
       {/* Recent Leads Table Card */}
-      <div className="card section">
+      <div className="card section" id="dashboard-recent-leads">
         <div className="card-head">
           <div>
-            <h3>Recent leads</h3>
-            <p>The latest enquiries, newest first.</p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <h3 style={{ margin: 0 }}>
+                {activeSourceFilter ? `Leads from "${activeSourceFilter}"` : "Recent leads"}
+              </h3>
+              {activeSourceFilter && (
+                <span
+                  style={{
+                    background: '#2563eb',
+                    color: '#ffffff',
+                    fontSize: '0.74rem',
+                    fontWeight: 700,
+                    padding: '2px 8px',
+                    borderRadius: '999px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                >
+                  Filtered
+                </span>
+              )}
+            </div>
+            <p style={{ margin: '4px 0 0' }}>
+              {activeSourceFilter
+                ? `Showing enquiries acquired through ${activeSourceFilter} (${displayedLeads.length} ${displayedLeads.length === 1 ? 'record' : 'records'})`
+                : "The latest enquiries, newest first."}
+            </p>
           </div>
-          <button
-            className="btn sm"
-            type="button"
-            onClick={() => onDrillIntoTable({})}
-          >
-            View all <Icon name="chevR" size={16} />
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            {activeSourceFilter && (
+              <button
+                className="btn sm"
+                type="button"
+                onClick={() => setActiveSourceFilter(null)}
+                style={{
+                  color: '#b91c1c',
+                  borderColor: '#fca5a5',
+                  background: '#fef2f2',
+                  fontWeight: 600
+                }}
+                title="Reset source filter"
+              >
+                Clear filter ✕
+              </button>
+            )}
+            <button
+              className="btn sm"
+              type="button"
+              onClick={() => onDrillIntoTable(activeSourceFilter ? { source: activeSourceFilter } : {})}
+            >
+              View all <Icon name="chevR" size={16} />
+            </button>
+          </div>
         </div>
+
+        {activeSourceFilter && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '8px',
+              background: '#eff6ff',
+              border: '1px solid #bfdbfe',
+              padding: '10px 18px',
+              borderRadius: '8px',
+              margin: '0 20px 14px 20px',
+              fontSize: '0.88rem'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <span style={{ fontWeight: 700, color: '#1e40af' }}>Active Filter:</span>
+              <span style={{ color: '#1e293b' }}>
+                Showing only leads from source <b>"{activeSourceFilter}"</b>
+              </span>
+              <span style={{ color: '#64748b', fontSize: '0.82rem' }}>
+                ({displayedLeads.length} {displayedLeads.length === 1 ? 'lead' : 'leads'} found)
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setActiveSourceFilter(null)}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: '#2563eb',
+                fontWeight: 700,
+                cursor: 'pointer',
+                textDecoration: 'underline',
+                fontSize: '0.84rem'
+              }}
+            >
+              Reset to all sources ✕
+            </button>
+          </div>
+        )}
 
         <div className="tbl-scroll">
           {loading ? (
             <div style={{ padding: '18px 22px' }}>
               <div className="skel" style={{ height: '240px' }} />
             </div>
-          ) : recentLeads.length === 0 ? (
+          ) : displayedLeads.length === 0 ? (
             <div className="empty">
               <div className="ei"><Icon name="inbox" size={24} /></div>
-              <b>No enquiries yet</b>
-              <span>New leads will appear here.</span>
+              <b>No enquiries found{activeSourceFilter ? ` for "${activeSourceFilter}"` : " yet"}</b>
+              <span>{activeSourceFilter ? `There are no leads with source "${activeSourceFilter}" in the selected date range.` : "New leads will appear here."}</span>
               <br />
-              <button
-                className="btn primary"
-                type="button"
-                onClick={onGoToNewLead}
-              >
-                Add an enquiry
-              </button>
+              {activeSourceFilter ? (
+                <button
+                  className="btn primary sm"
+                  type="button"
+                  onClick={() => setActiveSourceFilter(null)}
+                >
+                  Clear source filter
+                </button>
+              ) : (
+                <button
+                  className="btn primary"
+                  type="button"
+                  onClick={onGoToNewLead}
+                >
+                  Add an enquiry
+                </button>
+              )}
             </div>
           ) : (
             <table>
@@ -302,7 +421,7 @@ export default function EnquiryDashboard({
                 </tr>
               </thead>
               <tbody>
-                {recentLeads.map((e) => {
+                {displayedLeads.map((e) => {
                   const d = parseDate(e.followUpDate);
                   const isOverdue = d && dayDiff(new Date(), d) < 0;
                   return (
@@ -581,14 +700,59 @@ export default function EnquiryDashboard({
             </div>
           </div>
 
-          <div className="card chart-card">
-            <h3>Leads by Source</h3>
-            <p>Where enquiries are coming from</p>
+          <div className="card chart-card" id="leads-by-source-card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '8px', marginBottom: '6px' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.08rem', fontWeight: 800 }}>Leads by Source</h3>
+                <p style={{ margin: '2px 0 0', color: 'var(--muted)', fontSize: '0.86rem' }}>
+                  Where enquiries are coming from
+                </p>
+              </div>
+              {activeSourceFilter && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <button
+                    type="button"
+                    className="btn sm"
+                    onClick={() => {
+                      const el = document.getElementById('dashboard-recent-leads');
+                      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }}
+                    style={{
+                      fontSize: '0.78rem',
+                      padding: '3px 8px',
+                      background: '#eff6ff',
+                      color: '#2563eb',
+                      borderColor: '#bfdbfe'
+                    }}
+                  >
+                    View in table ↑
+                  </button>
+                  <button
+                    type="button"
+                    className="btn sm"
+                    onClick={() => setActiveSourceFilter(null)}
+                    style={{
+                      fontSize: '0.78rem',
+                      padding: '3px 8px',
+                      color: '#b91c1c',
+                      borderColor: '#fca5a5'
+                    }}
+                    title="Reset source filter"
+                  >
+                    Reset ✕
+                  </button>
+                </div>
+              )}
+            </div>
+            <p style={{ margin: '0 0 12px 0', fontSize: '0.78rem', color: '#64748b' }}>
+              💡 Click any slice or legend item to filter the table {activeSourceFilter ? `(filtered by "${activeSourceFilter}")` : ''}
+            </p>
             <DonutChart
               items={sourceItems}
               aria="Leads by source"
               centerLabel="leads"
-              onClick={(name) => onDrillIntoTable({ source: name })}
+              activeItem={activeSourceFilter}
+              onClick={handleSourceClick}
             />
           </div>
         </div>
