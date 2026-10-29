@@ -539,7 +539,7 @@ export default function AttendancePage({ user, users = [], onToast }) {
           </div>
         ) : (
           <>
-            <table className="table">
+            <table className="table mobile-card-stack">
               <thead>
                 <tr>
                   {user?.role === 'admin' && (
@@ -604,7 +604,7 @@ export default function AttendancePage({ user, users = [], onToast }) {
                     );
                   })
                 ) : (
-                  <tr>
+                  <tr className="empty-row">
                     <td colSpan={user?.role === 'admin' ? 6 : 5}>
                       {records.length === 0 ? (
                         <div className="empty">

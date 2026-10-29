@@ -75,6 +75,12 @@ export default function DonutChart({
     }
   };
 
+  const handleTouch = (ev) => {
+    if (ev.touches && ev.touches[0]) {
+      handleMouseMove(ev.touches[0]);
+    }
+  };
+
   return (
     <div className="donut-wrap">
       <div
@@ -83,6 +89,8 @@ export default function DonutChart({
         style={{ cursor: onClick ? 'pointer' : 'default' }}
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
+        onTouchStart={handleTouch}
+        onTouchMove={handleTouch}
         onClick={handleClick}
       >
         <svg className="donut" viewBox="0 0 180 180" role="img" aria-label={aria}>

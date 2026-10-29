@@ -2758,6 +2758,149 @@ td:has(.empty), td:has(.skel) {
     padding: 9px 10px;
     font-size: 0.84rem;
   }
+
+  /* ==========================================================================
+     Mobile Card Stack Layout for Data Tables
+     ========================================================================== */
+  table.mobile-card-stack {
+    min-width: 100% !important;
+    width: 100% !important;
+    border-collapse: separate !important;
+    border-spacing: 0 !important;
+  }
+
+  /* 1. Visually hide the main table header */
+  table.mobile-card-stack thead {
+    display: none !important;
+  }
+
+  table.mobile-card-stack tbody {
+    display: block !important;
+    width: 100% !important;
+  }
+
+  /* 2. Convert each table row into a styled card using flex-col */
+  table.mobile-card-stack tr {
+    display: flex !important;
+    flex-direction: column !important;
+    background: #ffffff !important;
+    border: 1px solid var(--line, #e2e8f0) !important;
+    border-radius: 12px !important;
+    padding: 14px 16px !important;
+    margin-bottom: 12px !important;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05) !important;
+    box-sizing: border-box !important;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  table.mobile-card-stack tr:last-child {
+    margin-bottom: 0 !important;
+  }
+
+  /* 3. Convert each table data cell to a flex container (flex-row, justify-between, items-center, with a light bottom border) */
+  table.mobile-card-stack td {
+    display: flex !important;
+    flex-direction: row !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    border: none !important;
+    border-bottom: 1px solid #f1f5f9 !important;
+    padding: 10px 0 !important;
+    width: 100% !important;
+    font-size: 0.88rem !important;
+    white-space: normal !important;
+    box-sizing: border-box !important;
+    min-height: 38px !important;
+  }
+
+  table.mobile-card-stack td:first-child {
+    padding-top: 2px !important;
+  }
+
+  table.mobile-card-stack td:last-child {
+    border-bottom: none !important;
+    padding-bottom: 2px !important;
+  }
+
+  /* 4. Prepend the corresponding column name as a bold inline label on the left, with dynamic value on the right */
+  table.mobile-card-stack td::before {
+    content: attr(data-label);
+    font-weight: 700 !important;
+    font-size: 0.82rem !important;
+    color: #475569 !important;
+    text-align: left !important;
+    margin-right: 12px !important;
+    flex-shrink: 0 !important;
+  }
+
+  table.mobile-card-stack td > * {
+    text-align: right !important;
+  }
+
+  /* 5. Ensure Active status badges and text colors remain intact */
+  table.mobile-card-stack td .pill {
+    margin-left: auto !important;
+    font-size: 0.78rem !important;
+    font-weight: 700 !important;
+    padding: 3px 10px !important;
+  }
+
+  /* Empty state handling */
+  table.mobile-card-stack tr.empty-row {
+    display: block !important;
+    padding: 24px 16px !important;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+
+  table.mobile-card-stack tr.empty-row td {
+    display: block !important;
+    border: none !important;
+    padding: 0 !important;
+    text-align: center !important;
+  }
+
+  table.mobile-card-stack tr.empty-row td::before {
+    display: none !important;
+  }
+
+  table.mobile-card-stack tr.empty-row td > * {
+    text-align: center !important;
+  }
+}
+
+/* Responsive chart toggle and helpers */
+.chart-mode-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: var(--card-2, #f1f5f9);
+  padding: 3px;
+  border-radius: 8px;
+  border: 1px solid var(--line, #e2e8f0);
+}
+
+.chart-mode-btn {
+  border: none;
+  background: transparent;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--muted, #64748b);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.chart-mode-btn.active {
+  background: #ffffff;
+  color: #1e293b;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  font-weight: 700;
 }
 
 /* ---------- Boot splash ---------- */

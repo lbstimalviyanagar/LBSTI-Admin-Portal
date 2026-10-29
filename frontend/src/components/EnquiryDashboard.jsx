@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import Icon from './Icons';
 import DonutChart from './Charts/DonutChart';
+import { useResponsive } from '../hooks/useResponsive';
 import {
   ResponsiveContainer,
   LineChart,
@@ -43,6 +44,9 @@ export default function EnquiryDashboard({
   onDrillIntoTable,
   onGoToNewLead
 }) {
+  const { width: windowWidth, isMobile, isTablet } = useResponsive();
+  const [courseViewMode, setCourseViewMode] = useState('auto'); // 'auto' | 'bars' (horizontal rows) | 'columns' (vertical bars)
+
   const r = rangeOf(dashRangeKind, dashFrom, dashTo);
   const list = enquiries.filter(e => inRange(e, r));
   const today = sod(new Date());
@@ -378,13 +382,23 @@ export default function EnquiryDashboard({
           <div className="card chart-card">
             <h3>Inquiry Trends</h3>
             <p>New enquiries · {rangeLabels[dashRangeKind]}</p>
-            <div style={{ width: '100%', height: 300 }}>
+            <div style={{ width: '100%', height: isMobile ? 260 : 300 }}>
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={getBuckets()} margin={{ top: 20, right: 35, left: 0, bottom: 20 }}>
+                <LineChart data={getBuckets()} margin={{ top: 20, right: isMobile ? 15 : 35, left: isMobile ? -15 : 0, bottom: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.3} />
-                  <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#64748b' }} />
-                  <YAxis allowDecimals={false} tick={{ fontSize: 12, fill: '#64748b' }} />
-                  <Tooltip />
+                  <XAxis dataKey="label" tick={{ fontSize: isMobile ? 10 : 11, fill: '#64748b' }} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: isMobile ? 11 : 12, fill: '#64748b' }} />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#0f172a',
+                      borderColor: '#334155',
+                      borderRadius: '8px',
+                      color: '#ffffff',
+                      fontSize: '12px',
+                      boxShadow: '0 8px 20px rgba(0,0,0,0.2)'
+                    }}
+                    itemStyle={{ color: '#60a5fa' }}
+                  />
                   <Line type="monotone" dataKey="v" stroke="#3b82f6" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
                 </LineChart>
               </ResponsiveContainer>
@@ -392,48 +406,139 @@ export default function EnquiryDashboard({
           </div>
 
           <div className="card chart-card">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '6px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
               <div>
-                <h3>Enquiries by Course</h3>
-                <p>Where the interest is coming from</p>
+                <h3 style={{ margin: 0, fontSize: '1.08rem', fontWeight: 800 }}>Enquiries by Course</h3>
+                <p style={{ margin: '2px 0 0', color: 'var(--muted)', fontSize: '0.86rem' }}>Where the interest is coming from</p>
               </div>
-              <span className="chart-swipe-hint">
-                <Icon name="arrowRight" size={13} /> Scroll horizontally to view all courses
-              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                {(courseViewMode === 'columns' || (!isMobile && courseViewMode === 'auto')) && (
+                  <span className="chart-swipe-hint">
+                    <Icon name="arrowRight" size={13} /> Swipe horizontally
+                  </span>
+                )}
+                <div className="chart-mode-toggle" role="group" aria-label="Course chart view mode">
+                  <button
+                    type="button"
+                    className={`chart-mode-btn ${(courseViewMode === 'bars' || (courseViewMode === 'auto' && (isMobile || courseItems.length > 7))) ? 'active' : ''}`}
+                    onClick={() => setCourseViewMode('bars')}
+                    title="Horizontal rows (recommended for mobile with long course names)"
+                  >
+                    Rows
+                  </button>
+                  <button
+                    type="button"
+                    className={`chart-mode-btn ${(courseViewMode === 'columns' || (courseViewMode === 'auto' && !isMobile && courseItems.length <= 7)) ? 'active' : ''}`}
+                    onClick={() => setCourseViewMode('columns')}
+                    title="Vertical columns with swipe scroll"
+                  >
+                    Columns
+                  </button>
+                </div>
+              </div>
             </div>
-            <div className="chart-scroll-wrapper">
-              <div className="chart-scroll-inner-courses">
+
+            {(courseViewMode === 'bars' || (courseViewMode === 'auto' && (isMobile || courseItems.length > 7))) ? (
+              /* Horizontal Bar Chart (Rows) - Ideal for mobile so long course names are completely horizontal, non-overlapping and clean */
+              <div style={{ width: '100%', height: Math.max(320, courseItems.length * (isMobile ? 36 : 40)), minHeight: 320 }}>
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={courseItems} margin={{ top: 20, right: 35, left: 0, bottom: 65 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.3} />
-                    <XAxis 
-                      dataKey="name" 
-                      angle={-30} 
-                      textAnchor="end" 
-                      interval={0} 
-                      height={70} 
-                      tick={{ fontSize: 11, fill: '#64748b' }}
-                      tickFormatter={(val) => val.length > 18 ? `${val.substring(0, 16)}...` : val}
+                  <BarChart
+                    layout="vertical"
+                    data={courseItems}
+                    margin={{ top: 15, right: isMobile ? 25 : 35, left: isMobile ? 5 : 20, bottom: 15 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} opacity={0.3} />
+                    <XAxis
+                      type="number"
+                      allowDecimals={false}
+                      tick={{ fontSize: isMobile ? 11 : 12, fill: '#64748b' }}
                     />
-                    <YAxis allowDecimals={false} tick={{ fontSize: 12, fill: '#64748b' }} />
-                    <Tooltip />
-                    <Bar dataKey="v" fill="#1e3a8a" radius={[6, 6, 0, 0]} />
+                    <YAxis
+                      type="category"
+                      dataKey="name"
+                      width={isMobile ? 125 : 175}
+                      interval={0}
+                      tick={{ fontSize: isMobile ? 10 : 11, fill: '#334155', fontWeight: 500 }}
+                      tickFormatter={(val) => val.length > (isMobile ? 18 : 26) ? `${val.substring(0, isMobile ? 16 : 24)}...` : val}
+                    />
+                    <Tooltip
+                      formatter={(val) => [val, 'Enquiries']}
+                      labelFormatter={(label) => `Course: ${label}`}
+                      contentStyle={{
+                        backgroundColor: '#0f172a',
+                        borderColor: '#334155',
+                        borderRadius: '8px',
+                        color: '#ffffff',
+                        fontSize: '12px',
+                        boxShadow: '0 8px 20px rgba(0,0,0,0.2)'
+                      }}
+                      itemStyle={{ color: '#60a5fa' }}
+                    />
+                    <Bar dataKey="v" fill="#1e3a8a" radius={[0, 6, 6, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
-            </div>
+            ) : (
+              /* Vertical Bar Chart (Columns) with Generous Dynamic Spacing and Smooth Horizontal Swipe */
+              <div className="chart-scroll-wrapper">
+                <div style={{ width: `${Math.max(windowWidth - (isMobile ? 40 : 120), courseItems.length * (isMobile ? 80 : 95))}px`, height: isMobile ? 340 : 360, minWidth: '100%' }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={courseItems}
+                      margin={{ top: 20, right: 35, left: isMobile ? -10 : 0, bottom: isMobile ? 80 : 70 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.3} />
+                      <XAxis
+                        dataKey="name"
+                        angle={-45}
+                        textAnchor="end"
+                        interval={0}
+                        height={isMobile ? 80 : 70}
+                        tick={{ fontSize: isMobile ? 10 : 11, fill: '#64748b' }}
+                        tickFormatter={(val) => val.length > (isMobile ? 16 : 20) ? `${val.substring(0, isMobile ? 14 : 18)}...` : val}
+                      />
+                      <YAxis allowDecimals={false} tick={{ fontSize: 12, fill: '#64748b' }} />
+                      <Tooltip
+                        formatter={(val) => [val, 'Enquiries']}
+                        labelFormatter={(label) => `Course: ${label}`}
+                        contentStyle={{
+                          backgroundColor: '#0f172a',
+                          borderColor: '#334155',
+                          borderRadius: '8px',
+                          color: '#ffffff',
+                          fontSize: '12px',
+                          boxShadow: '0 8px 20px rgba(0,0,0,0.2)'
+                        }}
+                        itemStyle={{ color: '#60a5fa' }}
+                      />
+                      <Bar dataKey="v" fill="#1e3a8a" radius={[6, 6, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="card chart-card">
             <h3>Counselor Workload</h3>
             <p>Open leads assigned per counselor</p>
-            <div style={{ width: '100%', height: 320 }}>
+            <div style={{ width: '100%', height: isMobile ? 280 : 320 }}>
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={workloadItems} margin={{ top: 20, right: 35, left: 0, bottom: 20 }}>
+                <BarChart data={workloadItems} margin={{ top: 20, right: isMobile ? 20 : 35, left: isMobile ? -15 : 0, bottom: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.3} />
-                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#64748b' }} />
+                  <XAxis dataKey="name" tick={{ fontSize: isMobile ? 10 : 11, fill: '#64748b' }} />
                   <YAxis allowDecimals={false} tick={{ fontSize: 12, fill: '#64748b' }} />
-                  <Tooltip />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#0f172a',
+                      borderColor: '#334155',
+                      borderRadius: '8px',
+                      color: '#ffffff',
+                      fontSize: '12px',
+                      boxShadow: '0 8px 20px rgba(0,0,0,0.2)'
+                    }}
+                    itemStyle={{ color: '#ea580c' }}
+                  />
                   <Bar dataKey="v" fill="#ea580c" radius={[6, 6, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
@@ -444,21 +549,31 @@ export default function EnquiryDashboard({
             <h3>Lead Status Overview</h3>
             <p>Where enquiries stand right now</p>
             <div className="chart-scroll-wrapper">
-              <div className="chart-scroll-inner-status">
+              <div style={{ width: isMobile ? '460px' : '100%', height: isMobile ? 280 : 320, minWidth: isMobile ? '460px' : '100%' }}>
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={statusItems} margin={{ top: 20, right: 35, left: 0, bottom: 65 }}>
+                  <BarChart data={statusItems} margin={{ top: 20, right: 25, left: isMobile ? -15 : 0, bottom: isMobile ? 55 : 65 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.3} />
-                    <XAxis 
-                      dataKey="name" 
-                      angle={-30} 
-                      textAnchor="end" 
-                      interval={0} 
-                      height={70} 
-                      tick={{ fontSize: 11, fill: '#64748b' }}
+                    <XAxis
+                      dataKey="name"
+                      angle={isMobile ? -25 : -30}
+                      textAnchor="end"
+                      interval={0}
+                      height={isMobile ? 55 : 70}
+                      tick={{ fontSize: isMobile ? 10 : 11, fill: '#64748b' }}
                       tickFormatter={(val) => val.length > 14 ? `${val.substring(0, 12)}...` : val}
                     />
                     <YAxis allowDecimals={false} tick={{ fontSize: 12, fill: '#64748b' }} />
-                    <Tooltip />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: '#0f172a',
+                        borderColor: '#334155',
+                        borderRadius: '8px',
+                        color: '#ffffff',
+                        fontSize: '12px',
+                        boxShadow: '0 8px 20px rgba(0,0,0,0.2)'
+                      }}
+                      itemStyle={{ color: '#047857' }}
+                    />
                     <Bar dataKey="v" fill="#047857" radius={[6, 6, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
