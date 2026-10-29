@@ -10,6 +10,7 @@ export default function PaymentsPage({
   onSavePayment,
   onUpdatePayment,
   onDeletePayment,
+  onRefresh,
   onToast
 }) {
   return (
@@ -22,6 +23,7 @@ export default function PaymentsPage({
       onSavePayment={onSavePayment}
       onUpdatePayment={onUpdatePayment}
       onDeletePayment={onDeletePayment}
+      onRefresh={onRefresh}
       onToast={onToast}
     />
   );

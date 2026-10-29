@@ -592,6 +592,7 @@ export default function App() {
               onSavePayment={handleSavePayment}
               onUpdatePayment={handleUpdatePayment}
               onDeletePayment={handleDeletePayment}
+              onRefresh={() => loadData(false)}
               onToast={addToast}
             />
           )}

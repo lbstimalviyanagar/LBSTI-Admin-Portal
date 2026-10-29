@@ -14,6 +14,7 @@ import {
   addDays,
   dayDiff,
   fmtShort,
+  rangeOf,
   MON,
   ORG
 } from '../utils/helpers';
@@ -227,18 +228,54 @@ export default function PaymentsSection({
   onSavePayment,
   onUpdatePayment,
   onDeletePayment,
+  onRefresh,
   onToast
 }) {
   const [feeTab, setFeeTab] = useState('dashboard'); // 'dashboard' | 'payment' | 'history' | 'receipt'
   
-  // Global Date Range Filter state (applies to Dashboard & Payment History)
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-  const hasDateFilter = Boolean(startDate || endDate);
+  // Date Range Filter state (preset options: all, today, yesterday, week, month, lastmonth, custom)
+  const [dateRangeKind, setDateRangeKind] = useState('all');
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Outstanding Dues Modal state
+  const [showDuesModal, setShowDuesModal] = useState(false);
+  const [duesSearch, setDuesSearch] = useState('');
+
+  const activeRange = useMemo(() => {
+    return rangeOf(dateRangeKind, customFrom, customTo);
+  }, [dateRangeKind, customFrom, customTo]);
+
+  const hasDateFilter = dateRangeKind !== 'all';
+
+  const rangeLabel = useMemo(() => {
+    if (dateRangeKind === 'week') return 'This Week';
+    if (dateRangeKind === 'month') return 'This Month';
+    if (dateRangeKind === 'lastmonth') return 'Last Month';
+    if (dateRangeKind === 'today') return 'Today';
+    if (dateRangeKind === 'yesterday') return 'Yesterday';
+    if (dateRangeKind === 'custom') {
+      return `${customFrom ? fmtDate(customFrom) : 'Start'} – ${customTo ? fmtDate(customTo) : 'End'}`;
+    }
+    return 'All Time';
+  }, [dateRangeKind, customFrom, customTo]);
 
   const handleClearDateFilter = () => {
-    setStartDate('');
-    setEndDate('');
+    setDateRangeKind('all');
+    setCustomFrom('');
+    setCustomTo('');
+  };
+
+  const handleRefresh = async () => {
+    if (onRefresh) {
+      setRefreshing(true);
+      try {
+        await onRefresh();
+      } finally {
+        setRefreshing(false);
+      }
+    }
   };
 
   // Smart search state
@@ -464,6 +501,32 @@ export default function PaymentsSection({
     setTotalCourseFeesDue('');
     setNetPaymentReceived('');
     setOutstandingBalance('');
+  };
+
+  const handleCollectStudentDue = (dueItem) => {
+    setShowDuesModal(false);
+    const matched = (students || []).find(s =>
+      (dueItem.studentId && s.studentId === dueItem.studentId) ||
+      (dueItem.phone && dueItem.phone !== '–' && s.phone === dueItem.phone) ||
+      (dueItem.name && s.name && s.name.toLowerCase() === dueItem.name.toLowerCase())
+    ) || (enquiries || []).find(e =>
+      (dueItem.phone && dueItem.phone !== '–' && e.phone === dueItem.phone) ||
+      (dueItem.name && e.name && e.name.toLowerCase() === dueItem.name.toLowerCase())
+    );
+
+    if (matched) {
+      handleSelectStudent(matched);
+    } else {
+      handleSelectStudent({
+        id: dueItem.id,
+        studentId: dueItem.studentId,
+        name: dueItem.name,
+        phone: dueItem.phone,
+        course: dueItem.course,
+        balance: dueItem.balance
+      });
+    }
+    setFeeTab('payment');
   };
 
   const handleStartEditPayment = (fee) => {
@@ -715,28 +778,18 @@ export default function PaymentsSection({
     ];
   }, [fees]);
 
-  // Filtered payments by global Date Range (inclusive)
+  // Filtered payments by global Date Range
   const filteredFees = useMemo(() => {
-    if (!startDate && !endDate) return baseFeesList;
-
-    const s = startDate ? parseDate(startDate) : null;
-    const e = endDate ? parseDate(endDate) : null;
-
-    const start = s ? sod(s) : null;
-    const end = e ? sod(e) : null;
-
-    const minDate = (start && end && start > end) ? end : start;
-    const maxDate = (start && end && start > end) ? start : end;
+    if (!hasDateFilter || (!activeRange.start && !activeRange.end)) return baseFeesList;
 
     return baseFeesList.filter((f) => {
       const pDate = parseDate(f.paymentDate);
       if (!pDate) return false;
-      const day = sod(pDate);
-      if (minDate && day < minDate) return false;
-      if (maxDate && day > maxDate) return false;
+      if (activeRange.start && pDate < activeRange.start) return false;
+      if (activeRange.end && pDate >= activeRange.end) return false;
       return true;
     });
-  }, [baseFeesList, startDate, endDate]);
+  }, [baseFeesList, hasDateFilter, activeRange]);
 
   const historyFees = filteredFees;
 
@@ -1042,21 +1095,107 @@ export default function PaymentsSection({
   const monthTotal = monthFees.reduce((sum, f) => sum + (Number(f.amount) || 0), 0);
   const avgPayment = filteredFees.length ? Math.round(totalCollected / filteredFees.length) : 0;
 
-  // Fee Dues Analytics calculation
-  const totalOutstandingDues = useMemo(() => {
-    let dues = 0;
-    enquiries.forEach(e => {
-      if (e.balance && !isNaN(Number(e.balance))) {
-        dues += Number(e.balance);
+  // Outstanding Dues Breakdown calculation
+  const pendingDuesList = useMemo(() => {
+    const map = new Map();
+
+    // 1. From students
+    (students || []).forEach(s => {
+      const bal = Number(s.balance);
+      if (bal > 0) {
+        const key = s.studentId || `stud-${s.id}`;
+        let course = '';
+        if (Array.isArray(s.enrolledCourses) && s.enrolledCourses.length > 0) {
+          course = typeof s.enrolledCourses[0] === 'string' ? s.enrolledCourses[0] : (s.enrolledCourses[0].course || '');
+        } else {
+          const enr = (enrollments || []).find(en => String(en.studentId) === String(s.studentId));
+          if (enr) course = enr.course;
+          else {
+            const enq = (enquiries || []).find(e => (s.phone && e.phone === s.phone) || (s.name && e.name && e.name.toLowerCase() === s.name.toLowerCase()));
+            if (enq) course = enq.course;
+          }
+        }
+        map.set(key, {
+          id: s.id,
+          studentId: s.studentId || `STU-${s.id}`,
+          name: s.name,
+          phone: s.phone || '–',
+          course: course || 'General Course',
+          balance: bal
+        });
       }
     });
-    return dues > 0 ? dues : 14500;
-  }, [enquiries]);
 
-  const pendingStudentsCount = useMemo(() => {
-    const count = enquiries.filter(e => e.balance && Number(e.balance) > 0).length;
-    return count > 0 ? count : 5;
-  }, [enquiries]);
+    // 2. From enrollments with feeDue or balance
+    (enrollments || []).forEach(en => {
+      const bal = Number(en.balance || en.feeDue);
+      if (bal > 0) {
+        const key = en.studentId || `enr-${en.id}`;
+        if (!map.has(key)) {
+          const student = (students || []).find(s => String(s.studentId) === String(en.studentId));
+          const enquiry = (enquiries || []).find(e => (student && student.phone && e.phone === student.phone) || (en.studentName && e.name && e.name.toLowerCase() === en.studentName.toLowerCase()));
+          map.set(key, {
+            id: en.id,
+            studentId: en.studentId || `ENR-${en.id}`,
+            name: en.studentName || student?.name || 'Enrolled Student',
+            phone: student?.phone || enquiry?.phone || '–',
+            course: en.course || 'General Course',
+            balance: bal
+          });
+        }
+      }
+    });
+
+    // 3. From enquiries with balance
+    (enquiries || []).forEach(e => {
+      const bal = Number(e.balance);
+      if (bal > 0) {
+        const key = `enq-${e.id}`;
+        const already = Array.from(map.values()).some(item => (e.phone && item.phone === e.phone) || (e.name && item.name.toLowerCase() === e.name.toLowerCase()));
+        if (!already) {
+          map.set(key, {
+            id: e.id,
+            studentId: `ENQ-${e.id}`,
+            name: e.name,
+            phone: e.phone || '–',
+            course: e.course || 'General Course',
+            balance: bal
+          });
+        }
+      }
+    });
+
+    const realList = Array.from(map.values()).sort((a, b) => b.balance - a.balance);
+    if (realList.length > 0) {
+      return realList;
+    }
+
+    // Default sample 5 pending students totaling ₹14,500
+    return [
+      { id: 'due-1', studentId: 'STU-1042', name: 'Aarav Sharma', phone: '9876543210', course: 'Web Development (MERN)', balance: 4500 },
+      { id: 'due-2', studentId: 'STU-1089', name: 'Priya Verma', phone: '9812345678', course: 'Graphic Design', balance: 3000 },
+      { id: 'due-3', studentId: 'STU-1104', name: 'Rahul Gupta', phone: '9898765432', course: 'Python Programming', balance: 2500 },
+      { id: 'due-4', studentId: 'STU-1120', name: 'Simran Kaur', phone: '9711223344', course: 'Tally Prime & GST', balance: 2500 },
+      { id: 'due-5', studentId: 'STU-1135', name: 'Aman Singh', phone: '9823456789', course: 'Digital Marketing', balance: 2000 }
+    ];
+  }, [students, enrollments, enquiries]);
+
+  const totalOutstandingDues = useMemo(() => {
+    return pendingDuesList.reduce((sum, item) => sum + item.balance, 0);
+  }, [pendingDuesList]);
+
+  const pendingStudentsCount = pendingDuesList.length;
+
+  const filteredPendingDues = useMemo(() => {
+    if (!duesSearch.trim()) return pendingDuesList;
+    const q = duesSearch.trim().toLowerCase();
+    return pendingDuesList.filter(item =>
+      item.name.toLowerCase().includes(q) ||
+      item.phone.toLowerCase().includes(q) ||
+      item.course.toLowerCase().includes(q) ||
+      (item.studentId && item.studentId.toLowerCase().includes(q))
+    );
+  }, [pendingDuesList, duesSearch]);
 
   // Payment Modes Distribution calculation from filtered fees
   const paymentModesData = useMemo(() => {
@@ -1081,7 +1220,7 @@ export default function PaymentsSection({
     if (cash > 0) items.push({ name: 'Cash', v: Math.round(cash), color: '#059669' });
     if (bank > 0) items.push({ name: 'Bank Transfer', v: Math.round(bank), color: '#d97706' });
 
-    if (items.length === 0 && !startDate && !endDate) {
+    if (items.length === 0 && !hasDateFilter) {
       return [
         { name: 'UPI', v: 4800, color: '#2563eb' },
         { name: 'Cash', v: 4000, color: '#059669' },
@@ -1090,53 +1229,48 @@ export default function PaymentsSection({
     }
 
     return items;
-  }, [filteredFees, startDate, endDate]);
+  }, [filteredFees, hasDateFilter]);
 
   // Fee collections trend data (adapts to date filter or defaults to last 6 calendar months)
   const { monthlyTrendData, trendMeta } = useMemo(() => {
     const list = filteredFees;
 
-    if (startDate && endDate) {
-      const s = parseDate(startDate);
-      const e = parseDate(endDate);
+    if (hasDateFilter && activeRange.start && activeRange.end) {
+      const start = sod(activeRange.start);
+      const lastIncluded = addDays(sod(activeRange.end), -1);
+      const spanDays = Math.max(1, dayDiff(start, lastIncluded) + 1);
 
-      if (s && e) {
-        const start = sod(s <= e ? s : e);
-        const end = sod(s <= e ? e : s);
-        const spanDays = Math.max(1, dayDiff(start, end) + 1);
-
-        if (spanDays <= 35) {
-          // Day-by-day points for date range
-          const days = [];
-          for (let i = 0; i < spanDays; i++) {
-            const curDate = addDays(start, i);
-            const iso = isoDay(curDate);
-            const label = `${curDate.getDate()} ${MON[curDate.getMonth()]}`;
-            const full = `${curDate.getDate()} ${MON[curDate.getMonth()]} ${curDate.getFullYear()}`;
-            days.push({ key: iso, label, full, v: 0, count: 0 });
-          }
-
-          list.forEach((f) => {
-            const pDate = parseDate(f.paymentDate);
-            if (!pDate) return;
-            const iso = isoDay(pDate);
-            const match = days.find((d) => d.key === iso);
-            if (match) {
-              match.v += Number(f.amount || 0);
-              match.count += 1;
-            }
-          });
-
-          return {
-            monthlyTrendData: days,
-            trendMeta: {
-              title: `Collection Trend (${fmtShort(start)} – ${fmtShort(end)})`,
-              sub: `Daily collections between ${fmtDate(start)} and ${fmtDate(end)}`,
-              total: days.reduce((acc, d) => acc + d.v, 0),
-              periodLabel: `${spanDays}-Day Total`
-            }
-          };
+      if (spanDays <= 35) {
+        // Day-by-day points for date range
+        const days = [];
+        for (let i = 0; i < spanDays; i++) {
+          const curDate = addDays(start, i);
+          const iso = isoDay(curDate);
+          const label = `${curDate.getDate()} ${MON[curDate.getMonth()]}`;
+          const full = `${curDate.getDate()} ${MON[curDate.getMonth()]} ${curDate.getFullYear()}`;
+          days.push({ key: iso, label, full, v: 0, count: 0 });
         }
+
+        list.forEach((f) => {
+          const pDate = parseDate(f.paymentDate);
+          if (!pDate) return;
+          const iso = isoDay(pDate);
+          const match = days.find((d) => d.key === iso);
+          if (match) {
+            match.v += Number(f.amount || 0);
+            match.count += 1;
+          }
+        });
+
+        return {
+          monthlyTrendData: days,
+          trendMeta: {
+            title: `Collection Trend (${rangeLabel})`,
+            sub: `Daily collections for ${rangeLabel}`,
+            total: days.reduce((acc, d) => acc + d.v, 0),
+            periodLabel: `${spanDays}-Day Total`
+          }
+        };
       }
     }
 
@@ -1166,7 +1300,7 @@ export default function PaymentsSection({
 
     const hasData = months.some((m) => m.v > 0);
     let finalPoints = months;
-    if (!hasData && !startDate && !endDate) {
+    if (!hasData && !hasDateFilter) {
       const mockValues = [18500, 24000, 29500, 21000, 34500, 42000];
       const mockCounts = [6, 8, 10, 7, 12, 14];
       finalPoints = months.map((m, idx) => ({
@@ -1179,13 +1313,13 @@ export default function PaymentsSection({
     return {
       monthlyTrendData: finalPoints,
       trendMeta: {
-        title: 'Monthly Collection Trend',
-        sub: 'Fee collections trend over the past 6 months',
+        title: hasDateFilter ? `Monthly Collection Trend (${rangeLabel})` : 'Monthly Collection Trend',
+        sub: hasDateFilter ? `Fee collections recorded for ${rangeLabel}` : 'Fee collections trend over the past 6 months',
         total: finalPoints.reduce((acc, m) => acc + m.v, 0),
-        periodLabel: '6-Month Total'
+        periodLabel: hasDateFilter ? `${rangeLabel} Total` : '6-Month Total'
       }
     };
-  }, [filteredFees, startDate, endDate]);
+  }, [filteredFees, hasDateFilter, activeRange, rangeLabel]);
 
   // Recent Transactions calculation from filtered fees
   const recentTransactions = useMemo(() => {
@@ -1246,164 +1380,96 @@ export default function PaymentsSection({
           <h2>Payments</h2>
           <p>Manage fee payments, breakdown particulars, and official receipts.</p>
         </div>
+
+        {(feeTab === 'dashboard' || feeTab === 'history') && (
+          <div className="controls">
+            <label className="sr-only" htmlFor="payments-range">Time range</label>
+            <select
+              className="select"
+              id="payments-range"
+              value={dateRangeKind}
+              onChange={(e) => setDateRangeKind(e.target.value)}
+            >
+              <option value="all">All Time</option>
+              <option value="today">Today</option>
+              <option value="yesterday">Yesterday</option>
+              <option value="week">This Week</option>
+              <option value="month">This Month</option>
+              <option value="lastmonth">Last Month</option>
+              <option value="custom">Custom Range</option>
+            </select>
+
+            {dateRangeKind === 'custom' && (
+              <div className="custom-range" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <input
+                  className="input"
+                  type="date"
+                  value={customFrom}
+                  onChange={(e) => setCustomFrom(e.target.value)}
+                  title="From date"
+                />
+                <span className="muted">to</span>
+                <input
+                  className="input"
+                  type="date"
+                  value={customTo}
+                  onChange={(e) => setCustomTo(e.target.value)}
+                  title="To date"
+                />
+              </div>
+            )}
+
+            <button
+              className="btn"
+              type="button"
+              onClick={handleRefresh}
+              title="Refresh payments data"
+            >
+              <span className={`ic ${refreshing || loading ? 'spin' : ''}`}><Icon name="refresh" size={18} /></span>
+              Refresh
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* Sub Tabs & Date Range Filter Container */}
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        flexWrap: 'wrap',
-        gap: '12px',
-        marginBottom: '20px'
-      }}>
-        <div className="tabs fees-tabs" role="tablist" style={{ margin: 0 }}>
-          <button
-            className="fee-tab"
-            type="button"
-            role="tab"
-            aria-selected={feeTab === 'dashboard'}
-            onClick={() => setFeeTab('dashboard')}
-          >
-            Dashboard
-          </button>
-          <button
-            className="fee-tab"
-            type="button"
-            role="tab"
-            aria-selected={feeTab === 'payment'}
-            onClick={() => setFeeTab('payment')}
-          >
-            Record Payment
-          </button>
-          <button
-            className="fee-tab"
-            type="button"
-            role="tab"
-            aria-selected={feeTab === 'history'}
-            onClick={() => setFeeTab('history')}
-          >
-            Payment History
-          </button>
-          <button
-            className="fee-tab"
-            type="button"
-            role="tab"
-            aria-selected={feeTab === 'receipt'}
-            onClick={() => setFeeTab('receipt')}
-          >
-            Issue Receipt
-          </button>
-        </div>
-
-        {/* Global Date Range Picker */}
-        <div
-          className="payments-date-filter"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            flexWrap: 'wrap',
-            gap: '8px',
-            background: 'var(--card, #ffffff)',
-            border: hasDateFilter ? '1.5px solid #3b82f6' : '1px solid var(--line, #e2e8f0)',
-            padding: '6px 12px',
-            borderRadius: '10px',
-            boxShadow: hasDateFilter ? '0 2px 8px rgba(59, 130, 246, 0.15)' : '0 1px 3px rgba(0,0,0,0.04)',
-            transition: 'all 0.2s ease'
-          }}
+      {/* Sub Tabs Container */}
+      <div className="tabs fees-tabs" role="tablist" style={{ marginBottom: '20px' }}>
+        <button
+          className="fee-tab"
+          type="button"
+          role="tab"
+          aria-selected={feeTab === 'dashboard'}
+          onClick={() => setFeeTab('dashboard')}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: hasDateFilter ? '#1d4ed8' : '#475569', fontSize: '0.82rem', fontWeight: 700 }}>
-            <Icon name="calendar" size={16} />
-            <span>Date Range:</span>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <label htmlFor="payments-start-date" style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 600 }}>From</label>
-            <input
-              id="payments-start-date"
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="input"
-              style={{
-                height: '32px',
-                padding: '2px 8px',
-                fontSize: '0.82rem',
-                borderRadius: '6px',
-                border: '1px solid var(--line, #cbd5e1)',
-                background: '#ffffff',
-                width: '135px'
-              }}
-              title="Start Date (inclusive)"
-            />
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <label htmlFor="payments-end-date" style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 600 }}>To</label>
-            <input
-              id="payments-end-date"
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="input"
-              style={{
-                height: '32px',
-                padding: '2px 8px',
-                fontSize: '0.82rem',
-                borderRadius: '6px',
-                border: '1px solid var(--line, #cbd5e1)',
-                background: '#ffffff',
-                width: '135px'
-              }}
-              title="End Date (inclusive)"
-            />
-          </div>
-
-          {hasDateFilter ? (
-            <button
-              type="button"
-              className="btn sm"
-              onClick={handleClearDateFilter}
-              style={{
-                height: '32px',
-                padding: '0 10px',
-                fontSize: '0.78rem',
-                fontWeight: 600,
-                color: '#b91c1c',
-                borderColor: '#fca5a5',
-                background: '#fef2f2'
-              }}
-              title="Clear date filter and view all records"
-            >
-              Clear Filter ✕
-            </button>
-          ) : (
-            <div style={{ display: 'flex', gap: '4px' }}>
-              <button
-                type="button"
-                className="btn sm"
-                onClick={() => {
-                  const now = new Date();
-                  const first = new Date(now.getFullYear(), now.getMonth(), 1);
-                  const last = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-                  setStartDate(isoDay(first));
-                  setEndDate(isoDay(last));
-                }}
-                style={{
-                  height: '30px',
-                  padding: '0 8px',
-                  fontSize: '0.76rem',
-                  color: 'var(--muted)',
-                  background: 'transparent',
-                  border: '1px solid var(--line)'
-                }}
-                title="Filter to current month"
-              >
-                This Month
-              </button>
-            </div>
-          )}
-        </div>
+          Dashboard
+        </button>
+        <button
+          className="fee-tab"
+          type="button"
+          role="tab"
+          aria-selected={feeTab === 'payment'}
+          onClick={() => setFeeTab('payment')}
+        >
+          Record Payment
+        </button>
+        <button
+          className="fee-tab"
+          type="button"
+          role="tab"
+          aria-selected={feeTab === 'history'}
+          onClick={() => setFeeTab('history')}
+        >
+          Payment History
+        </button>
+        <button
+          className="fee-tab"
+          type="button"
+          role="tab"
+          aria-selected={feeTab === 'receipt'}
+          onClick={() => setFeeTab('receipt')}
+        >
+          Issue Receipt
+        </button>
       </div>
 
       {/* 1. Dashboard Tab */}
@@ -1433,12 +1499,12 @@ export default function PaymentsSection({
                 <div className="card stat">
                   <div className="stat-top">
                     <span className="stat-ico"><Icon name="clock" size={20} /></span>
-                    <span className="stat-label">{hasDateFilter ? "Selected Range" : "Collected this month"}</span>
+                    <span className="stat-label">{hasDateFilter ? rangeLabel : "Collected this month"}</span>
                   </div>
                   <div className="stat-val">{hasDateFilter ? `${feesCount} records` : `₹${monthTotal.toLocaleString("en-IN")}`}</div>
                   <div className="stat-sub">
                     {hasDateFilter
-                      ? `${startDate ? fmtDate(startDate) : 'Start'} – ${endDate ? fmtDate(endDate) : 'End'}`
+                      ? `Filter active: ${rangeLabel}`
                       : `${monthFeesCount} ${monthFeesCount === 1 ? 'payment' : 'payments'} this month`}
                   </div>
                 </div>
@@ -1450,17 +1516,45 @@ export default function PaymentsSection({
                   </div>
                   <div className="stat-val">₹{avgPayment.toLocaleString("en-IN")}</div>
                   <div className="stat-sub">
-                    {hasDateFilter ? "Average for selected period" : "Across all recorded payments"}
+                    {hasDateFilter ? `Average for ${rangeLabel}` : "Across all recorded payments"}
                   </div>
                 </div>
 
-                {/* 4. Fee Dues Analytics Card */}
-                <div className="card stat">
+                {/* 4. Fee Dues Analytics Card (Interactive with Outstanding Dues Modal) */}
+                <div
+                  className="card stat"
+                  onClick={() => setShowDuesModal(true)}
+                  style={{
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    position: 'relative'
+                  }}
+                  title="Click to view students with pending balances"
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setShowDuesModal(true); }}
+                >
                   <div className="stat-top">
                     <span className="stat-ico" style={{ background: '#fef2f2', color: '#dc2626' }}>
                       <Icon name="alert" size={20} />
                     </span>
                     <span className="stat-label">Total Outstanding Dues</span>
+                    <span
+                      style={{
+                        marginLeft: 'auto',
+                        fontSize: '0.72rem',
+                        color: '#dc2626',
+                        fontWeight: 700,
+                        background: '#fee2e2',
+                        padding: '2px 8px',
+                        borderRadius: '12px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}
+                    >
+                      View List →
+                    </span>
                   </div>
                   <div className="stat-val" style={{ color: '#b91c1c' }}>
                     ₹{totalOutstandingDues.toLocaleString("en-IN")}
@@ -1482,7 +1576,7 @@ export default function PaymentsSection({
                 <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800 }}>Recent Transactions</h3>
                 <p style={{ margin: '4px 0 0', color: 'var(--muted)', fontSize: '0.86rem' }}>
                   {hasDateFilter
-                    ? `Showing ${sortedRecentTx.length} payments recorded between ${startDate ? fmtDate(startDate) : 'Start'} and ${endDate ? fmtDate(endDate) : 'End'}`
+                    ? `Showing ${sortedRecentTx.length} payments recorded for ${rangeLabel}`
                     : "Latest fee collections and receipt records."}
                 </p>
               </div>
@@ -2454,7 +2548,7 @@ export default function PaymentsSection({
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                 <span style={{ fontWeight: 700, color: '#1e40af' }}>Active Date Filter:</span>
                 <span style={{ color: '#1e293b' }}>
-                  Showing collections from <b>{startDate ? fmtDate(startDate) : 'Start'}</b> to <b>{endDate ? fmtDate(endDate) : 'End'}</b>
+                  Showing collections for <b>{rangeLabel}</b>
                 </span>
                 <span style={{ color: '#64748b', fontSize: '0.82rem' }}>
                   ({sortedHistoryFees.length} {sortedHistoryFees.length === 1 ? 'record' : 'records'} · Total: ₹{sortedHistoryFees.reduce((sum, f) => sum + (Number(f.amount) || 0), 0).toLocaleString('en-IN')})
@@ -2484,7 +2578,7 @@ export default function PaymentsSection({
                 <h3>Payment history</h3>
                 <p>
                   {hasDateFilter
-                    ? `Fee payments recorded between ${startDate ? fmtDate(startDate) : 'Start'} and ${endDate ? fmtDate(endDate) : 'End'}`
+                    ? `Fee payments recorded for ${rangeLabel}`
                     : "All fee payments recorded, newest first."}
                 </p>
               </div>
@@ -2673,6 +2767,232 @@ export default function PaymentsSection({
             </div>
           </div>
         </section>
+      )}
+
+      {/* Outstanding Dues Breakdown Modal */}
+      {showDuesModal && (
+        <div
+          className="overlay"
+          onClick={(e) => {
+            if (e.target.classList.contains('overlay')) setShowDuesModal(false);
+          }}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="dues-modal-title"
+        >
+          <div
+            className="modal"
+            style={{
+              maxWidth: '840px',
+              width: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              maxHeight: '90vh',
+              overflow: 'hidden'
+            }}
+          >
+            <header
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '18px 24px',
+                borderBottom: '1px solid var(--line)'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span
+                  style={{
+                    background: '#fef2f2',
+                    color: '#dc2626',
+                    width: '40px',
+                    height: '40px',
+                    borderRadius: '10px',
+                    display: 'grid',
+                    placeItems: 'center',
+                    flexShrink: 0
+                  }}
+                >
+                  <Icon name="alert" size={20} />
+                </span>
+                <div>
+                  <h3 id="dues-modal-title" style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: '#1e293b' }}>
+                    Outstanding Dues Breakdown
+                  </h3>
+                  <small style={{ color: 'var(--muted)', fontSize: '0.84rem' }}>
+                    {pendingDuesList.length} students with pending balances · Total: ₹{totalOutstandingDues.toLocaleString('en-IN')}
+                  </small>
+                </div>
+              </div>
+              <button
+                className="icon-btn"
+                type="button"
+                onClick={() => setShowDuesModal(false)}
+                title="Close modal"
+                aria-label="Close"
+              >
+                <Icon name="x" size={18} />
+              </button>
+            </header>
+
+            {/* Quick search input */}
+            <div style={{ padding: '14px 24px', borderBottom: '1px solid var(--line)', background: 'var(--surface, #f8fafc)' }}>
+              <div className="search" style={{ margin: 0, width: '100%' }}>
+                <span className="si"><Icon name="search" size={16} /></span>
+                <input
+                  className="input"
+                  type="search"
+                  placeholder="Search by student name, phone number, or course..."
+                  value={duesSearch}
+                  onChange={(e) => setDuesSearch(e.target.value)}
+                  style={{ width: '100%', height: '36px', fontSize: '0.86rem' }}
+                />
+              </div>
+            </div>
+
+            {/* Table */}
+            <div style={{ overflowY: 'auto', flex: 1, minHeight: '180px' }}>
+              <div className="tbl-scroll">
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ background: '#f8fafc', borderBottom: '1px solid var(--line)' }}>
+                      <th style={{ padding: '12px 18px', textAlign: 'left', fontSize: '0.8rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
+                        Student Name
+                      </th>
+                      <th style={{ padding: '12px 18px', textAlign: 'left', fontSize: '0.8rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
+                        Phone Number
+                      </th>
+                      <th style={{ padding: '12px 18px', textAlign: 'left', fontSize: '0.8rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
+                        Course
+                      </th>
+                      <th style={{ padding: '12px 18px', textAlign: 'right', fontSize: '0.8rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
+                        Pending Amount
+                      </th>
+                      <th style={{ padding: '12px 18px', textAlign: 'center', fontSize: '0.8rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
+                        Action
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredPendingDues.length === 0 ? (
+                      <tr>
+                        <td colSpan="5" style={{ textAlign: 'center', padding: '36px 20px', color: 'var(--muted)' }}>
+                          No students found matching "{duesSearch}"
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredPendingDues.map((item) => (
+                        <tr key={item.id} style={{ borderBottom: '1px solid var(--line)' }}>
+                          <td style={{ padding: '12px 18px' }}>
+                            <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.92rem' }}>
+                              {item.name}
+                            </div>
+                            <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px' }}>
+                              ID: {item.studentId}
+                            </div>
+                          </td>
+                          <td style={{ padding: '12px 18px', whiteSpace: 'nowrap' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ fontSize: '0.88rem', color: '#334155', fontWeight: 600 }}>{item.phone}</span>
+                              {item.phone && item.phone !== '–' && (
+                                <a
+                                  href={`https://wa.me/91${String(item.phone).replace(/\D/g, '')}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  title="Chat on WhatsApp"
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    width: '24px',
+                                    height: '24px',
+                                    borderRadius: '50%',
+                                    background: '#25D366',
+                                    color: '#fff',
+                                    fontSize: '11px',
+                                    textDecoration: 'none'
+                                  }}
+                                >
+                                  <Icon name="whatsapp" size={13} />
+                                </a>
+                              )}
+                            </div>
+                          </td>
+                          <td style={{ padding: '12px 18px' }}>
+                            <span
+                              style={{
+                                background: '#f1f5f9',
+                                color: '#334155',
+                                padding: '3px 8px',
+                                borderRadius: '6px',
+                                fontSize: '0.82rem',
+                                fontWeight: 600,
+                                display: 'inline-block'
+                              }}
+                            >
+                              {item.course}
+                            </span>
+                          </td>
+                          <td style={{ padding: '12px 18px', textAlign: 'right' }}>
+                            <span
+                              style={{
+                                display: 'inline-block',
+                                background: '#fef2f2',
+                                color: '#b91c1c',
+                                border: '1px solid #fecaca',
+                                padding: '4px 10px',
+                                borderRadius: '8px',
+                                fontWeight: 800,
+                                fontSize: '0.92rem'
+                              }}
+                            >
+                              ₹{Number(item.balance || 0).toLocaleString('en-IN')}
+                            </span>
+                          </td>
+                          <td style={{ padding: '12px 18px', textAlign: 'center' }}>
+                            <button
+                              type="button"
+                              className="btn sm primary"
+                              onClick={() => handleCollectStudentDue(item)}
+                              title="Record payment for this student"
+                              style={{ whiteSpace: 'nowrap', fontSize: '0.78rem', padding: '6px 12px' }}
+                            >
+                              Collect Fee
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <footer
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '14px 24px',
+                borderTop: '1px solid var(--line)',
+                background: '#fff'
+              }}
+            >
+              <div style={{ fontSize: '0.86rem', color: '#475569' }}>
+                Total Pending Dues: <b style={{ color: '#b91c1c', fontSize: '1rem', marginLeft: '4px' }}>₹{totalOutstandingDues.toLocaleString('en-IN')}</b>
+                <span style={{ color: '#94a3b8', marginLeft: '8px' }}>({pendingDuesList.length} students)</span>
+              </div>
+              <button
+                className="btn"
+                type="button"
+                onClick={() => setShowDuesModal(false)}
+              >
+                Close
+              </button>
+            </footer>
+          </div>
+        </div>
       )}
     </section>
   );
