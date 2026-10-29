@@ -392,26 +392,35 @@ export default function EnquiryDashboard({
           </div>
 
           <div className="card chart-card">
-            <h3>Enquiries by Course</h3>
-            <p>Where the interest is coming from</p>
-            <div style={{ width: '100%', height: 320 }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={courseItems} margin={{ top: 20, right: 35, left: 0, bottom: 65 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.3} />
-                  <XAxis 
-                    dataKey="name" 
-                    angle={-30} 
-                    textAnchor="end" 
-                    interval={0} 
-                    height={70} 
-                    tick={{ fontSize: 11, fill: '#64748b' }}
-                    tickFormatter={(val) => val.length > 18 ? `${val.substring(0, 16)}...` : val}
-                  />
-                  <YAxis allowDecimals={false} tick={{ fontSize: 12, fill: '#64748b' }} />
-                  <Tooltip />
-                  <Bar dataKey="v" fill="#1e3a8a" radius={[6, 6, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '6px' }}>
+              <div>
+                <h3>Enquiries by Course</h3>
+                <p>Where the interest is coming from</p>
+              </div>
+              <span className="chart-swipe-hint">
+                <Icon name="arrowRight" size={13} /> Scroll horizontally to view all courses
+              </span>
+            </div>
+            <div className="chart-scroll-wrapper">
+              <div className="chart-scroll-inner-courses">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={courseItems} margin={{ top: 20, right: 35, left: 0, bottom: 65 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.3} />
+                    <XAxis 
+                      dataKey="name" 
+                      angle={-30} 
+                      textAnchor="end" 
+                      interval={0} 
+                      height={70} 
+                      tick={{ fontSize: 11, fill: '#64748b' }}
+                      tickFormatter={(val) => val.length > 18 ? `${val.substring(0, 16)}...` : val}
+                    />
+                    <YAxis allowDecimals={false} tick={{ fontSize: 12, fill: '#64748b' }} />
+                    <Tooltip />
+                    <Bar dataKey="v" fill="#1e3a8a" radius={[6, 6, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             </div>
           </div>
 
@@ -434,24 +443,26 @@ export default function EnquiryDashboard({
           <div className="card chart-card">
             <h3>Lead Status Overview</h3>
             <p>Where enquiries stand right now</p>
-            <div style={{ width: '100%', height: 320 }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={statusItems} margin={{ top: 20, right: 35, left: 0, bottom: 65 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.3} />
-                  <XAxis 
-                    dataKey="name" 
-                    angle={-30} 
-                    textAnchor="end" 
-                    interval={0} 
-                    height={70} 
-                    tick={{ fontSize: 11, fill: '#64748b' }}
-                    tickFormatter={(val) => val.length > 14 ? `${val.substring(0, 12)}...` : val}
-                  />
-                  <YAxis allowDecimals={false} tick={{ fontSize: 12, fill: '#64748b' }} />
-                  <Tooltip />
-                  <Bar dataKey="v" fill="#047857" radius={[6, 6, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+            <div className="chart-scroll-wrapper">
+              <div className="chart-scroll-inner-status">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={statusItems} margin={{ top: 20, right: 35, left: 0, bottom: 65 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.3} />
+                    <XAxis 
+                      dataKey="name" 
+                      angle={-30} 
+                      textAnchor="end" 
+                      interval={0} 
+                      height={70} 
+                      tick={{ fontSize: 11, fill: '#64748b' }}
+                      tickFormatter={(val) => val.length > 14 ? `${val.substring(0, 12)}...` : val}
+                    />
+                    <YAxis allowDecimals={false} tick={{ fontSize: 12, fill: '#64748b' }} />
+                    <Tooltip />
+                    <Bar dataKey="v" fill="#047857" radius={[6, 6, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             </div>
           </div>
 

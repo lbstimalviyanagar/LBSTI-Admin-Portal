@@ -1392,7 +1392,7 @@ export default function PaymentsSection({
                 paddingTop: '16px',
                 borderTop: '1px solid var(--line)',
                 display: 'grid',
-                gridTemplateColumns: 'repeat(3, 1fr)',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(min(90px, 100%), 1fr))',
                 gap: '10px',
                 textAlign: 'center'
               }}>

@@ -465,29 +465,36 @@ export default function StudentsSection({ students = [], enrollments = [], loadi
           
           <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "20px" }}>
             <div className="card section" style={{ padding: "20px" }}>
-              <h3 style={{ marginBottom: "15px", fontSize: "16px", color: "#1e293b" }}>Course Insights (Enrollments & Status)</h3>
-              <div style={{ width: "100%", height: 400 }}>
-                <ResponsiveContainer>
-                  <BarChart data={courseData} margin={{ top: 20, right: 30, left: 0, bottom: 60 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                    <XAxis dataKey="name" angle={-45} textAnchor="end" tick={{fontSize: 12, fill: '#64748b'}} interval={0} height={60} />
-                    <YAxis tick={{fill: '#64748b'}} />
-                    <RechartsTooltip cursor={{fill: '#f1f5f9'}} />
-                    <Legend verticalAlign="top" height={36} />
-                    <Bar dataKey="Active" stackId="a" fill="#0088FE" />
-                    <Bar dataKey="Completed" stackId="a" fill="#00C49F" />
-                    <Bar dataKey="Dropped" stackId="a" fill="#FF8042" />
-                  </BarChart>
-                </ResponsiveContainer>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '6px', marginBottom: "15px" }}>
+                <h3 style={{ margin: 0, fontSize: "16px", color: "#1e293b" }}>Course Insights (Enrollments & Status)</h3>
+                <span className="chart-swipe-hint">
+                  <Icon name="arrowRight" size={13} /> Scroll horizontally to view all courses
+                </span>
+              </div>
+              <div className="chart-scroll-wrapper">
+                <div className="chart-scroll-inner-courses" style={{ height: 400 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={courseData} margin={{ top: 20, right: 30, left: 0, bottom: 60 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                      <XAxis dataKey="name" angle={-45} textAnchor="end" tick={{fontSize: 12, fill: '#64748b'}} interval={0} height={60} />
+                      <YAxis tick={{fill: '#64748b'}} />
+                      <RechartsTooltip cursor={{fill: '#f1f5f9'}} />
+                      <Legend verticalAlign="top" height={36} />
+                      <Bar dataKey="Active" stackId="a" fill="#0088FE" />
+                      <Bar dataKey="Completed" stackId="a" fill="#00C49F" />
+                      <Bar dataKey="Dropped" stackId="a" fill="#FF8042" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
             </div>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "20px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(300px, 100%), 1fr))", gap: "20px" }}>
             <div className="card section" style={{ padding: "20px" }}>
               <h3 style={{ marginBottom: "15px", fontSize: "16px", color: "#1e293b" }}>Enrollment Status</h3>
               <div style={{ width: "100%", height: 300 }}>
-                <ResponsiveContainer>
+                <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie data={statusData} cx="50%" cy="50%" innerRadius={0} outerRadius={100} dataKey="value">
                       {statusData.map((entry, index) => (
@@ -504,16 +511,18 @@ export default function StudentsSection({ students = [], enrollments = [], loadi
 
           <div className="card section" style={{ padding: "20px" }}>
             <h3 style={{ marginBottom: "15px", fontSize: "16px", color: "#1e293b" }}>Enrollments Over Time</h3>
-            <div style={{ width: "100%", height: 350 }}>
-              <ResponsiveContainer>
-                <BarChart data={enrollmentsTrend} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                  <XAxis dataKey="name" tick={{fill: '#64748b'}} tickLine={false} />
-                  <YAxis tick={{fill: '#64748b'}} tickLine={false} axisLine={false} />
-                  <RechartsTooltip cursor={{fill: '#f1f5f9'}} />
-                  <Bar dataKey="Enrollments" fill="#4f46e5" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+            <div className="chart-scroll-wrapper">
+              <div className="chart-scroll-inner-status" style={{ height: 350 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={enrollmentsTrend} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                    <XAxis dataKey="name" tick={{fill: '#64748b'}} tickLine={false} />
+                    <YAxis tick={{fill: '#64748b'}} tickLine={false} axisLine={false} />
+                    <RechartsTooltip cursor={{fill: '#f1f5f9'}} />
+                    <Bar dataKey="Enrollments" fill="#4f46e5" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             </div>
           </div>
         </div>
@@ -793,7 +802,7 @@ export default function StudentsSection({ students = [], enrollments = [], loadi
             </div>
 
             {/* Filter Dropdowns and Actions */}
-            <div className="filters" style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+            <div className="filters-inline" style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
               {/* All courses dropdown */}
               <div className="fl">
                 <select

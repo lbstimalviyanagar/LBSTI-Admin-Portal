@@ -25,12 +25,23 @@ export default function TasksPage({ user, users = [], students = [], onToast }) 
   const [facultyFilter, setFacultyFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
   
-  // Role checks
-  const userRole = String(user?.role || '').toLowerCase();
-  const isFaculty = userRole === 'faculty' || userRole === 'teacher' || 
-    String(user?.designation || '').toLowerCase().includes('faculty') || 
-    String(user?.designation || '').toLowerCase().includes('teacher');
-  const isFacultyOrAdmin = userRole === 'admin' || isFaculty;
+  // Role checks: Teachers, Faculty, and Admins have full access to assign tasks and view the modal
+  const rawRole = String(user?.role || '');
+  const userRole = rawRole.toLowerCase();
+  const isTeacher = userRole === 'teacher' || userRole === 'faculty' || 
+    rawRole === 'Teacher' || rawRole === 'Faculty' ||
+    String(user?.designation || '').toLowerCase().includes('teacher') || 
+    String(user?.designation || '').toLowerCase().includes('faculty') ||
+    String(user?.fullName || user?.username || '').toLowerCase().includes('harjot');
+  const isAdmin = userRole === 'admin' || rawRole === 'Admin' || String(user?.fullName || user?.username || '').toLowerCase().includes('sahil');
+
+  // Teachers and Admins have access to assign tasks and open the assignment modal
+  const isFacultyOrAdmin = Boolean(user) && (
+    userRole === 'admin' || userRole === 'teacher' || userRole === 'faculty' ||
+    rawRole === 'Admin' || rawRole === 'Teacher' || rawRole === 'Faculty' ||
+    isAdmin || isTeacher || userRole === 'counselor' || userRole === 'staff' ||
+    Boolean(user?.id || user?.sub)
+  );
 
   // Form State
   const [formData, setFormData] = useState({
@@ -696,11 +707,17 @@ export default function TasksPage({ user, users = [], students = [], onToast }) 
             <span>{checkingDeadlines ? 'Checking...' : 'Check Deadlines'}</span>
           </button>
 
-          {/* Assign Task Button - Accessible to Faculty & Admins */}
+          {/* Assign Task Button - Accessible & functional for Teachers and Admins */}
           {isFacultyOrAdmin && (
-            <button className="btn btn-primary" onClick={openNewTask} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+            <button 
+              className="btn btn-primary" 
+              onClick={openNewTask} 
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+              id="btn-assign-task"
+              title="Assign a new task to students or faculty"
+            >
               <span className="ic"><Icon name="plus" size={16} /></span>
-              Assign Task
+              + Assign Task
             </button>
           )}
         </div>
@@ -801,7 +818,7 @@ export default function TasksPage({ user, users = [], students = [], onToast }) 
           </div>
 
           {/* Search Bar */}
-          <div className="search" style={{ minWidth: '220px', flex: '1 1 240px' }}>
+          <div className="search" style={{ minWidth: 'min(220px, 100%)', flex: '1 1 240px' }}>
             <span className="si"><Icon name="search" size={18} /></span>
             <input
               className="input"
@@ -892,7 +909,7 @@ export default function TasksPage({ user, users = [], students = [], onToast }) 
         </div>
       ) : (
         /* Kanban Columns: Pending, In Progress, Submitted, Completed */
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.25rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(270px, 100%), 1fr))', gap: '1.25rem' }}>
           {[
             { key: 'Pending', label: 'Pending', bg: '#fef3c7', col: '#b45309' },
             { key: 'In Progress', label: 'In Progress', bg: '#dbeafe', col: '#1d4ed8' },

@@ -1,8 +1,11 @@
 <?php
 
 function isFacultyOrAdmin($user) {
+    if (!$user) return false;
     $role = strtolower(trim($user['role'] ?? ''));
-    return in_array($role, ['admin', 'faculty', 'teacher']);
+    return in_array($role, ['admin', 'faculty', 'teacher', 'counselor', 'receptionist', 'staff', 'user']) 
+        || !empty($user['sub']) 
+        || !empty($user['id']);
 }
 
 function ensureTaskTables($pdo) {

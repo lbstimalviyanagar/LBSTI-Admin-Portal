@@ -504,7 +504,7 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
           </div>
 
           {/* Filter Dropdowns */}
-          <div className="filters" style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <div className="filters-inline" style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
             {/* Course Dropdown Filter */}
             <div className="fl">
               <select
