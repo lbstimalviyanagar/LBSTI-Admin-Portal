@@ -3178,6 +3178,20 @@ td:has(.empty), td:has(.skel) {
   white-space: nowrap;
 }
 
+/* Global Payments Date Range Filter */
+.payments-date-filter {
+  flex-wrap: wrap;
+}
+@media (max-width: 768px) {
+  .payments-date-filter {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .payments-date-filter input[type="date"] {
+    width: 125px !important;
+  }
+}
+
 .payment-actions-group .btn {
   padding: 6px 11px;
   font-size: 0.82rem;
