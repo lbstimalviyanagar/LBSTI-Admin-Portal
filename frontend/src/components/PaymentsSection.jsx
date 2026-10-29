@@ -1,6 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import Icon from './Icons';
 import DonutChart from './Charts/DonutChart';
+import SearchablePaymentSelect from './SearchablePaymentSelect';
 import {
   FEE_ITEMS,
   feeBreakdownTotals,
@@ -2262,19 +2263,15 @@ export default function PaymentsSection({
             <div className="fee-receipt-actions">
               <div className="fld">
                 <label htmlFor="receiptPayment">Payment record</label>
-                <select
-                  className="select"
+                <SearchablePaymentSelect
                   id="receiptPayment"
-                  value={selectedReceiptPaymentId}
-                  onChange={(e) => setSelectedReceiptPaymentId(e.target.value)}
-                >
-                  <option value="">Select a payment...</option>
-                  {historyFees.map((f) => (
-                    <option key={f.id} value={f.id}>
-                      {f.studentName || "Student"} — ₹{Number(f.amount || 0).toLocaleString("en-IN")} — {fmtDate(f.paymentDate)}{(f.othersDescription || f.receiptDetails?.othersDescription) ? ` (${f.othersDescription || f.receiptDetails?.othersDescription})` : ''}
-                    </option>
-                  ))}
-                </select>
+                  payments={historyFees}
+                  students={students}
+                  enquiries={enquiries}
+                  selectedId={selectedReceiptPaymentId}
+                  onSelect={(id) => setSelectedReceiptPaymentId(id)}
+                  placeholder="Type student name, contact number, or receipt ID..."
+                />
               </div>
 
               <button

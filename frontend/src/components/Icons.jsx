@@ -107,6 +107,8 @@ export const ICONS = {
   menu: <path d="M4 7h16M4 12h16M4 17h16" />,
   chevL: <path d="m15 6-6 6 6 6" />,
   chevR: <path d="m9 6 6 6-6 6" />,
+  chevD: <path d="m6 9 6 6 6-6" />,
+  chevU: <path d="m18 15-6-6-6 6" />,
   check: <path d="m5 12 5 5 9-10" />,
   trash: (
     <>
