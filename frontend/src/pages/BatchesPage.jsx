@@ -55,28 +55,6 @@ export function sortBatchesChronologically(list) {
 // Fixed master daily schedule for the institute
 const DEFAULT_BATCHES = [
   {
-    id: 'b0_1',
-    batch_time: '06:00 AM - 07:00 AM',
-    instructor_name: 'Sahil',
-    instructor_id: 1,
-    course_name: 'Web Development',
-    topic: 'HTML & CSS Foundations',
-    student_count: 10,
-    status: 'Upcoming',
-    updated_at: '2026-10-14 06:00:00'
-  },
-  {
-    id: 'b0_2',
-    batch_time: '07:00 AM - 08:00 AM',
-    instructor_name: 'Harjot Kaur',
-    instructor_id: 2,
-    course_name: 'Python Programming',
-    topic: 'Syntax & Data Structures',
-    student_count: 12,
-    status: 'Upcoming',
-    updated_at: '2026-10-14 07:00:00'
-  },
-  {
     id: 'b1',
     batch_time: '09:00 AM - 10:00 AM',
     instructor_name: 'Harjot Kaur',
@@ -184,9 +162,8 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
     date: new Date().toISOString().slice(0, 10)
   });
 
-  // Master institute routine time slots (06:00 AM to 09:00 PM)
+  // Master institute routine time slots (08:00 AM to 09:00 PM)
   const timeSlots = [
-    '06:00 AM - 07:00 AM', '07:00 AM - 08:00 AM',
     '08:00 AM - 09:00 AM', '09:00 AM - 10:00 AM', '10:00 AM - 11:00 AM', '11:00 AM - 12:00 PM',
     '12:00 PM - 01:00 PM', '01:00 PM - 02:00 PM', '02:00 PM - 03:00 PM', '03:00 PM - 04:00 PM',
     '04:00 PM - 05:00 PM', '05:00 PM - 06:00 PM', '06:00 PM - 07:00 PM', '07:00 PM - 08:00 PM',
@@ -206,7 +183,7 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
       .filter(t => !isNaN(t));
 
     if (timestamps.length === 0) {
-      return 'Last Updated: 2 Hours Ago';
+      return 'Last Updated: Today';
     }
 
     const latestTime = Math.max(...timestamps);
@@ -252,6 +229,21 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
 
   useEffect(() => {
     loadBatches();
+
+    // Auto-refresh every 30 seconds to keep batch details up to date in real time
+    const interval = setInterval(() => {
+      loadBatches();
+    }, 30000);
+
+    const handleFocus = () => {
+      loadBatches();
+    };
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
+    };
   }, [loadBatches]);
 
   // Load filter options dynamically from backend API on mount
@@ -511,6 +503,8 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
         onToast('Batch created.');
       }
       setIsModalOpen(false);
+      // Immediately reload fresh batch data from server
+      loadBatches();
     } catch (err) {
       onToast(err.message || 'Failed to save batch.', true);
     }
@@ -526,6 +520,7 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
       }
       setBatches(prev => prev.filter(b => b.id !== id));
       onToast('Batch deleted.');
+      loadBatches();
     } catch (err) {
       onToast(err.message || 'Failed to delete batch.', true);
     }
@@ -674,6 +669,18 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
                 ? `${sortedBatches.length} ${sortedBatches.length === 1 ? 'batch' : 'batches'} found (of ${batches.length})`
                 : `${batches.length} ${batches.length === 1 ? 'batch' : 'batches'} total`}
             </span>
+
+            <button
+              className="btn sm"
+              type="button"
+              onClick={loadBatches}
+              title="Refresh latest batches from server"
+              disabled={loading}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+            >
+              <span className={`ic ${loading ? 'spin' : ''}`}><Icon name="refresh" size={13} /></span>
+              Refresh
+            </button>
 
             {user?.role === 'admin' && (
               <button

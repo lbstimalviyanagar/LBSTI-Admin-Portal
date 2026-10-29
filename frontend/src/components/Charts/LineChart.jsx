@@ -1,7 +1,16 @@
 import React, { useState, useRef } from 'react';
 import Icon from '../Icons';
 
-export default function LineChart({ points = [], aria = "Inquiry trends", emptyTitle = "No enquiries in this period", emptyMsg = "Try a wider date range." }) {
+export default function LineChart({
+  points = [],
+  aria = "Trends",
+  emptyTitle = "No data in this period",
+  emptyMsg = "Try a wider date range.",
+  formatTooltip,
+  formatYAxis,
+  valuePrefix = "",
+  unit = ""
+}) {
   const [hoverIndex, setHoverIndex] = useState(null);
   const [tipPos, setTipPos] = useState({ left: 0, top: 0 });
   const svgRef = useRef(null);
@@ -75,10 +84,15 @@ export default function LineChart({ points = [], aria = "Inquiry trends", emptyT
         {gridSteps.map((k) => {
           const v = step * k;
           const yy = getY(v);
+          const formattedY = formatYAxis
+            ? formatYAxis(v)
+            : valuePrefix
+            ? `${valuePrefix}${v >= 1000 ? (v / 1000).toFixed(v % 1000 === 0 ? 0 : 1) + 'k' : v}`
+            : v;
           return (
             <React.Fragment key={k}>
               <line className="grid" x1={l} x2={W - r} y1={yy} y2={yy} />
-              <text className="ax" x={l - 10} y={yy + 4} textAnchor="end">{v}</text>
+              <text className="ax" x={l - 10} y={yy + 4} textAnchor="end">{formattedY}</text>
             </React.Fragment>
           );
         })}
@@ -113,8 +127,17 @@ export default function LineChart({ points = [], aria = "Inquiry trends", emptyT
 
       {hoverIndex !== null && (
         <div className="tip" style={{ left: `${tipPos.left}px`, top: `${tipPos.top}px` }}>
-          <b>{points[hoverIndex].full}</b>
-          {points[hoverIndex].v} {points[hoverIndex].v === 1 ? 'enquiry' : 'enquiries'}
+          {formatTooltip ? (
+            formatTooltip(points[hoverIndex])
+          ) : (
+            <>
+              <b>{points[hoverIndex].full}</b>
+              <div>
+                {valuePrefix ? `${valuePrefix}${Number(points[hoverIndex].v).toLocaleString('en-IN')}` : points[hoverIndex].v}
+                {unit ? ` ${unit}` : (points[hoverIndex].v === 1 ? ' enquiry' : ' enquiries')}
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>

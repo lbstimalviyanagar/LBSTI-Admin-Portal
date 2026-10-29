@@ -189,21 +189,26 @@ function updateBatch($pdo, $user, $id, $body) {
             return;
         }
 
-        if ($user['role'] !== 'admin' && (int)$batch['instructor_id'] !== (int)$user['sub']) {
+        $isAssignedToOther = !empty($batch['instructor_id']) && (int)$batch['instructor_id'] !== (int)$user['sub'];
+        if ($user['role'] !== 'admin' && $isAssignedToOther) {
             http_response_code(403);
-            echo json_encode(["message" => "Access denied. You can only edit your own batches."]);
+            echo json_encode(["message" => "Access denied. You can only edit your own batches or unassigned batches."]);
             return;
         }
 
         $batchTime = $body['batchTime'] ?? $batch['batch_time'];
-        $instructorId = $body['instructorId'] ?? $batch['instructor_id'];
-        $courseName = $body['courseName'] ?? $batch['course_name'];
-        $topic = $body['topic'] ?? $batch['topic'];
-        $studentCount = $body['studentCount'] ?? $batch['student_count'];
-        $status = $body['status'] ?? $batch['status'];
-        $date = $body['date'] ?? $batch['date'];
+        $instructorId = array_key_exists('instructorId', $body) ? $body['instructorId'] : $batch['instructor_id'];
+        if ($instructorId === '' || $instructorId === '0' || $instructorId === 0) {
+            $instructorId = null;
+        }
 
-        $stmt = $pdo->prepare("UPDATE institute_batches SET batch_time = ?, instructor_id = ?, course_name = ?, topic = ?, student_count = ?, status = ?, `date` = ? WHERE id = ?");
+        $courseName = $body['courseName'] ?? $batch['course_name'];
+        $topic = array_key_exists('topic', $body) ? $body['topic'] : $batch['topic'];
+        $studentCount = array_key_exists('studentCount', $body) ? $body['studentCount'] : $batch['student_count'];
+        $status = $body['status'] ?? $batch['status'];
+        $date = $body['date'] ?? $batch['date'] ?? date('Y-m-d');
+
+        $stmt = $pdo->prepare("UPDATE institute_batches SET batch_time = ?, instructor_id = ?, course_name = ?, topic = ?, student_count = ?, status = ?, `date` = ?, updated_at = NOW() WHERE id = ?");
         $stmt->execute([$batchTime, $instructorId, $courseName, $topic, $studentCount, $status, $date, $id]);
 
         $stmt = $pdo->prepare("
