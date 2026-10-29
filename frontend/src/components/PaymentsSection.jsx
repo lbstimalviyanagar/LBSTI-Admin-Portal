@@ -243,6 +243,9 @@ export default function PaymentsSection({
   const [showDuesModal, setShowDuesModal] = useState(false);
   const [duesSearch, setDuesSearch] = useState('');
 
+  // Payment History real-time search state
+  const [historySearchQuery, setHistorySearchQuery] = useState('');
+
   const activeRange = useMemo(() => {
     return rangeOf(dateRangeKind, customFrom, customTo);
   }, [dateRangeKind, customFrom, customTo]);
@@ -1016,9 +1019,9 @@ export default function PaymentsSection({
   };
 
   const handleExportFeesCSV = () => {
-    const exportList = filteredFees;
+    const exportList = historySearchQuery.trim() ? displayedHistoryFees : filteredFees;
     if (!exportList.length) {
-      onToast("Nothing to export for this date range", true);
+      onToast("Nothing to export for this search / date range", true);
       return;
     }
     const itemColumns = FEE_ITEMS.flatMap(([key, label]) => [
@@ -1372,6 +1375,18 @@ export default function PaymentsSection({
   const sortedHistoryFees = useMemo(() => {
     return sortHistoryFees(historyFees);
   }, [historyFees, sortHistoryFees]);
+
+  // Real-time search filter for Payment History (checks student, course, receivedBy)
+  const displayedHistoryFees = useMemo(() => {
+    if (!historySearchQuery.trim()) return sortedHistoryFees;
+    const q = historySearchQuery.trim().toLowerCase();
+    return sortedHistoryFees.filter((f) => {
+      const student = String(f.studentName || '').toLowerCase();
+      const course = String(f.course || '').toLowerCase();
+      const receivedBy = String(f.receivedBy || '').toLowerCase();
+      return student.includes(q) || course.includes(q) || receivedBy.includes(q);
+    });
+  }, [sortedHistoryFees, historySearchQuery]);
 
   return (
     <section>
@@ -2551,7 +2566,7 @@ export default function PaymentsSection({
                   Showing collections for <b>{rangeLabel}</b>
                 </span>
                 <span style={{ color: '#64748b', fontSize: '0.82rem' }}>
-                  ({sortedHistoryFees.length} {sortedHistoryFees.length === 1 ? 'record' : 'records'} · Total: ₹{sortedHistoryFees.reduce((sum, f) => sum + (Number(f.amount) || 0), 0).toLocaleString('en-IN')})
+                  ({displayedHistoryFees.length} {displayedHistoryFees.length === 1 ? 'record' : 'records'} · Total: ₹{displayedHistoryFees.reduce((sum, f) => sum + (Number(f.amount) || 0), 0).toLocaleString('en-IN')})
                 </span>
               </div>
               <button
@@ -2582,7 +2597,21 @@ export default function PaymentsSection({
                     : "All fee payments recorded, newest first."}
                 </p>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                {/* Real-time search input for Payment History */}
+                <div className="search" style={{ margin: 0, minWidth: '220px', maxWidth: '320px' }}>
+                  <span className="si"><Icon name="search" size={16} /></span>
+                  <input
+                    className="input"
+                    type="search"
+                    placeholder="Search student, course, or receiver..."
+                    value={historySearchQuery}
+                    onChange={(e) => setHistorySearchQuery(e.target.value)}
+                    style={{ height: '36px', fontSize: '0.84rem' }}
+                    autoComplete="off"
+                  />
+                </div>
+
                 {hasDateFilter && (
                   <button
                     className="btn sm"
@@ -2625,19 +2654,34 @@ export default function PaymentsSection({
                         <div className="skel" style={{ height: '160px' }} />
                       </td>
                     </tr>
-                  ) : sortedHistoryFees.length === 0 ? (
+                  ) : displayedHistoryFees.length === 0 ? (
                     <tr>
                       <td colSpan="7">
                         <div className="empty">
                           <div className="ei"><Icon name="fee" size={24} /></div>
-                          <b>No payments recorded {hasDateFilter ? 'in this date range' : 'yet'}</b>
+                          <b>
+                            {historySearchQuery.trim()
+                              ? `No payments found matching "${historySearchQuery}"`
+                              : `No payments recorded ${hasDateFilter ? 'in this date range' : 'yet'}`}
+                          </b>
                           <span>
-                            {hasDateFilter
-                              ? 'Try picking another date range or clear the filter.'
-                              : 'Record your first fee payment using the Record Payment tab.'}
+                            {historySearchQuery.trim()
+                              ? 'Try searching by a different student name, course, or receiver.'
+                              : (hasDateFilter
+                                ? 'Try picking another date range or clear the filter.'
+                                : 'Record your first fee payment using the Record Payment tab.')}
                           </span>
-                          {hasDateFilter && (
-                            <div style={{ marginTop: '12px' }}>
+                          <div style={{ marginTop: '12px', display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                            {historySearchQuery.trim() && (
+                              <button
+                                type="button"
+                                className="btn sm"
+                                onClick={() => setHistorySearchQuery('')}
+                              >
+                                Clear Search
+                              </button>
+                            )}
+                            {hasDateFilter && (
                               <button
                                 type="button"
                                 className="btn primary sm"
@@ -2645,13 +2689,13 @@ export default function PaymentsSection({
                               >
                                 Clear Date Filter
                               </button>
-                            </div>
-                          )}
+                            )}
+                          </div>
                         </div>
                       </td>
                     </tr>
                   ) : (
-                    sortedHistoryFees.map((f) => (
+                    displayedHistoryFees.map((f) => (
                       <tr key={f.id}>
                         <td>
                           <b>{f.studentName || "Student"}</b>
