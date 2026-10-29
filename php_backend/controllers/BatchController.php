@@ -52,10 +52,43 @@ function getBatches($pdo) {
             FROM institute_batches b 
             LEFT JOIN portal_users u ON u.id = b.instructor_id 
             {$whereClause}
-            ORDER BY b.batch_time ASC, b.id ASC
+            ORDER BY 
+                COALESCE(STR_TO_DATE(TRIM(SUBSTRING_INDEX(b.batch_time, '-', 1)), '%h:%i %p'), '23:59:59') ASC,
+                b.batch_time ASC,
+                b.id ASC
         ");
         $stmt->execute($params);
-        echo json_encode($stmt->fetchAll());
+        $batches = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $parseTime = function($timeStr) {
+            if (empty($timeStr)) return 9999;
+            $parts = preg_split('/[-–—]|to/i', $timeStr);
+            $start = trim($parts[0] ?? '');
+            if (preg_match('/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i', $start, $m)) {
+                $h = (int)$m[1];
+                $min = isset($m[2]) && $m[2] !== '' ? (int)$m[2] : 0;
+                $ampm = strtoupper($m[3] ?? '');
+                if ($ampm === 'PM' && $h < 12) $h += 12;
+                else if ($ampm === 'AM' && $h === 12) $h = 0;
+                return ($h * 60) + $min;
+            }
+            return 9999;
+        };
+
+        usort($batches, function($a, $b) use ($parseTime) {
+            $tA = $parseTime($a['batch_time'] ?? '');
+            $tB = $parseTime($b['batch_time'] ?? '');
+            if ($tA !== $tB) {
+                return $tA - $tB;
+            }
+            $cComp = strcasecmp($a['course_name'] ?? '', $b['course_name'] ?? '');
+            if ($cComp !== 0) {
+                return $cComp;
+            }
+            return ($a['id'] ?? 0) <=> ($b['id'] ?? 0);
+        });
+
+        echo json_encode($batches);
     } catch (PDOException $e) {
         http_response_code(500);
         echo json_encode(["message" => "Database error: " . $e->getMessage()]);

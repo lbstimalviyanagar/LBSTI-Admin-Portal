@@ -10,11 +10,11 @@ export function parseSortableDate(val) {
 
   const str = String(val).trim();
 
-  // Check for time slot range like "07:00 AM - 08:00 AM" or "7:00 AM"
-  const timeSlotMatch = str.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+  // Check for time slot range like "07:00 AM - 08:00 AM", "06:00 AM", or "7 AM"
+  const timeSlotMatch = str.match(/(\d{1,2})(?::(\d{2}))?\s*(AM|PM)/i);
   if (timeSlotMatch) {
     let hours = parseInt(timeSlotMatch[1], 10);
-    const minutes = parseInt(timeSlotMatch[2], 10);
+    const minutes = timeSlotMatch[2] ? parseInt(timeSlotMatch[2], 10) : 0;
     const meridiem = timeSlotMatch[3].toUpperCase();
     if (meridiem === 'PM' && hours < 12) hours += 12;
     if (meridiem === 'AM' && hours === 12) hours = 0;

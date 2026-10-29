@@ -4,8 +4,78 @@ import Icon from '../components/Icons';
 import { useTableSort } from '../hooks/useTableSort';
 import { SortableTh } from '../components/SortableHeader';
 
+/**
+ * Parses any time slot string into minutes from midnight (0 - 1439).
+ * Evaluates chronological order accurately for 12-hour AM/PM formats
+ * (e.g., '06:00 AM - 07:00 AM' -> 360, '07:00 AM' -> 420, '12:00 PM' -> 720, '01:00 PM' -> 780).
+ */
+export function parseTimeSlotMinutes(timeStr) {
+  if (!timeStr || typeof timeStr !== 'string') return 9999;
+
+  // Extract start time part (e.g. "06:00 AM" from "06:00 AM - 07:00 AM" or "06:00 AM to 07:00 AM")
+  const startPart = timeStr.split(/[-–—]|to/i)[0].trim();
+  const match = startPart.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i);
+  if (!match) return 9999;
+
+  let hours = parseInt(match[1], 10);
+  const minutes = match[2] ? parseInt(match[2], 10) : 0;
+  let meridian = match[3] ? match[3].toUpperCase() : null;
+
+  if (!meridian) {
+    const fullMeridian = timeStr.match(/\b(am|pm)\b/i);
+    if (fullMeridian) meridian = fullMeridian[1].toUpperCase();
+  }
+
+  if (meridian === 'PM' && hours < 12) {
+    hours += 12;
+  } else if (meridian === 'AM' && hours === 12) {
+    hours = 0;
+  }
+
+  return hours * 60 + minutes;
+}
+
+/**
+ * Sorts a batch array strictly chronologically by time slot, with stable tie-breaking.
+ */
+export function sortBatchesChronologically(list) {
+  if (!Array.isArray(list)) return [];
+  return [...list].sort((a, b) => {
+    const timeA = parseTimeSlotMinutes(a?.batch_time);
+    const timeB = parseTimeSlotMinutes(b?.batch_time);
+    if (timeA !== timeB) return timeA - timeB;
+    const courseA = String(a?.course_name || '');
+    const courseB = String(b?.course_name || '');
+    const cComp = courseA.localeCompare(courseB, undefined, { sensitivity: 'base' });
+    if (cComp !== 0) return cComp;
+    return String(a?.id || '').localeCompare(String(b?.id || ''), undefined, { numeric: true });
+  });
+}
+
 // Fixed master daily schedule for the institute
 const DEFAULT_BATCHES = [
+  {
+    id: 'b0_1',
+    batch_time: '06:00 AM - 07:00 AM',
+    instructor_name: 'Sahil',
+    instructor_id: 1,
+    course_name: 'Web Development',
+    topic: 'HTML & CSS Foundations',
+    student_count: 10,
+    status: 'Upcoming',
+    updated_at: '2026-10-14 06:00:00'
+  },
+  {
+    id: 'b0_2',
+    batch_time: '07:00 AM - 08:00 AM',
+    instructor_name: 'Harjot Kaur',
+    instructor_id: 2,
+    course_name: 'Python Programming',
+    topic: 'Syntax & Data Structures',
+    student_count: 12,
+    status: 'Upcoming',
+    updated_at: '2026-10-14 07:00:00'
+  },
   {
     id: 'b1',
     batch_time: '09:00 AM - 10:00 AM',
@@ -97,9 +167,9 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
   const [courseFilter, setCourseFilter] = useState('All');
   const [facultyFilter, setFacultyFilter] = useState('All');
 
-  // Pagination State
+  // Pagination State (Default 15 to fit the full 15-slot daily routine on page 1)
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize, setPageSize] = useState(15);
 
   // Unscheduled slots view toggle (only active when no filter is applied)
   const [showUnscheduled, setShowUnscheduled] = useState(true);
@@ -114,11 +184,13 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
     date: new Date().toISOString().slice(0, 10)
   });
 
-  // Time slots for the 12-hour grid
+  // Master institute routine time slots (06:00 AM to 09:00 PM)
   const timeSlots = [
+    '06:00 AM - 07:00 AM', '07:00 AM - 08:00 AM',
     '08:00 AM - 09:00 AM', '09:00 AM - 10:00 AM', '10:00 AM - 11:00 AM', '11:00 AM - 12:00 PM',
     '12:00 PM - 01:00 PM', '01:00 PM - 02:00 PM', '02:00 PM - 03:00 PM', '03:00 PM - 04:00 PM',
-    '04:00 PM - 05:00 PM', '05:00 PM - 06:00 PM', '06:00 PM - 07:00 PM', '07:00 PM - 08:00 PM'
+    '04:00 PM - 05:00 PM', '05:00 PM - 06:00 PM', '06:00 PM - 07:00 PM', '07:00 PM - 08:00 PM',
+    '08:00 PM - 09:00 PM'
   ];
 
   // Calculate Last Updated status indicator for a slot
@@ -166,19 +238,13 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
     try {
       const data = await api.getBatches();
       if (Array.isArray(data) && data.length > 0) {
-        const has9am = data.some(b => b.batch_time === '09:00 AM - 10:00 AM');
-        if (!has9am) {
-          const default9am = DEFAULT_BATCHES.filter(b => b.batch_time === '09:00 AM - 10:00 AM');
-          setBatches([...default9am, ...data]);
-        } else {
-          setBatches(data);
-        }
+        setBatches(sortBatchesChronologically(data));
       } else {
-        setBatches(DEFAULT_BATCHES);
+        setBatches(sortBatchesChronologically(DEFAULT_BATCHES));
       }
     } catch (err) {
       console.warn('Using master batches schedule:', err);
-      setBatches(DEFAULT_BATCHES);
+      setBatches(sortBatchesChronologically(DEFAULT_BATCHES));
     } finally {
       setLoading(false);
     }
@@ -310,10 +376,20 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
     });
   }, [batches, courseFilter, facultyFilter, searchQuery, users]);
 
-  // Determine all time slots (including custom batch times not in fixed grid)
+  // Determine all time slots (including custom batch times not in fixed grid), strictly sorted chronologically
   const allTimeSlots = useMemo(() => {
-    const customSlots = Array.from(new Set(batches.map(b => b.batch_time).filter(t => t && !timeSlots.includes(t))));
-    return [...timeSlots, ...customSlots];
+    const slotSet = new Set(timeSlots);
+    batches.forEach(b => {
+      if (b.batch_time && typeof b.batch_time === 'string' && b.batch_time.trim()) {
+        slotSet.add(b.batch_time.trim());
+      }
+    });
+    return Array.from(slotSet).sort((a, b) => {
+      const minA = parseTimeSlotMinutes(a);
+      const minB = parseTimeSlotMinutes(b);
+      if (minA !== minB) return minA - minB;
+      return a.localeCompare(b, undefined, { numeric: true });
+    });
   }, [batches, timeSlots]);
 
   // Sorting state for Batches table
@@ -328,15 +404,20 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
   const isSortingActive = Boolean(batchSortKey && batchSortDir);
   const isCustomView = hasActiveFilters || isSortingActive;
 
-  // Custom getters for special field matching
+  // Custom getters for special field matching and chronological sorting
   const batchCustomGetters = useMemo(() => ({
+    batch_time: (b) => parseTimeSlotMinutes(b.batch_time),
     student_count: (b) => (b.student_count != null ? Number(b.student_count) : 0),
     instructor_name: (b) => b.instructor_name || 'Unassigned'
   }), []);
 
   const sortedBatches = useMemo(() => {
+    if (!batchSortKey) {
+      // Default view: sort chronologically from 06:00 AM onwards
+      return sortBatchesChronologically(filteredBatches);
+    }
     return sortBatches(filteredBatches, batchCustomGetters);
-  }, [filteredBatches, sortBatches, batchCustomGetters]);
+  }, [filteredBatches, batchSortKey, sortBatches, batchCustomGetters]);
 
   // Clear all filters & sorting
   const clearFilters = () => {
@@ -396,7 +477,7 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
         } catch (apiErr) {
           console.warn('API update failed, updating state locally:', apiErr);
         }
-        setBatches(prev => prev.map(b => b.id === editingBatch.id ? {
+        setBatches(prev => sortBatchesChronologically(prev.map(b => b.id === editingBatch.id ? {
           ...b,
           batch_time: formData.batchTime,
           course_name: formData.courseName,
@@ -406,7 +487,7 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
           student_count: Number(formData.studentCount),
           status: formData.status,
           updated_at: new Date().toISOString().replace('T', ' ').slice(0, 19)
-        } : b));
+        } : b)));
         onToast('Batch updated.');
       } else {
         const newBatchItem = {
@@ -426,7 +507,7 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
         } catch (apiErr) {
           console.warn('API create failed, creating state locally:', apiErr);
         }
-        setBatches(prev => [...prev, newBatchItem]);
+        setBatches(prev => sortBatchesChronologically([...prev, newBatchItem]));
         onToast('Batch created.');
       }
       setIsModalOpen(false);
@@ -937,9 +1018,9 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
                   });
                 })
               ) : (
-                /* Compact unfiltered view: only batches displayed */
+                /* Compact unfiltered view: only batches displayed, sorted chronologically */
                 (() => {
-                  const paginatedBatches = batches.slice(startIndex, startIndex + pageSize);
+                  const paginatedBatches = sortedBatches.slice(startIndex, startIndex + pageSize);
                   const slotGroups = [];
                   paginatedBatches.forEach(batch => {
                     const lastGroup = slotGroups[slotGroups.length - 1];
@@ -1086,8 +1167,10 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
                 aria-label="Rows per page"
               >
                 <option value={10}>10</option>
+                <option value={15}>15</option>
                 <option value={25}>25</option>
                 <option value={50}>50</option>
+                <option value={100}>100</option>
               </select>
             </span>
             <button
