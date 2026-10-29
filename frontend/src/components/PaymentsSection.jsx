@@ -689,17 +689,35 @@ export default function PaymentsSection({
     ];
   }, [fees]);
 
+  // Auto-initialize selectedReceiptPaymentId to first available record if unset
+  useEffect(() => {
+    if (!selectedReceiptPaymentId && historyFees.length > 0) {
+      setSelectedReceiptPaymentId(String(historyFees[0].id));
+    }
+  }, [historyFees, selectedReceiptPaymentId]);
+
   // Issue Printable Receipt
   const handleIssueReceipt = async (targetPaymentId, directFee) => {
-    const feeId = targetPaymentId || selectedReceiptPaymentId || (fees.length > 0 ? fees[0].id : (historyFees.length > 0 ? historyFees[0].id : null));
+    // If targetPaymentId is a React SyntheticEvent or not a primitive, fallback to selectedReceiptPaymentId
+    const isPrimitive = typeof targetPaymentId === 'string' || typeof targetPaymentId === 'number';
+    const feeId = (isPrimitive && targetPaymentId)
+      ? String(targetPaymentId)
+      : (selectedReceiptPaymentId || (fees.length > 0 ? String(fees[0].id) : (historyFees.length > 0 ? String(historyFees[0].id) : null)));
+
     if (!feeId && !directFee) {
       onToast("Select a recorded payment first.", true);
       return;
     }
 
-    const fee = directFee || fees.find(f => String(f.id) === String(feeId)) ||
-                historyFees.find(f => String(f.id) === String(feeId));
-    if (!fee) return;
+    const fee = (directFee && typeof directFee === 'object' && directFee.id)
+      ? directFee
+      : fees.find(f => String(f.id) === String(feeId)) ||
+        historyFees.find(f => String(f.id) === String(feeId));
+
+    if (!fee) {
+      onToast("Selected payment could not be found.", true);
+      return;
+    }
 
     const receiptWin = window.open("", "_blank", "width=820,height=750");
     if (!receiptWin) {
@@ -2373,11 +2391,14 @@ export default function PaymentsSection({
                 <label htmlFor="receiptPayment">Payment record</label>
                 <SearchablePaymentSelect
                   id="receiptPayment"
+                  name="receiptPayment"
                   payments={historyFees}
                   students={students}
                   enquiries={enquiries}
                   selectedId={selectedReceiptPaymentId}
+                  value={selectedReceiptPaymentId}
                   onSelect={(id) => setSelectedReceiptPaymentId(id)}
+                  onChange={(id) => setSelectedReceiptPaymentId(id)}
                   placeholder="Type student name, contact number, or receipt ID..."
                 />
               </div>
@@ -2385,7 +2406,8 @@ export default function PaymentsSection({
               <button
                 className="btn primary"
                 type="button"
-                onClick={handleIssueReceipt}
+                id="issueReceiptBtn"
+                onClick={() => handleIssueReceipt(selectedReceiptPaymentId)}
               >
                 Issue Receipt
               </button>

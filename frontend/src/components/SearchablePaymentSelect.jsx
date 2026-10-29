@@ -8,13 +8,17 @@ import { fmtDate } from '../utils/helpers';
  */
 export default function SearchablePaymentSelect({
   id = 'receiptPayment',
+  name = 'receiptPayment',
   payments = [],
   students = [],
   enquiries = [],
   selectedId = '',
+  value = '',
   onSelect,
+  onChange,
   placeholder = 'Search by student name, contact number, or receipt ID...'
 }) {
+  const activeId = String(selectedId || value || '');
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
@@ -72,9 +76,9 @@ export default function SearchablePaymentSelect({
 
   // Current selected payment object
   const selectedPayment = useMemo(() => {
-    if (!selectedId) return null;
-    return normalizedPayments.find((p) => p.stringId === String(selectedId)) || null;
-  }, [normalizedPayments, selectedId]);
+    if (!activeId) return null;
+    return normalizedPayments.find((p) => p.stringId === activeId || String(p.rawId) === activeId) || null;
+  }, [normalizedPayments, activeId]);
 
   // Filter payments based on search query (by student name, contact number, or receipt ID)
   const filteredPayments = useMemo(() => {
@@ -134,8 +138,12 @@ export default function SearchablePaymentSelect({
   }, [highlightedIndex, isOpen]);
 
   const handleSelectPayment = (payment) => {
-    if (onSelect) {
-      onSelect(payment.stringId);
+    const pId = payment ? String(payment.stringId || payment.rawId || payment.id) : '';
+    if (typeof onSelect === 'function') {
+      onSelect(pId, payment);
+    }
+    if (typeof onChange === 'function') {
+      onChange(pId, payment);
     }
     setIsOpen(false);
     setSearchQuery('');
@@ -147,8 +155,11 @@ export default function SearchablePaymentSelect({
 
   const handleClearSelection = (e) => {
     e.stopPropagation();
-    if (onSelect) {
-      onSelect('');
+    if (typeof onSelect === 'function') {
+      onSelect('', null);
+    }
+    if (typeof onChange === 'function') {
+      onChange('', null);
     }
     setSearchQuery('');
     setIsOpen(true);
@@ -202,6 +213,9 @@ export default function SearchablePaymentSelect({
         width: '100%'
       }}
     >
+      {/* Hidden input to ensure programmatic and form value access */}
+      <input type="hidden" id={`${id}-value`} name={name} value={activeId} />
+
       {/* Combobox Input Container */}
       <div
         style={{
@@ -412,6 +426,10 @@ export default function SearchablePaymentSelect({
                   role="option"
                   aria-selected={isSelected}
                   className="searchable-payment-item"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    handleSelectPayment(p);
+                  }}
                   onClick={() => handleSelectPayment(p)}
                   onMouseEnter={() => setHighlightedIndex(idx)}
                   style={{
