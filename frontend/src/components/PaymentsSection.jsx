@@ -1336,204 +1336,212 @@ export default function PaymentsSection({
             )}
           </div>
 
-          {/* Monthly Collection Trend Line Graph Card */}
-          <div className="card section" style={{ padding: '24px', marginTop: '22px', marginBottom: '0' }}>
-            <div style={{
-              display: 'flex',
-              alignItems: 'flex-start',
-              justifyContent: 'space-between',
-              flexWrap: 'wrap',
-              gap: '12px',
-              marginBottom: '18px'
-            }}>
+          {/* 1. Full-Width Recent Transactions Table Card at the Very Top */}
+          <div className="card section w-full" style={{ width: '100%', marginTop: '22px', marginBottom: '22px' }}>
+            <div className="card-head">
               <div>
-                <h3 style={{ margin: 0, fontSize: '1.08rem', fontWeight: 800, color: '#0f172a' }}>
-                  Monthly Collection Trend
-                </h3>
+                <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800 }}>Recent Transactions</h3>
                 <p style={{ margin: '4px 0 0', color: 'var(--muted)', fontSize: '0.86rem' }}>
-                  Fee collections trend over the past 6 months
+                  Latest fee collections and receipt records.
                 </p>
               </div>
-
-              <div style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '8px',
-                background: '#eff6ff',
-                color: '#1d4ed8',
-                padding: '6px 14px',
-                borderRadius: '8px',
-                fontSize: '0.82rem',
-                fontWeight: 700,
-                border: '1px solid #bfdbfe'
-              }}>
-                <Icon name="chart" size={15} />
-                <span>
-                  6-Month Total: ₹{monthlyTrendData.reduce((acc, m) => acc + m.v, 0).toLocaleString('en-IN')}
-                </span>
-              </div>
+              <button
+                className="btn sm"
+                type="button"
+                onClick={() => setFeeTab('history')}
+                title="View all payments in history"
+              >
+                View all <Icon name="chevR" size={14} />
+              </button>
             </div>
 
-            <LineChart
-              points={monthlyTrendData}
-              aria="Monthly fee collections trend"
-              valuePrefix="₹"
-              unit="collected"
-              emptyTitle="No collection records"
-              emptyMsg="Record payments to visualize the monthly collection trend."
-              formatTooltip={(p) => (
-                <div>
-                  <div style={{ fontWeight: 700, color: '#fff', fontSize: '0.86rem' }}>{p.full}</div>
-                  <div style={{ marginTop: '2px', color: '#93c5fd', fontWeight: 600 }}>
-                    ₹{Number(p.v || 0).toLocaleString('en-IN')}
-                  </div>
-                  {p.count > 0 && (
-                    <div style={{ fontSize: '0.74rem', color: '#cbd5e1', marginTop: '1px' }}>
-                      {p.count} {p.count === 1 ? 'payment recorded' : 'payments recorded'}
-                    </div>
-                  )}
-                </div>
-              )}
-            />
+            <div className="tbl-scroll">
+              <table style={{ width: '100%' }}>
+                <thead>
+                  <tr>
+                    <SortableTh colKey="receiptNo" label="Receipt No." sortKey={recentSortKey} sortDirection={recentSortDir} onSort={handleRecentSort} />
+                    <SortableTh colKey="studentName" label="Student Name" sortKey={recentSortKey} sortDirection={recentSortDir} onSort={handleRecentSort} />
+                    <SortableTh colKey="date" label="Date" sortKey={recentSortKey} sortDirection={recentSortDir} onSort={handleRecentSort} />
+                    <SortableTh colKey="course" label="Course" sortKey={recentSortKey} sortDirection={recentSortDir} onSort={handleRecentSort} />
+                    <SortableTh colKey="amount" label="Amount Paid" sortKey={recentSortKey} sortDirection={recentSortDir} onSort={handleRecentSort} />
+                    <SortableTh colKey="mode" label="Payment Mode" sortKey={recentSortKey} sortDirection={recentSortDir} onSort={handleRecentSort} />
+                    <SortableTh colKey="status" label="Status" sortKey={recentSortKey} sortDirection={recentSortDir} onSort={handleRecentSort} />
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedRecentTx.map((tx) => (
+                    <tr key={tx.id}>
+                      <td>
+                        <span style={{ fontFamily: 'monospace', fontWeight: 600, color: 'var(--navy-700)', fontSize: '0.82rem' }}>
+                          {tx.receiptNo}
+                        </span>
+                      </td>
+                      <td>
+                        <div style={{ fontWeight: 700, color: '#0f172a' }}>{tx.studentName}</div>
+                        {tx.studentPhone && <small style={{ color: 'var(--muted)', fontSize: '0.78rem' }}>{tx.studentPhone}</small>}
+                      </td>
+                      <td>{tx.date}</td>
+                      <td>
+                        <div>{tx.course}</div>
+                        {tx.othersDescription ? (
+                          <small style={{ display: 'block', color: 'var(--muted)', fontSize: '0.78rem' }}>
+                            For: {tx.othersDescription}
+                          </small>
+                        ) : null}
+                      </td>
+                      <td>
+                        <strong style={{ color: '#0f172a' }}>₹{Number(tx.amount || 0).toLocaleString('en-IN')}</strong>
+                      </td>
+                      <td>
+                        <span style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          padding: '3px 9px',
+                          borderRadius: '6px',
+                          fontSize: '0.78rem',
+                          fontWeight: 600,
+                          background: '#f1f5f9',
+                          color: '#334155',
+                          border: '1px solid #e2e8f0'
+                        }}>
+                          {tx.mode}
+                        </span>
+                      </td>
+                      <td>
+                        <span style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '5px',
+                          padding: '3px 10px',
+                          borderRadius: '12px',
+                          fontSize: '0.78rem',
+                          fontWeight: 700,
+                          background: tx.status === 'Completed' ? '#dcfce7' : '#fef9c3',
+                          color: tx.status === 'Completed' ? '#15803d' : '#854d0e',
+                          border: `1px solid ${tx.status === 'Completed' ? '#bbf7d0' : '#fef08a'}`
+                        }}>
+                          <span style={{
+                            width: '6px',
+                            height: '6px',
+                            borderRadius: '50%',
+                            background: tx.status === 'Completed' ? '#16a34a' : '#ca8a04'
+                          }} />
+                          {tx.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
 
-          {/* 2-Column Section: Recent Transactions + Payment Modes Distribution */}
-          <div className="payments-dashboard-grid">
-            {/* Recent Transactions Table Card */}
-            <div className="card section" style={{ margin: 0 }}>
-              <div className="card-head">
-                <div>
-                  <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800 }}>Recent Transactions</h3>
-                  <p style={{ margin: '4px 0 0', color: 'var(--muted)', fontSize: '0.86rem' }}>
-                    Latest fee collections and receipt records.
-                  </p>
-                </div>
-                <button
-                  className="btn sm"
-                  type="button"
-                  onClick={() => setFeeTab('history')}
-                  title="View all payments in history"
-                >
-                  View all <Icon name="chevR" size={14} />
-                </button>
-              </div>
+          {/* 2. Responsive Bottom Container: Line Graph and Donut Chart Side-by-Side (Stacked on Mobile) */}
+          <div className="payments-charts-row" style={{ display: 'flex', gap: '20px', width: '100%', marginTop: '0', marginBottom: '0' }}>
+            {/* Monthly Collection Trend Line Graph Card */}
+            <div className="chart-col-line" style={{ flex: '1.4', minWidth: 0 }}>
+              <div className="card section" style={{ margin: 0, padding: '24px', height: '100%', display: 'flex', flexDirection: 'column' }}>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: '12px',
+                  marginBottom: '18px'
+                }}>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: '1.08rem', fontWeight: 800, color: '#0f172a' }}>
+                      Monthly Collection Trend
+                    </h3>
+                    <p style={{ margin: '4px 0 0', color: 'var(--muted)', fontSize: '0.86rem' }}>
+                      Fee collections trend over the past 6 months
+                    </p>
+                  </div>
 
-              <div className="tbl-scroll">
-                <table>
-                  <thead>
-                    <tr>
-                      <SortableTh colKey="receiptNo" label="Receipt No." sortKey={recentSortKey} sortDirection={recentSortDir} onSort={handleRecentSort} />
-                      <SortableTh colKey="studentName" label="Student Name" sortKey={recentSortKey} sortDirection={recentSortDir} onSort={handleRecentSort} />
-                      <SortableTh colKey="date" label="Date" sortKey={recentSortKey} sortDirection={recentSortDir} onSort={handleRecentSort} />
-                      <SortableTh colKey="course" label="Course" sortKey={recentSortKey} sortDirection={recentSortDir} onSort={handleRecentSort} />
-                      <SortableTh colKey="amount" label="Amount Paid" sortKey={recentSortKey} sortDirection={recentSortDir} onSort={handleRecentSort} />
-                      <SortableTh colKey="mode" label="Payment Mode" sortKey={recentSortKey} sortDirection={recentSortDir} onSort={handleRecentSort} />
-                      <SortableTh colKey="status" label="Status" sortKey={recentSortKey} sortDirection={recentSortDir} onSort={handleRecentSort} />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sortedRecentTx.map((tx) => (
-                      <tr key={tx.id}>
-                        <td>
-                          <span style={{ fontFamily: 'monospace', fontWeight: 600, color: 'var(--navy-700)', fontSize: '0.82rem' }}>
-                            {tx.receiptNo}
-                          </span>
-                        </td>
-                        <td>
-                          <div style={{ fontWeight: 700, color: '#0f172a' }}>{tx.studentName}</div>
-                          {tx.studentPhone && <small style={{ color: 'var(--muted)', fontSize: '0.78rem' }}>{tx.studentPhone}</small>}
-                        </td>
-                        <td>{tx.date}</td>
-                        <td>
-                          <div>{tx.course}</div>
-                          {tx.othersDescription ? (
-                            <small style={{ display: 'block', color: 'var(--muted)', fontSize: '0.78rem' }}>
-                              For: {tx.othersDescription}
-                            </small>
-                          ) : null}
-                        </td>
-                        <td>
-                          <strong style={{ color: '#0f172a' }}>₹{Number(tx.amount || 0).toLocaleString('en-IN')}</strong>
-                        </td>
-                        <td>
-                          <span style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            padding: '3px 9px',
-                            borderRadius: '6px',
-                            fontSize: '0.78rem',
-                            fontWeight: 600,
-                            background: '#f1f5f9',
-                            color: '#334155',
-                            border: '1px solid #e2e8f0'
-                          }}>
-                            {tx.mode}
-                          </span>
-                        </td>
-                        <td>
-                          <span style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '5px',
-                            padding: '3px 10px',
-                            borderRadius: '12px',
-                            fontSize: '0.78rem',
-                            fontWeight: 700,
-                            background: tx.status === 'Completed' ? '#dcfce7' : '#fef9c3',
-                            color: tx.status === 'Completed' ? '#15803d' : '#854d0e',
-                            border: `1px solid ${tx.status === 'Completed' ? '#bbf7d0' : '#fef08a'}`
-                          }}>
-                            <span style={{
-                              width: '6px',
-                              height: '6px',
-                              borderRadius: '50%',
-                              background: tx.status === 'Completed' ? '#16a34a' : '#ca8a04'
-                            }} />
-                            {tx.status}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                  <div style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    background: '#eff6ff',
+                    color: '#1d4ed8',
+                    padding: '6px 14px',
+                    borderRadius: '8px',
+                    fontSize: '0.82rem',
+                    fontWeight: 700,
+                    border: '1px solid #bfdbfe'
+                  }}>
+                    <Icon name="chart" size={15} />
+                    <span>
+                      6-Month Total: ₹{monthlyTrendData.reduce((acc, m) => acc + m.v, 0).toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                </div>
+
+                <div style={{ flex: 1, minHeight: 0 }}>
+                  <LineChart
+                    points={monthlyTrendData}
+                    aria="Monthly fee collections trend"
+                    valuePrefix="₹"
+                    unit="collected"
+                    emptyTitle="No collection records"
+                    emptyMsg="Record payments to visualize the monthly collection trend."
+                    formatTooltip={(p) => (
+                      <div>
+                        <div style={{ fontWeight: 700, color: '#fff', fontSize: '0.86rem' }}>{p.full}</div>
+                        <div style={{ marginTop: '2px', color: '#93c5fd', fontWeight: 600 }}>
+                          ₹{Number(p.v || 0).toLocaleString('en-IN')}
+                        </div>
+                        {p.count > 0 && (
+                          <div style={{ fontSize: '0.74rem', color: '#cbd5e1', marginTop: '1px' }}>
+                            {p.count} {p.count === 1 ? 'payment recorded' : 'payments recorded'}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  />
+                </div>
               </div>
             </div>
 
             {/* Payment Modes Distribution Donut Card */}
-            <div className="card section" style={{ margin: 0, padding: '24px' }}>
-              <div style={{ marginBottom: '18px' }}>
-                <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800 }}>Payment Modes Distribution</h3>
-                <p style={{ margin: '4px 0 0', color: 'var(--muted)', fontSize: '0.86rem' }}>
-                  Collections breakdown by payment channel
-                </p>
-              </div>
+            <div className="chart-col-donut" style={{ flex: '1', minWidth: 0 }}>
+              <div className="card section" style={{ margin: 0, padding: '24px', height: '100%', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ marginBottom: '18px' }}>
+                  <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800 }}>Payment Modes Distribution</h3>
+                  <p style={{ margin: '4px 0 0', color: 'var(--muted)', fontSize: '0.86rem' }}>
+                    Collections breakdown by payment channel
+                  </p>
+                </div>
 
-              <DonutChart
-                items={paymentModesData}
-                aria="Payment Modes Distribution"
-                centerLabel="collected"
-              />
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                  <DonutChart
+                    items={paymentModesData}
+                    aria="Payment Modes Distribution"
+                    centerLabel="collected"
+                  />
+                </div>
 
-              <div style={{
-                marginTop: '20px',
-                paddingTop: '16px',
-                borderTop: '1px solid var(--line)',
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(min(90px, 100%), 1fr))',
-                gap: '10px',
-                textAlign: 'center'
-              }}>
-                {paymentModesData.map((item) => (
-                  <div key={item.name} style={{ background: 'var(--card-2)', padding: '10px 8px', borderRadius: '8px', border: '1px solid var(--line)' }}>
-                    <div style={{ fontSize: '0.76rem', color: 'var(--muted)', fontWeight: 600 }}>{item.name}</div>
-                    <div style={{ fontSize: '0.96rem', fontWeight: 800, color: '#0f172a', marginTop: '2px' }}>
-                      ₹{item.v.toLocaleString('en-IN')}
+                <div style={{
+                  marginTop: '20px',
+                  paddingTop: '16px',
+                  borderTop: '1px solid var(--line)',
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(min(90px, 100%), 1fr))',
+                  gap: '10px',
+                  textAlign: 'center'
+                }}>
+                  {paymentModesData.map((item) => (
+                    <div key={item.name} style={{ background: 'var(--card-2)', padding: '10px 8px', borderRadius: '8px', border: '1px solid var(--line)' }}>
+                      <div style={{ fontSize: '0.76rem', color: 'var(--muted)', fontWeight: 600 }}>{item.name}</div>
+                      <div style={{ fontSize: '0.96rem', fontWeight: 800, color: '#0f172a', marginTop: '2px' }}>
+                        ₹{item.v.toLocaleString('en-IN')}
+                      </div>
+                      <div style={{ fontSize: '0.74rem', color: item.color, fontWeight: 700, marginTop: '2px' }}>
+                        {Math.round((item.v / totalCollected) * 100)}%
+                      </div>
                     </div>
-                    <div style={{ fontSize: '0.74rem', color: item.color, fontWeight: 700, marginTop: '2px' }}>
-                      {Math.round((item.v / totalCollected) * 100)}%
-                    </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             </div>
           </div>

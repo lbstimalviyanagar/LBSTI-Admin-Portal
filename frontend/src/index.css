@@ -3124,6 +3124,28 @@ td:has(.empty), td:has(.skel) {
   }
 }
 
+/* Payments Dashboard Bottom Charts Row (Side-by-Side on Desktop, Stacked on Mobile) */
+.payments-charts-row {
+  display: flex;
+  flex-direction: row;
+  gap: 20px;
+  width: 100%;
+  margin-top: 22px;
+}
+.payments-charts-row .chart-col-line {
+  flex: 1.4;
+  min-width: 0;
+}
+.payments-charts-row .chart-col-donut {
+  flex: 1;
+  min-width: 0;
+}
+@media (max-width: 900px) {
+  .payments-charts-row {
+    flex-direction: column;
+  }
+}
+
 /* Payment History Table Action Buttons */
 .payment-actions-cell {
   white-space: nowrap;
