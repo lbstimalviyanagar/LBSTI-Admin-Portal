@@ -24,7 +24,18 @@ export const COURSES = [
   "Cyber Security (3 Months)"
 ];
 
-export const SOURCES = ["Website", "Meta Ads", "Google Ads", "Walk-in", "Referral", "Phone call", "Education fair"];
+export const STANDARDIZED_SOURCES = [
+  "Website",
+  "Meta Ads",
+  "Google Ads",
+  "Walk-in",
+  "Referral",
+  "Phone call",
+  "Education fair",
+  "Other"
+];
+
+export const SOURCES = STANDARDIZED_SOURCES;
 
 export const BATCHES = [
   "Morning (7 AM - 10 AM)",
@@ -34,7 +45,127 @@ export const BATCHES = [
   "Weekend"
 ];
 
-export const COUNSELORS = ["Sahil", "Harjot"];
+export function normalizeLeadSource(src) {
+  if (!src) return "Other";
+  const s = String(src).trim();
+  if (!s) return "Other";
+  const lower = s.toLowerCase();
+
+  // Walk-in variations: walkin, walk-in, walk in, direct, walk_in, center visit, walk
+  if (
+    lower === "walkin" ||
+    lower === "walk-in" ||
+    lower === "walk in" ||
+    lower === "walk_in" ||
+    lower.includes("walk") ||
+    lower === "direct" ||
+    lower.includes("visit")
+  ) {
+    return "Walk-in";
+  }
+
+  // Referral variations: refrence, referral, reference, referal, student reference, friend
+  if (
+    lower.includes("ref") ||
+    lower.includes("friend") ||
+    lower.includes("mouth") ||
+    lower.includes("recommend")
+  ) {
+    return "Referral";
+  }
+
+  // Google Ads variations: google ads, google, adwords, gads
+  if (
+    lower === "google ads" ||
+    lower === "google ad" ||
+    lower === "google" ||
+    lower.includes("google") ||
+    lower.includes("adword") ||
+    lower === "gads"
+  ) {
+    return "Google Ads";
+  }
+
+  // Meta Ads variations: meta ads, meta, facebook, fb, instagram, insta
+  if (
+    lower === "meta ads" ||
+    lower === "meta ad" ||
+    lower === "meta" ||
+    lower.includes("meta") ||
+    lower.includes("facebook") ||
+    lower === "fb" ||
+    lower === "fb ads" ||
+    lower.includes("insta") ||
+    lower.includes("social")
+  ) {
+    return "Meta Ads";
+  }
+
+  // Website variations: website, site, web, portal, landing page, lbsti
+  if (
+    lower === "website" ||
+    lower === "web" ||
+    lower === "site" ||
+    lower.includes("web") ||
+    lower.includes("site") ||
+    lower.includes("portal") ||
+    lower.includes("landing") ||
+    lower.includes("online")
+  ) {
+    return "Website";
+  }
+
+  // Phone call variations: phone call, phone, call, calling, telephonic, inbound
+  if (
+    lower === "phone call" ||
+    lower === "phone" ||
+    lower === "call" ||
+    lower.includes("phone") ||
+    lower.includes("call") ||
+    lower.includes("tele")
+  ) {
+    return "Phone call";
+  }
+
+  // Education fair variations: fair, expo, seminar, exhibition
+  if (
+    lower === "education fair" ||
+    lower.includes("fair") ||
+    lower.includes("expo") ||
+    lower.includes("seminar") ||
+    lower.includes("event") ||
+    lower.includes("exhibit")
+  ) {
+    return "Education fair";
+  }
+
+  // Case-insensitive match against standardized sources
+  for (const std of STANDARDIZED_SOURCES) {
+    if (lower === std.toLowerCase()) return std;
+  }
+
+  return "Other";
+}
+
+export function canonicalCounselorName(rawName) {
+  if (!rawName) return '';
+  const trimmed = String(rawName).trim();
+  if (!trimmed) return '';
+  const lower = trimmed.toLowerCase();
+  if (lower === 'unassigned' || lower === 'none' || lower === '–' || lower === '-') return '';
+  if (lower === 'sahil' || lower === 'sahil choudhary' || lower.startsWith('sahil choudh')) {
+    return 'Sahil Choudhary';
+  }
+  if (lower === 'harjot' || lower === 'harjot kaur' || lower.startsWith('harjot k')) {
+    return 'Harjot Kaur';
+  }
+  if (lower === 'palwasha' || lower.startsWith('palwasha')) {
+    return 'Palwasha';
+  }
+  return trimmed;
+}
+
+export const COUNSELORS = ["Sahil Choudhary", "Harjot Kaur"];
 
 export const FEE_ITEMS = [
   ["registrationFee", "Registration Fee"],

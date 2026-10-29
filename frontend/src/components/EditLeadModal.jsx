@@ -1,9 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import Icon from './Icons';
 import {
   COURSES,
   BATCHES,
   SOURCES,
+  STANDARDIZED_SOURCES,
+  normalizeLeadSource,
+  canonicalCounselorName,
   OPEN_STATUSES,
   STATUSES,
   fmtDate,
@@ -41,6 +44,23 @@ export default function EditLeadModal({
   const [notesTranslating, setNotesTranslating] = useState(false);
   const [notesTranslation, setNotesTranslation] = useState(null);
 
+  // Apply a Set to ensure unique counselors in EditLeadModal
+  const uniqueCounselorList = useMemo(() => {
+    const seen = new Set();
+    const result = [];
+
+    (counselorList || []).forEach((c) => {
+      const raw = typeof c === 'string' ? c : (c?.fullName || c?.name || '');
+      const canonical = canonicalCounselorName(raw);
+      if (canonical && !seen.has(canonical.toLowerCase())) {
+        seen.add(canonical.toLowerCase());
+        result.push(canonical);
+      }
+    });
+
+    return result.sort((a, b) => a.localeCompare(b));
+  }, [counselorList]);
+
   // Remark composer dictation & translation
   const [remarkMicOn, setRemarkMicOn] = useState(false);
   const [remarkLang, setRemarkLang] = useState('en-IN');
@@ -60,9 +80,9 @@ export default function EditLeadModal({
         city: lead.city || '',
         course: lead.course || '',
         batch: lead.batch || '',
-        source: lead.source || '',
+        source: normalizeLeadSource(lead.source),
         status: lead.status || 'New',
-        assignedTo: lead.assignedTo || '',
+        assignedTo: canonicalCounselorName(lead.assignedTo),
         followUpDate: lead.followUpDate ? String(lead.followUpDate).slice(0, 10) : '',
         notes: lead.notes || ''
       };
@@ -274,6 +294,8 @@ export default function EditLeadModal({
         patch[key] = formData[key];
       }
     }
+    if (patch.source) patch.source = normalizeLeadSource(patch.source);
+    if (patch.assignedTo) patch.assignedTo = canonicalCounselorName(patch.assignedTo);
 
     if (Object.keys(patch).length === 0) {
       onToast("No changes to save.");
@@ -406,7 +428,7 @@ export default function EditLeadModal({
                     onChange={(e) => setFormData({ ...formData, source: e.target.value })}
                   >
                     <option value="">Select Source</option>
-                    {SOURCES.map(s => <option key={s} value={s}>{s}</option>)}
+                    {STANDARDIZED_SOURCES.map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </div>
 
@@ -419,7 +441,7 @@ export default function EditLeadModal({
                     onChange={(e) => setFormData({ ...formData, assignedTo: e.target.value })}
                   >
                     <option value="">Select Counselor</option>
-                    {counselorList.map(c => <option key={c} value={c}>{c}</option>)}
+                    {uniqueCounselorList.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
 

@@ -16,7 +16,17 @@ async function getUsers(req, res) {
   try {
     const client = db.getClient();
     const result = await client.query('SELECT id, username, full_name, role, created_at FROM portal_users ORDER BY created_at DESC');
-    res.json(result.rows.map(normalizeUser));
+    const seen = new Set();
+    const uniqueUsers = [];
+    for (const row of (result.rows || [])) {
+      const u = normalizeUser(row);
+      const key = (u.fullName || u.username || '').trim().toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        uniqueUsers.push(u);
+      }
+    }
+    res.json(uniqueUsers);
   } catch (error) {
     console.error('[GET USERS ERROR]', error);
     res.status(500).json({ message: 'Unable to fetch users.' });

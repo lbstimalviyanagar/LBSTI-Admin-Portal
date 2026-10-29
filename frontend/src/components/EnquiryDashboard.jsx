@@ -30,7 +30,10 @@ import {
   avColor,
   slug,
   parseDate,
-  MON
+  MON,
+  STANDARDIZED_SOURCES,
+  normalizeLeadSource,
+  canonicalCounselorName
 } from '../utils/helpers';
 
 export default function EnquiryDashboard({
@@ -144,10 +147,11 @@ export default function EnquiryDashboard({
     .map(k => ({ name: k, v: byCourseMap[k] }))
     .sort((a, b) => b.v - a.v);
 
-  // Counselor workload
+  // Counselor workload (grouped strictly by canonical faculty/counselor name)
   const byStaffMap = {};
   list.forEach(e => {
-    if (e.assignedTo) byStaffMap[e.assignedTo] = (byStaffMap[e.assignedTo] || 0) + 1;
+    const counselor = canonicalCounselorName(e.assignedTo);
+    if (counselor) byStaffMap[counselor] = (byStaffMap[counselor] || 0) + 1;
   });
   const workloadItems = Object.keys(byStaffMap)
     .map(k => ({ name: k, v: byStaffMap[k] }))
@@ -165,18 +169,20 @@ export default function EnquiryDashboard({
     color: SCOL[s]
   }));
 
-  // Leads by source
+  // Leads by source (strictly normalized into standardized categories: Website, Meta Ads, Google Ads, Walk-in, Referral, Phone call, Education fair, Other)
   const bySourceMap = {};
+  STANDARDIZED_SOURCES.forEach(s => { bySourceMap[s] = 0; });
   list.forEach(e => {
-    const s = e.source || "Other";
+    const s = normalizeLeadSource(e.source);
     bySourceMap[s] = (bySourceMap[s] || 0) + 1;
   });
-  const sourceItems = Object.keys(bySourceMap)
+  const sourceItems = STANDARDIZED_SOURCES
     .map((k, i) => ({
       name: k,
-      v: bySourceMap[k],
+      v: bySourceMap[k] || 0,
       color: PALETTE[i % PALETTE.length]
     }))
+    .filter(it => it.v > 0)
     .sort((a, b) => b.v - a.v);
 
   // Filtered recent leads (filtered by activeSourceFilter when clicked on chart)
@@ -185,10 +191,9 @@ export default function EnquiryDashboard({
     let filteredList = pool;
 
     if (activeSourceFilter) {
-      const target = String(activeSourceFilter).trim().toLowerCase();
+      const target = normalizeLeadSource(activeSourceFilter);
       filteredList = pool.filter(e => {
-        const s = String(e.source || "Other").trim().toLowerCase();
-        return s === target;
+        return normalizeLeadSource(e.source) === target;
       });
     }
 
@@ -443,14 +448,14 @@ export default function EnquiryDashboard({
                       </td>
                       <td>{e.course || "–"}</td>
                       <td>{e.phone}</td>
-                      <td>{e.source || "–"}</td>
+                      <td>{normalizeLeadSource(e.source)}</td>
                       <td>
                         <span className={`pill s-${slug(e.status)}`}>
                           {e.status}
                         </span>
                       </td>
                       <td>
-                        {e.assignedTo ? e.assignedTo : <span className="muted">Unassigned</span>}
+                        {canonicalCounselorName(e.assignedTo) || <span className="muted">Unassigned</span>}
                       </td>
                       <td>
                         {!OPEN_STATUSES.includes(e.status) ? (

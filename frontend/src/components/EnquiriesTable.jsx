@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import Icon from './Icons';
 import CsvUploader from './CsvUploader';
 import {
@@ -12,7 +12,10 @@ import {
   avColor,
   slug,
   parseDate,
-  isoDay
+  isoDay,
+  STANDARDIZED_SOURCES,
+  normalizeLeadSource,
+  canonicalCounselorName
 } from '../utils/helpers';
 
 export default function EnquiriesTable({
@@ -43,9 +46,26 @@ export default function EnquiriesTable({
     size
   } = filterParams;
 
-  // Extract unique courses and sources for filters
+  // Extract unique courses and standardized sources for filters
   const uniqueCourses = Array.from(new Set(enquiries.map(e => e.course).filter(Boolean))).sort();
-  const uniqueSources = Array.from(new Set(enquiries.map(e => e.source).filter(Boolean))).sort();
+  const uniqueSources = STANDARDIZED_SOURCES.filter(s =>
+    enquiries.some(e => normalizeLeadSource(e.source) === s)
+  );
+
+  // Apply a Set to ensure unique counselor options
+  const uniqueCounselorList = useMemo(() => {
+    const seen = new Set();
+    const list = [];
+    (counselorList || []).forEach(c => {
+      const raw = typeof c === 'string' ? c : (c?.fullName || c?.name || '');
+      const canonical = canonicalCounselorName(raw);
+      if (canonical && !seen.has(canonical.toLowerCase())) {
+        seen.add(canonical.toLowerCase());
+        list.push(canonical);
+      }
+    });
+    return list.sort((a, b) => a.localeCompare(b));
+  }, [counselorList]);
 
   // Calculate active filters count
   const activeFiltersCount = (
@@ -62,8 +82,8 @@ export default function EnquiriesTable({
 
   const filteredRows = enquiries.filter((e) => {
     if (course !== "All" && e.course !== course) return false;
-    if (source !== "All" && e.source !== source) return false;
-    if (counselor !== "All" && e.assignedTo !== counselor) return false;
+    if (source !== "All" && normalizeLeadSource(e.source) !== source) return false;
+    if (counselor !== "All" && canonicalCounselorName(e.assignedTo) !== counselor && e.assignedTo !== counselor) return false;
     if (status !== "All" && e.status !== status) return false;
     if (!inRange(e, dateRange)) return false;
 
@@ -142,9 +162,9 @@ export default function EnquiriesTable({
         e.city || "",
         e.course || "",
         e.batch || "",
-        e.source || "",
+        normalizeLeadSource(e.source),
         e.status || "",
-        e.assignedTo || "",
+        canonicalCounselorName(e.assignedTo),
         parseDate(e.followUpDate) ? isoDay(parseDate(e.followUpDate)) : "",
         parseDate(e.createdAt) ? isoDay(parseDate(e.createdAt)) : "",
         e.notes || ""
@@ -255,7 +275,7 @@ export default function EnquiriesTable({
                 onChange={(e) => setFilterParams(prev => ({ ...prev, counselor: e.target.value, page: 1 }))}
               >
                 <option value="All">All counselors</option>
-                {counselorList.map(c => <option key={c} value={c}>{c}</option>)}
+                {uniqueCounselorList.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
 
@@ -439,14 +459,14 @@ export default function EnquiriesTable({
                       </td>
                       <td data-label="Course">{e.course || "–"}</td>
                       <td data-label="Phone">{e.phone}</td>
-                      <td data-label="Source">{e.source || "–"}</td>
+                      <td data-label="Source">{normalizeLeadSource(e.source)}</td>
                       <td data-label="Status">
                         <span className={`pill s-${slug(e.status)}`}>
                           {e.status}
                         </span>
                       </td>
                       <td data-label="Counselor">
-                        {e.assignedTo ? e.assignedTo : <span className="muted">Unassigned</span>}
+                        {canonicalCounselorName(e.assignedTo) || <span className="muted">Unassigned</span>}
                       </td>
                       <td data-label="Follow-up Date">
                         {e.status === "Confirmed" || e.status === "Dropped" ? (

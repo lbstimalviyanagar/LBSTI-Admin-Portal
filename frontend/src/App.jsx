@@ -19,7 +19,7 @@ import Icon from './components/Icons';
 import { useAuth } from './hooks/useAuth';
 import { useToast } from './hooks/useToast';
 import api from './services/api';
-import { COUNSELORS, ORG, WHATSAPP_NUMBER } from './utils/helpers';
+import { COUNSELORS, ORG, WHATSAPP_NUMBER, canonicalCounselorName, normalizeLeadSource, STANDARDIZED_SOURCES } from './utils/helpers';
 import { hasMenuAccess } from './utils/permissions';
 
 export default function App() {
@@ -366,10 +366,37 @@ export default function App() {
     }
   };
 
-  // Build list of counselors dynamically from assignments + defaults
-  const counselorList = Array.from(
-    new Set([...COUNSELORS, ...enquiries.map(e => e.assignedTo).filter(Boolean), user?.name].filter(Boolean))
-  ).sort();
+  // Build strictly unique list of counselors dynamically from assignments + users + defaults
+  const counselorList = useMemo(() => {
+    const seen = new Set();
+    const result = [];
+
+    const addName = (raw) => {
+      const canonical = canonicalCounselorName(raw);
+      if (canonical && !seen.has(canonical.toLowerCase())) {
+        seen.add(canonical.toLowerCase());
+        result.push(canonical);
+      }
+    };
+
+    // 1. Registered portal users (faculty / staff users from database)
+    if (Array.isArray(usersList)) {
+      usersList.forEach(u => addName(u.fullName || u.full_name || u.name || u.username));
+    }
+
+    // 2. Default faculty names
+    COUNSELORS.forEach(addName);
+
+    // 3. Current logged in user
+    if (user) {
+      addName(user.fullName || user.name || user.username);
+    }
+
+    // 4. Any assigned counselor from enquiries
+    enquiries.forEach(e => addName(e.assignedTo));
+
+    return result.sort((a, b) => a.localeCompare(b));
+  }, [usersList, enquiries, user]);
 
   const activeLeadToEdit = editLeadId ? enquiries.find(e => String(e.id) === String(editLeadId)) : null;
 

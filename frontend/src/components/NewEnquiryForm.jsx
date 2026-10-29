@@ -1,9 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import Icon from './Icons';
 import {
   COURSES,
   BATCHES,
   SOURCES,
+  STANDARDIZED_SOURCES,
+  normalizeLeadSource,
+  canonicalCounselorName,
   OPEN_STATUSES,
   COUNSELORS,
   isoDay,
@@ -31,6 +34,23 @@ export default function NewEnquiryForm({
 
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
+
+  // Apply a Set to ensure only unique counselor names are mapped to the <option> elements
+  const uniqueCounselorList = useMemo(() => {
+    const seen = new Set();
+    const result = [];
+
+    (counselorList || []).forEach((c) => {
+      const raw = typeof c === 'string' ? c : (c?.fullName || c?.name || '');
+      const canonical = canonicalCounselorName(raw);
+      if (canonical && !seen.has(canonical.toLowerCase())) {
+        seen.add(canonical.toLowerCase());
+        result.push(canonical);
+      }
+    });
+
+    return result.sort((a, b) => a.localeCompare(b));
+  }, [counselorList]);
 
   // Voice dictation state
   const [isListening, setIsListening] = useState(false);
@@ -175,8 +195,8 @@ export default function NewEnquiryForm({
         city: formData.city.trim(),
         course: formData.course,
         batch: formData.batch,
-        source: formData.source,
-        assignedTo: formData.assignedTo,
+        source: normalizeLeadSource(formData.source),
+        assignedTo: canonicalCounselorName(formData.assignedTo),
         status: formData.status || 'New',
         followUpDate: formData.followUpDate || '',
         notes: formData.notes.trim()
@@ -347,7 +367,7 @@ export default function NewEnquiryForm({
                 onChange={(e) => setFormData({ ...formData, assignedTo: e.target.value })}
               >
                 <option value="">Select Counselor</option>
-                {counselorList.map((c) => (
+                {uniqueCounselorList.map((c) => (
                   <option key={c} value={c}>{c}</option>
                 ))}
               </select>

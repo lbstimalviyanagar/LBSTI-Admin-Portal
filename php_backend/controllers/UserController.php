@@ -36,8 +36,16 @@ function hasMenuPermissionsColumn($pdo) {
 function getUsers($pdo) {
     $stmt = $pdo->query("SELECT * FROM portal_users ORDER BY created_at DESC");
     $users = [];
+    $seen = [];
     while ($row = $stmt->fetch()) {
-        $users[] = normalizeUser($row);
+        $u = normalizeUser($row);
+        $nameKey = strtolower(trim($u['fullName'] ?: $u['username']));
+        if ($nameKey !== '' && !isset($seen[$nameKey])) {
+            $seen[$nameKey] = true;
+            $users[] = $u;
+        } elseif ($nameKey === '') {
+            $users[] = $u;
+        }
     }
     echo json_encode($users);
 }
