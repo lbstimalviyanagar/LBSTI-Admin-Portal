@@ -33,6 +33,7 @@ import {
   MON,
   STANDARDIZED_SOURCES,
   normalizeLeadSource,
+  normalizeStatus,
   canonicalCounselorName
 } from '../utils/helpers';
 
@@ -65,11 +66,14 @@ export default function EnquiryDashboard({
   const today = sod(new Date());
 
   const total = list.length;
-  const openLeads = list.filter(e => OPEN_STATUSES.includes(e.status));
+  const openLeads = list.filter(e => OPEN_STATUSES.includes(normalizeStatus(e.status)));
   const active = openLeads.filter(e => e.assignedTo).length;
-  const dropped = list.filter(e => e.status === "Dropped").length;
-  const confirmed = list.filter(e => e.status === "Confirmed").length;
-  const inCounseling = list.filter(e => e.status === "Counseling Scheduled" || e.status === "Counseling done").length;
+  const dropped = list.filter(e => normalizeStatus(e.status) === "Lost / Closed").length;
+  const confirmed = list.filter(e => normalizeStatus(e.status) === "Admission Confirmed").length;
+  const inCounseling = list.filter(e => {
+    const ns = normalizeStatus(e.status);
+    return ns === "In Discussion" || ns === "Campus Visit Booked";
+  }).length;
   const pending = openLeads.filter(isPendingFU);
   const overdue = pending.filter(e => {
     const d = parseDate(e.followUpDate);
@@ -98,7 +102,7 @@ export default function EnquiryDashboard({
     if (dashRangeKind === "today") {
       const c = Array(24).fill(0);
       list.forEach(e => {
-        const d = parseDate(e.createdAt);
+        const d = parseDate(e.inquiryDate || e.createdAt);
         if (d) c[d.getHours()]++;
       });
       return c.map((v, h) => {
@@ -109,7 +113,7 @@ export default function EnquiryDashboard({
 
     let start = r.start;
     if (!start) {
-      const ds = list.map(e => parseDate(e.createdAt)).filter(Boolean);
+      const ds = list.map(e => parseDate(e.inquiryDate || e.createdAt)).filter(Boolean);
       start = ds.length ? sod(new Date(Math.min(...ds))) : addDays(tomorrow, -30);
     }
     let end = r.end && r.end < tomorrow ? r.end : tomorrow;
@@ -121,7 +125,7 @@ export default function EnquiryDashboard({
     const c = Array(n).fill(0);
 
     list.forEach(e => {
-      const d = parseDate(e.createdAt);
+      const d = parseDate(e.inquiryDate || e.createdAt);
       if (!d) return;
       const i = Math.floor(dayDiff(start, d) / (weekly ? 7 : 1));
       if (i >= 0 && i < n) c[i]++;
@@ -161,7 +165,8 @@ export default function EnquiryDashboard({
   const byStatusMap = {};
   STATUSES.forEach(s => { byStatusMap[s] = 0; });
   list.forEach(e => {
-    byStatusMap[e.status] = (byStatusMap[e.status] || 0) + 1;
+    const s = normalizeStatus(e.status);
+    byStatusMap[s] = (byStatusMap[s] || 0) + 1;
   });
   const statusItems = STATUSES.map(s => ({
     name: s,

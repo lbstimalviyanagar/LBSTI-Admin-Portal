@@ -9,6 +9,9 @@ import StudentsPage from './pages/StudentsPage';
 import LoginPage from './pages/LoginPage';
 import UserManagementPage from './pages/UserManagementPage';
 import AttendancePage from './pages/AttendancePage';
+import CourseContentPage from './pages/CourseContentPage';
+import StudentAttendancePage from './pages/StudentAttendancePage';
+import SocialPlannerPage from './pages/SocialPlannerPage';
 import TasksPage from './pages/TasksPage';
 import BatchesPage from './pages/BatchesPage';
 import EditLeadModal from './components/EditLeadModal';
@@ -38,7 +41,7 @@ export default function App() {
   const getInitialTab = () => {
     try {
       const hash = window.location.hash.replace(/^#\/?/, '').trim();
-      const validTabs = ['dashboard', 'new', 'table', 'payments', 'students', 'attendance', 'tasks', 'batches', 'users'];
+      const validTabs = ['dashboard', 'new', 'table', 'payments', 'students', 'student-attendance', 'attendance', 'course-content', 'social-planner', 'tasks', 'batches', 'users'];
       if (hash && validTabs.includes(hash)) return hash;
       const saved = localStorage.getItem('lbstimn_active_tab');
       if (saved && validTabs.includes(saved)) return saved;
@@ -61,7 +64,7 @@ export default function App() {
   useEffect(() => {
     const onHashChange = () => {
       const hash = window.location.hash.replace(/^#\/?/, '').trim();
-      const validTabs = ['dashboard', 'new', 'table', 'payments', 'students', 'attendance', 'tasks', 'batches', 'users'];
+      const validTabs = ['dashboard', 'new', 'table', 'payments', 'students', 'student-attendance', 'attendance', 'course-content', 'social-planner', 'tasks', 'batches', 'users'];
       if (hash && validTabs.includes(hash)) {
         setTabState(hash);
         try { localStorage.setItem('lbstimn_active_tab', hash); } catch (e) {}
@@ -80,7 +83,10 @@ export default function App() {
       table: 'enquiries',
       payments: 'payments',
       students: 'students',
+      'student-attendance': 'student_attendance',
       attendance: 'attendance',
+      'course-content': 'course_content',
+      'social-planner': 'social_planner',
       tasks: 'tasks',
       batches: 'batches',
       users: 'admin'
@@ -106,7 +112,7 @@ export default function App() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   // Dashboard time range filter
-  const [dashRangeKind, setDashRangeKind] = useState('all');
+  const [dashRangeKind, setDashRangeKind] = useState('month');
   const [dashFrom, setDashFrom] = useState('');
   const [dashTo, setDashTo] = useState('');
 
@@ -606,10 +612,31 @@ export default function App() {
             />
           )}
 
+          {tab === 'student-attendance' && (
+            <StudentAttendancePage
+              user={user}
+              onToast={addToast}
+            />
+          )}
+
           {tab === 'attendance' && (
             <AttendancePage
               user={user}
               users={usersList}
+              onToast={addToast}
+            />
+          )}
+
+          {tab === 'course-content' && (
+            <CourseContentPage
+              user={user}
+              onToast={addToast}
+            />
+          )}
+
+          {tab === 'social-planner' && (
+            <SocialPlannerPage
+              user={user}
               onToast={addToast}
             />
           )}

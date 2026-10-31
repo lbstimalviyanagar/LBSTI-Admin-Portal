@@ -166,3 +166,103 @@ CREATE TABLE IF NOT EXISTS `institute_batches` (
   PRIMARY KEY (`id`),
   FOREIGN KEY (`instructor_id`) REFERENCES `portal_users`(`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- Module 4: Course Content & Catalog Management
+ALTER TABLE `enquiries` ADD COLUMN IF NOT EXISTS `inquiry_date` DATE DEFAULT NULL AFTER `assigned_to`;
+
+CREATE TABLE IF NOT EXISTS `courses` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `name` VARCHAR(190) NOT NULL,
+  `code` VARCHAR(50) DEFAULT NULL,
+  `category` VARCHAR(100) DEFAULT 'General',
+  `duration` VARCHAR(100) DEFAULT '3 Months',
+  `description` TEXT DEFAULT NULL,
+  `is_active` TINYINT(1) DEFAULT 1,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_courses_name` (`name`),
+  KEY `idx_courses_category` (`category`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `course_content` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `course_id` BIGINT UNSIGNED NOT NULL,
+  `module_no` INT DEFAULT 1,
+  `title` VARCHAR(255) NOT NULL,
+  `topic` VARCHAR(255) DEFAULT NULL,
+  `content` TEXT DEFAULT NULL,
+  `order_index` INT DEFAULT 1,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_content_course` (`course_id`),
+  CONSTRAINT `fk_content_course` FOREIGN KEY (`course_id`) REFERENCES `courses` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `course_syllabus` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `course_id` BIGINT UNSIGNED NOT NULL,
+  `title` VARCHAR(255) NOT NULL,
+  `version` VARCHAR(50) DEFAULT '1.0',
+  `document_url` VARCHAR(500) DEFAULT NULL,
+  `description` TEXT DEFAULT NULL,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_syllabus_course` (`course_id`),
+  CONSTRAINT `fk_syllabus_course` FOREIGN KEY (`course_id`) REFERENCES `courses` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `course_notes` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `course_id` BIGINT UNSIGNED NOT NULL,
+  `title` VARCHAR(255) NOT NULL,
+  `topic` VARCHAR(255) DEFAULT NULL,
+  `content` TEXT DEFAULT NULL,
+  `attachment_url` VARCHAR(500) DEFAULT NULL,
+  `file_type` VARCHAR(50) DEFAULT 'pdf',
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_notes_course` (`course_id`),
+  CONSTRAINT `fk_notes_course` FOREIGN KEY (`course_id`) REFERENCES `courses` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Module 5: Student Daily Attendance Management
+CREATE TABLE IF NOT EXISTS `student_attendance` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `student_id` BIGINT UNSIGNED NOT NULL,
+  `student_name` VARCHAR(190) NOT NULL,
+  `course_name` VARCHAR(190) DEFAULT NULL,
+  `batch_time` VARCHAR(100) DEFAULT NULL,
+  `date` DATE NOT NULL,
+  `status` ENUM('Present', 'Absent', 'Leave') NOT NULL DEFAULT 'Present',
+  `remarks` VARCHAR(255) DEFAULT NULL,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_student_date_batch` (`student_id`, `date`, `batch_time`),
+  KEY `idx_student_att_date` (`date`),
+  KEY `idx_student_att_student` (`student_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Module 6: Social Media Marketing & Content Planner
+CREATE TABLE IF NOT EXISTS `social_media_planner` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `title` VARCHAR(255) NOT NULL,
+  `platform` ENUM('Instagram', 'Facebook', 'YouTube', 'LinkedIn', 'X', 'Website', 'Other') NOT NULL DEFAULT 'Instagram',
+  `caption` TEXT NOT NULL,
+  `hashtags` TEXT DEFAULT NULL,
+  `media_url` VARCHAR(500) DEFAULT NULL,
+  `cta` VARCHAR(255) DEFAULT NULL,
+  `scheduled_at` DATETIME DEFAULT NULL,
+  `status` ENUM('Draft', 'Scheduled', 'Published', 'Archived') NOT NULL DEFAULT 'Draft',
+  `notes` TEXT DEFAULT NULL,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_social_scheduled` (`scheduled_at`),
+  KEY `idx_social_platform_status` (`platform`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

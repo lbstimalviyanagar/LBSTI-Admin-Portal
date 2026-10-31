@@ -116,16 +116,55 @@ export default function Sidebar({
           </button>
         )}
 
+        {hasMenuAccess(user, 'student_attendance') && (
+          <button
+            className="nav-item"
+            type="button"
+            aria-current={tab === "student-attendance" ? "page" : undefined}
+            onClick={() => { setTab("student-attendance"); if (onNavClick) onNavClick(); }}
+            data-tooltip-right={collapsed ? "Student Attendance" : undefined}
+          >
+            <span className="ic"><Icon name="clipboard" size={20} /></span>
+            <span className="label">Student Attendance</span>
+          </button>
+        )}
+
         {hasMenuAccess(user, 'attendance') && (
           <button
             className="nav-item"
             type="button"
             aria-current={tab === "attendance" ? "page" : undefined}
             onClick={() => { setTab("attendance"); if (onNavClick) onNavClick(); }}
-            data-tooltip-right={collapsed ? "Attendance" : undefined}
+            data-tooltip-right={collapsed ? "Staff Attendance" : undefined}
           >
             <span className="ic"><Icon name="clock" size={20} /></span>
-            <span className="label">Attendance</span>
+            <span className="label">Staff Attendance</span>
+          </button>
+        )}
+
+        {hasMenuAccess(user, 'course_content') && (
+          <button
+            className="nav-item"
+            type="button"
+            aria-current={tab === "course-content" ? "page" : undefined}
+            onClick={() => { setTab("course-content"); if (onNavClick) onNavClick(); }}
+            data-tooltip-right={collapsed ? "Course Content" : undefined}
+          >
+            <span className="ic"><Icon name="book" size={20} /></span>
+            <span className="label">Course Content</span>
+          </button>
+        )}
+
+        {hasMenuAccess(user, 'social_planner') && (
+          <button
+            className="nav-item"
+            type="button"
+            aria-current={tab === "social-planner" ? "page" : undefined}
+            onClick={() => { setTab("social-planner"); if (onNavClick) onNavClick(); }}
+            data-tooltip-right={collapsed ? "Content Planner" : undefined}
+          >
+            <span className="ic"><Icon name="calendar" size={20} /></span>
+            <span className="label">Content Planner</span>
           </button>
         )}
 

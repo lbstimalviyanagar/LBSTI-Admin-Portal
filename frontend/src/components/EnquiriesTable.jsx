@@ -15,7 +15,9 @@ import {
   isoDay,
   STANDARDIZED_SOURCES,
   normalizeLeadSource,
-  canonicalCounselorName
+  canonicalCounselorName,
+  getTelUrl,
+  getWhatsAppUrl
 } from '../utils/helpers';
 
 export default function EnquiriesTable({
@@ -105,7 +107,13 @@ export default function EnquiriesTable({
     if (sortKey === "status") {
       x = STATUSES.indexOf(x);
       y = STATUSES.indexOf(y);
-    } else if (sortKey === "createdAt" || sortKey === "followUpDate") {
+    } else if (sortKey === "createdAt" || sortKey === "inquiryDate" || sortKey === "followUpDate") {
+      const inf = sortDir > 0 ? Infinity : -Infinity;
+      const valA = sortKey === "inquiryDate" ? (a.inquiryDate || a.createdAt) : x;
+      const valB = sortKey === "inquiryDate" ? (b.inquiryDate || b.createdAt) : y;
+      x = parseDate(valA) ? +parseDate(valA) : inf;
+      y = parseDate(valB) ? +parseDate(valB) : inf;
+    } else if (false) {
       const inf = sortDir > 0 ? Infinity : -Infinity;
       x = parseDate(x) ? +parseDate(x) : inf;
       y = parseDate(y) ? +parseDate(y) : inf;
@@ -189,7 +197,7 @@ export default function EnquiriesTable({
     { key: "status", label: "Status", sortable: true },
     { key: "assignedTo", label: "Counselor", sortable: true },
     { key: "followUpDate", label: "Follow-up", sortable: true },
-    { key: "createdAt", label: "Created", sortable: true },
+    { key: "inquiryDate", label: "Inquiry Date", sortable: true },
     { key: "action", label: "Action", sortable: false }
   ];
 
@@ -469,7 +477,7 @@ export default function EnquiriesTable({
                         {canonicalCounselorName(e.assignedTo) || <span className="muted">Unassigned</span>}
                       </td>
                       <td data-label="Follow-up Date">
-                        {e.status === "Confirmed" || e.status === "Dropped" ? (
+                        {e.status === "Admission Confirmed" || e.status === "Confirmed" || e.status === "Lost / Closed" || e.status === "Dropped" ? (
                           <span className="muted">–</span>
                         ) : !d ? (
                           <span className="muted">Not set</span>
@@ -479,17 +487,61 @@ export default function EnquiriesTable({
                           fmtDay(d)
                         )}
                       </td>
-                      <td data-label="Created">{fmtDay(e.createdAt)}</td>
+                      <td data-label="Inquiry Date">{fmtDay(e.inquiryDate || e.createdAt)}</td>
                       <td data-label="Actions">
                         <div className="acts">
+                          {getTelUrl(e.phone) ? (
+                            <a
+                              href={getTelUrl(e.phone)}
+                              className="btn sm icon"
+                              title={`Call ${e.name} (${e.phone})`}
+                              aria-label={`Call ${e.name}`}
+                              style={{ textDecoration: 'none' }}
+                            >
+                              <Icon name="phone" size={15} />
+                            </a>
+                          ) : (
+                            <button
+                              type="button"
+                              className="btn sm icon muted"
+                              title="No valid contact number"
+                              onClick={() => onToast && onToast("No valid phone number available for this lead.", true)}
+                            >
+                              <Icon name="phone" size={15} />
+                            </button>
+                          )}
+
+                          {getWhatsAppUrl(e.phone) ? (
+                            <a
+                              href={getWhatsAppUrl(e.phone, `Hello ${e.name || ''}, greetings from LBSTI!`)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="btn sm icon"
+                              title={`WhatsApp ${e.name}`}
+                              aria-label={`WhatsApp ${e.name}`}
+                              style={{ color: '#16a34a', textDecoration: 'none' }}
+                            >
+                              <Icon name="whatsapp" size={16} />
+                            </a>
+                          ) : (
+                            <button
+                              type="button"
+                              className="btn sm icon muted"
+                              title="No valid contact number"
+                              onClick={() => onToast && onToast("No valid phone number available for this lead.", true)}
+                            >
+                              <Icon name="whatsapp" size={16} />
+                            </button>
+                          )}
+
                           <button
                             className="btn sm"
                             type="button"
                             onClick={() => onOpenEdit(e.id)}
                           >
-                            <Icon name="edit" size={15} /> Edit lead
+                            <Icon name="edit" size={15} /> Edit
                           </button>
-                          {isPendingFU(e) && (
+                          {e.status !== "Admission Confirmed" && e.status !== "Confirmed" && isPendingFU(e) && (
                             <button
                               className="btn sm ok icon"
                               type="button"

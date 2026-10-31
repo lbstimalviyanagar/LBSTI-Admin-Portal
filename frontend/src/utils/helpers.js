@@ -456,7 +456,7 @@ export function inRange(e, r) {
 }
 
 export function isPendingFU(e) {
-  return OPEN_STATUSES.includes(e.status) && !!parseDate(e.followUpDate);
+  return OPEN_STATUSES.includes(normalizeStatus(e.status)) && !!parseDate(e.followUpDate);
 }
 
 // Convert numbers to Indian Rupees Words
