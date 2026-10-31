@@ -995,7 +995,16 @@ export default function PaymentsSection({
     receiptWin.document.close();
   };
 
-  // Format message text for the interactive WhatsApp modal
+  // Generate a receipt number for display in WhatsApp messages
+  const generateReceiptNo = (feeId, paymentDate) => {
+    const year = paymentDate
+      ? new Date(paymentDate).getFullYear()
+      : new Date().getFullYear();
+    const padded = String(feeId || '').padStart(6, '0');
+    return `LBSTI-${year}-${padded}`;
+  };
+
+    // Format message text for the interactive WhatsApp modal
   const buildWhatsAppText = useCallback((type, params) => {
     const sName = params.name || 'Student';
     const cName = params.course || 'Professional Course';
@@ -3163,6 +3172,266 @@ export default function PaymentsSection({
           </div>
         </div>
       )}
+
+      {/* ── Interactive WhatsApp Message Modal ── */}
+      {showWhatsAppModal && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 9999,
+            background: 'rgba(0,0,0,0.55)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: '16px'
+          }}
+          onClick={(e) => { if (e.target === e.currentTarget) setShowWhatsAppModal(false); }}
+        >
+          <div
+            style={{
+              background: '#fff', borderRadius: '14px', boxShadow: '0 8px 40px rgba(0,0,0,0.18)',
+              width: '100%', maxWidth: '520px', maxHeight: '90vh',
+              overflowY: 'auto', display: 'flex', flexDirection: 'column'
+            }}
+          >
+            {/* Header */}
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '18px 22px 12px', borderBottom: '1px solid #e2e8f0'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{
+                  background: '#25d366', borderRadius: '50%',
+                  width: '36px', height: '36px', display: 'flex',
+                  alignItems: 'center', justifyContent: 'center'
+                }}>
+                  <Icon name="whatsapp" size={20} style={{ color: '#fff' }} />
+                </span>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: '1rem', color: '#1e293b' }}>
+                    WhatsApp Message
+                  </div>
+                  <div style={{ fontSize: '0.78rem', color: '#64748b' }}>
+                    Choose a message type and send
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowWhatsAppModal(false)}
+                style={{
+                  border: 'none', background: 'none', cursor: 'pointer',
+                  fontSize: '1.4rem', color: '#94a3b8', lineHeight: 1, padding: '4px'
+                }}
+                aria-label="Close"
+              >×</button>
+            </div>
+
+            {/* Body */}
+            <div style={{ padding: '18px 22px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+
+              {/* Recipient phone */}
+              <div>
+                <label style={{ fontWeight: 600, fontSize: '0.82rem', color: '#475569', display: 'block', marginBottom: '5px' }}>
+                  Recipient Phone Number
+                </label>
+                <input
+                  type="tel"
+                  className="input"
+                  value={waRecipientPhone}
+                  onChange={(e) => setWaRecipientPhone(e.target.value)}
+                  placeholder="e.g. 9876543210"
+                  style={{ width: '100%' }}
+                />
+                {!waRecipientPhone.replace(/\D/g, '') && (
+                  <div style={{ color: '#ef4444', fontSize: '0.76rem', marginTop: '3px' }}>
+                    ⚠ No phone number — please enter one to send.
+                  </div>
+                )}
+              </div>
+
+              {/* Message type selector */}
+              <div>
+                <label style={{ fontWeight: 600, fontSize: '0.82rem', color: '#475569', display: 'block', marginBottom: '8px' }}>
+                  Message Type
+                </label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                  {[
+                    { value: 'pending_fee', label: '💸 Pending Fees Reminder' },
+                    { value: 'assignment', label: '📋 Pending Assignment Reminder' },
+                  ].map(({ value, label }) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => {
+                        setWaMessageType(value);
+                        const newText = buildWhatsAppText(value, {
+                          name: waRecipientName,
+                          course: waCourseName,
+                          balance: waPendingBalance,
+                          assignmentTopic: waAssignmentTopic,
+                          receiptNumber: waReceiptNumber,
+                          amount: waPaidAmount,
+                          date: waPaymentDate,
+                          mode: waPaymentMode
+                        });
+                        setWaCustomMessage(newText);
+                      }}
+                      style={{
+                        padding: '8px 14px',
+                        borderRadius: '8px',
+                        border: waMessageType === value ? '2px solid #25d366' : '1.5px solid #cbd5e1',
+                        background: waMessageType === value ? '#f0fdf4' : '#f8fafc',
+                        color: waMessageType === value ? '#15803d' : '#334155',
+                        fontWeight: waMessageType === value ? 700 : 500,
+                        cursor: 'pointer',
+                        fontSize: '0.83rem',
+                        transition: 'all 0.15s'
+                      }}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Assignment topic (only for assignment type) */}
+              {waMessageType === 'assignment' && (
+                <div>
+                  <label style={{ fontWeight: 600, fontSize: '0.82rem', color: '#475569', display: 'block', marginBottom: '5px' }}>
+                    Assignment / Subject Detail
+                  </label>
+                  <input
+                    type="text"
+                    className="input"
+                    value={waAssignmentTopic}
+                    onChange={(e) => {
+                      setWaAssignmentTopic(e.target.value);
+                      setWaCustomMessage(buildWhatsAppText('assignment', {
+                        name: waRecipientName,
+                        course: waCourseName,
+                        balance: waPendingBalance,
+                        assignmentTopic: e.target.value,
+                        receiptNumber: waReceiptNumber,
+                        amount: waPaidAmount,
+                        date: waPaymentDate,
+                        mode: waPaymentMode
+                      }));
+                    }}
+                    placeholder="e.g. Module 3 Practical / MS Excel Project"
+                    style={{ width: '100%' }}
+                  />
+                </div>
+              )}
+
+              {/* Pending amount (only for pending fee) */}
+              {waMessageType === 'pending_fee' && (
+                <div>
+                  <label style={{ fontWeight: 600, fontSize: '0.82rem', color: '#475569', display: 'block', marginBottom: '5px' }}>
+                    Pending Amount (₹)
+                  </label>
+                  <input
+                    type="number"
+                    className="input"
+                    value={waPendingBalance}
+                    onChange={(e) => {
+                      setWaPendingBalance(e.target.value);
+                      setWaCustomMessage(buildWhatsAppText('pending_fee', {
+                        name: waRecipientName,
+                        course: waCourseName,
+                        balance: e.target.value,
+                        assignmentTopic: waAssignmentTopic,
+                        receiptNumber: waReceiptNumber,
+                        amount: waPaidAmount,
+                        date: waPaymentDate,
+                        mode: waPaymentMode
+                      }));
+                    }}
+                    placeholder="0"
+                    min="0"
+                    style={{ width: '100%' }}
+                  />
+                </div>
+              )}
+
+              {/* Message preview / edit */}
+              <div>
+                <label style={{ fontWeight: 600, fontSize: '0.82rem', color: '#475569', display: 'block', marginBottom: '5px' }}>
+                  Message Preview (editable)
+                </label>
+                <textarea
+                  className="input"
+                  rows={8}
+                  value={waCustomMessage}
+                  onChange={(e) => setWaCustomMessage(e.target.value)}
+                  style={{ width: '100%', resize: 'vertical', fontFamily: 'inherit', fontSize: '0.83rem', lineHeight: 1.55 }}
+                />
+              </div>
+
+              {/* Action buttons */}
+              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => {
+                    if (navigator.clipboard) {
+                      navigator.clipboard.writeText(waCustomMessage)
+                        .then(() => onToast && onToast('Message copied to clipboard!'))
+                        .catch(() => onToast && onToast('Copy failed — please copy manually.', true));
+                    }
+                  }}
+                  style={{ flex: 1, minWidth: '120px' }}
+                >
+                  📋 Copy Text
+                </button>
+                <button
+                  type="button"
+                  disabled={!waRecipientPhone.replace(/\D/g, '')}
+                  onClick={() => {
+                    const digits = waRecipientPhone.replace(/\D/g, '');
+                    if (!digits) {
+                      onToast && onToast('Please enter a valid phone number.', true);
+                      return;
+                    }
+                    // Normalize: ensure 91 country code for Indian numbers
+                    let normalized = digits;
+                    if (normalized.length === 10) {
+                      normalized = '91' + normalized;
+                    } else if (normalized.length === 12 && normalized.startsWith('0')) {
+                      normalized = '91' + normalized.slice(1);
+                    } else if (normalized.startsWith('+')) {
+                      normalized = normalized.slice(1);
+                    }
+                    const url = 'https://wa.me/' + normalized + '?text=' + encodeURIComponent(waCustomMessage);
+                    window.open(url, '_blank', 'noopener,noreferrer');
+                  }}
+                  style={{
+                    flex: 2, minWidth: '160px',
+                    background: waRecipientPhone.replace(/\D/g, '') ? '#25d366' : '#94a3b8',
+                    color: '#fff', border: 'none', borderRadius: '8px',
+                    padding: '10px 18px', cursor: waRecipientPhone.replace(/\D/g, '') ? 'pointer' : 'not-allowed',
+                    fontWeight: 700, fontSize: '0.9rem', display: 'flex', alignItems: 'center',
+                    justifyContent: 'center', gap: '6px'
+                  }}
+                >
+                  <Icon name="whatsapp" size={18} />
+                  Open WhatsApp
+                </button>
+              </div>
+
+              {/* Student info footer */}
+              <div style={{
+                background: '#f8fafc', borderRadius: '8px', padding: '10px 14px',
+                fontSize: '0.78rem', color: '#475569', display: 'flex', flexDirection: 'column', gap: '3px'
+              }}>
+                <div><b>Student:</b> {waRecipientName || '–'}</div>
+                <div><b>Course:</b> {waCourseName || '–'}</div>
+                {waPendingBalance && Number(waPendingBalance) > 0 && (
+                  <div><b>Pending Balance:</b> ₹{Number(waPendingBalance).toLocaleString('en-IN')}</div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
     </section>
   );
 }
