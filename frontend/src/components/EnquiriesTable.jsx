@@ -310,13 +310,13 @@ export default function EnquiriesTable({
                 value={dateKind}
                 onChange={(e) => setFilterParams(prev => ({ ...prev, dateKind: e.target.value, page: 1 }))}
               >
-                <option value="all">Any date</option>
                 <option value="today">Today</option>
                 <option value="yesterday">Yesterday</option>
-                <option value="week">This week</option>
                 <option value="month">This month</option>
+                <option value="week">This week</option>
                 <option value="lastmonth">Last month</option>
                 <option value="custom">Custom range</option>
+                <option value="all">All Time</option>
               </select>
             </div>
 

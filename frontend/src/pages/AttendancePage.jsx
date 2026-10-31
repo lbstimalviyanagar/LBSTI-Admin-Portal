@@ -447,12 +447,12 @@ export default function AttendancePage({ user, users = [], onToast }) {
               title="Filter by date"
               style={{ minWidth: '140px' }}
             >
-              <option value="All">All Dates</option>
               <option value="today">Today ({formatDateDisplay(todayIST).display})</option>
               <option value="yesterday">Yesterday</option>
-              <option value="this_week">This Week</option>
               <option value="this_month">This Month</option>
+              <option value="this_week">This Week</option>
               <option value="custom">Specific Date...</option>
+              <option value="All">All Dates</option>
               {distinctHistoricalDates.length > 0 && (
                 <optgroup label="Historical Dates">
                   {distinctHistoricalDates.map(d => (

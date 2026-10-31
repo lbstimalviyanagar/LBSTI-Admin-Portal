@@ -243,6 +243,21 @@ export default function PaymentsSection({
   const [showDuesModal, setShowDuesModal] = useState(false);
   const [duesSearch, setDuesSearch] = useState('');
 
+  // Interactive WhatsApp Generator Modal state
+  const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
+  const [waMessageType, setWaMessageType] = useState('pending_fee'); // 'pending_fee' | 'assignment' | 'receipt' | 'custom'
+  const [waRecipientName, setWaRecipientName] = useState('');
+  const [waRecipientPhone, setWaRecipientPhone] = useState('');
+  const [waCourseName, setWaCourseName] = useState('');
+  const [waPendingBalance, setWaPendingBalance] = useState('');
+  const [waAssignmentTopic, setWaAssignmentTopic] = useState('Coursework Assignment / Practical Lab Project');
+  const [waReceiptNumber, setWaReceiptNumber] = useState('');
+  const [waPaidAmount, setWaPaidAmount] = useState('');
+  const [waPaymentMode, setWaPaymentMode] = useState('');
+  const [waPaymentDate, setWaPaymentDate] = useState('');
+  const [waCustomMessage, setWaCustomMessage] = useState('');
+  const [waTargetFee, setWaTargetFee] = useState(null);
+
   // Payment History real-time search state
   const [historySearchQuery, setHistorySearchQuery] = useState('');
 
@@ -980,43 +995,153 @@ export default function PaymentsSection({
     receiptWin.document.close();
   };
 
-  // Send Receipt to Student's Phone Number via WhatsApp
-  const handleSendToNumber = (fee) => {
-    const student = students.find(s => String(s.id) === String(fee.enquiryId) || String(s.studentId) === String(fee.studentId) || (fee.studentPhone && s.phone === fee.studentPhone) || (fee.studentName && s.name && s.name.toLowerCase() === fee.studentName.toLowerCase())) ||
-                    enquiries.find(e => String(e.id) === String(fee.enquiryId) || (fee.studentPhone && e.phone === fee.studentPhone) || (fee.studentName && e.name && e.name.toLowerCase() === fee.studentName.toLowerCase())) || {};
+  // Format message text for the interactive WhatsApp modal
+  const buildWhatsAppText = useCallback((type, params) => {
+    const sName = params.name || 'Student';
+    const cName = params.course || 'Professional Course';
+    const orgName = ORG.fullName || 'LBSTI (Lal Bahadur Shastri Training Institute)';
+    const orgPhone = ORG.phone || '9990352721';
 
-    let phone = fee.studentPhone || student.phone || student.mobile || '';
-    if (!phone) {
-      phone = window.prompt(`Enter 10-digit WhatsApp number for ${fee.studentName || 'Student'}:`);
-      if (!phone) return;
+    if (type === 'pending_fee') {
+      const balanceNum = parseFloat(params.balance) || 0;
+      const formattedBalance = balanceNum.toLocaleString('en-IN');
+      return `Dear *${sName}*,\n\n` +
+        `Greetings from *${orgName}*.\n\n` +
+        `This is a gentle reminder regarding your enrolled course: *${cName}*.\n` +
+        `Your current outstanding fee balance is: *₹${formattedBalance}*.\n\n` +
+        `Kindly arrange to clear the pending fees at your earliest convenience to maintain continuous batch attendance and certification processing.\n\n` +
+        `If you have already made the payment, please share the transaction receipt with us so we can update your ledger.\n\n` +
+        `For UPI / Bank details or any queries, feel free to contact us.\n\n` +
+        `Warm regards,\n` +
+        `*Accounts Office - ${orgName}*\n` +
+        `📞 ${orgPhone} | 🌐 lbstimn.com`;
     }
 
-    const cleanPhone = String(phone).replace(/\D/g, '');
-    const waNumber = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+    if (type === 'assignment') {
+      const topic = params.assignmentTopic || 'Coursework Assignment / Practical Lab';
+      return `Dear *${sName}*,\n\n` +
+        `Greetings from *${orgName}*.\n\n` +
+        `This is a reminder regarding your course: *${cName}*.\n` +
+        `Our academic records show that your assignment submission (*${topic}*) is currently pending.\n\n` +
+        `Please complete and submit your work to your instructor at the earliest. Timely assignment completion is required for practical evaluation and your course certification.\n\n` +
+        `If you need any guidance or lab practice time, please coordinate with your faculty during your batch hours.\n\n` +
+        `Best regards,\n` +
+        `*Academic & Faculty Team*\n` +
+        `*${orgName}*\n` +
+        `📞 ${orgPhone}`;
+    }
+
+    if (type === 'receipt') {
+      const recNo = params.receiptNumber || 'REC-PAID';
+      const amtStr = Number(params.amount || 0).toLocaleString('en-IN');
+      const dateStr = params.date || fmtDate(new Date());
+      const mode = params.mode || 'Cash';
+      return `*OFFICIAL FEE RECEIPT - ${ORG.shortName || 'LBSTI'}*\n\n` +
+        `*Receipt No:* ${recNo}\n` +
+        `*Student Name:* ${sName}\n` +
+        `*Course:* ${cName}\n` +
+        `*Amount Paid:* ₹${amtStr}\n` +
+        `*Payment Mode:* ${mode}\n` +
+        `*Date:* ${dateStr}\n` +
+        `*Status:* Confirmed / Received\n\n` +
+        `Thank you for your payment.\n` +
+        `*${orgName}*\n` +
+        `📞 ${orgPhone}`;
+    }
+
+    return `Hello *${sName}*,\n\nGreetings from *${orgName}* regarding your course *${cName}*.`;
+  }, []);
+
+  // Open Interactive WhatsApp Choice Modal for a Payment row
+  const handleOpenWhatsAppModal = (fee) => {
+    const student = (students || []).find(s => 
+      String(s.id) === String(fee.enquiryId) || 
+      String(s.studentId) === String(fee.studentId) || 
+      (fee.studentPhone && s.phone === fee.studentPhone) || 
+      (fee.studentName && s.name && s.name.toLowerCase() === fee.studentName.toLowerCase())
+    ) || (enquiries || []).find(e => 
+      String(e.id) === String(fee.enquiryId) || 
+      (fee.studentPhone && e.phone === fee.studentPhone) || 
+      (fee.studentName && e.name && e.name.toLowerCase() === fee.studentName.toLowerCase())
+    ) || {};
+
     const studentName = fee.studentName || student.name || 'Student';
-    const amount = Number(fee.amount || 0).toLocaleString('en-IN');
+    const phone = fee.studentPhone || student.phone || student.mobile || '';
     const course = fee.course || student.course || student.courses || 'Professional Course';
-    const dateStr = fee.paymentDate ? fmtDate(fee.paymentDate) : fmtDate(new Date());
-    const mode = fee.mode || 'Cash';
-    const othersDesc = fee.othersDescription || (fee.receiptDetails && fee.receiptDetails.othersDescription) || '';
-    const descLine = othersDesc ? `*Description:* ${othersDesc}\n` : '';
 
-    const text = `*OFFICIAL FEE RECEIPT - ${ORG.shortName || 'LBSTI'}*\n\n` +
-      `*Receipt No:* ${receiptNo}\n` +
-      `*Student Name:* ${studentName}\n` +
-      `*Course:* ${course}\n` +
-      descLine +
-      `*Amount Paid:* ₹${amount}\n` +
-      `*Payment Mode:* ${mode}\n` +
-      `*Date:* ${dateStr}\n` +
-      `*Status:* Confirmed / Received\n\n` +
-      `Thank you for your payment.\n` +
-      `*${ORG.fullName || 'LBSTI Malviya Nagar'}*`;
+    let pendingAmt = 0;
+    if (fee.balance != null && Number(fee.balance) >= 0) {
+      pendingAmt = Number(fee.balance);
+    } else if (fee.outstandingBalance != null && Number(fee.outstandingBalance) >= 0) {
+      pendingAmt = Number(fee.outstandingBalance);
+    } else if (fee.receiptDetails && fee.receiptDetails.outstandingBalance != null) {
+      pendingAmt = Number(fee.receiptDetails.outstandingBalance);
+    } else if (student.balance != null && Number(student.balance) >= 0) {
+      pendingAmt = Number(student.balance);
+    }
 
-    const waUrl = `https://wa.me/${waNumber}?text=${encodeURIComponent(text)}`;
-    window.open(waUrl, '_blank', 'noopener,noreferrer');
-    if (onToast) onToast(`Opening WhatsApp for ${studentName} (${phone})`);
+    const recNo = generateReceiptNo(fee.id, fee.paymentDate);
+    const dateFormatted = fee.paymentDate ? fmtDate(fee.paymentDate) : fmtDate(new Date());
+
+    setWaTargetFee(fee);
+    setWaRecipientName(studentName);
+    setWaRecipientPhone(phone);
+    setWaCourseName(course);
+    setWaPendingBalance(pendingAmt > 0 ? String(pendingAmt) : '0');
+    setWaAssignmentTopic('Module Practical / Assignment Submission');
+    setWaReceiptNumber(recNo);
+    setWaPaidAmount(String(fee.amount || '0'));
+    setWaPaymentMode(fee.mode || 'Cash');
+    setWaPaymentDate(dateFormatted);
+
+    // Default message type: pending_fee if pending balance > 0, otherwise receipt
+    const defaultType = pendingAmt > 0 ? 'pending_fee' : 'receipt';
+    setWaMessageType(defaultType);
+
+    const initialText = buildWhatsAppText(defaultType, {
+      name: studentName,
+      course,
+      balance: pendingAmt > 0 ? String(pendingAmt) : '0',
+      assignmentTopic: 'Module Practical / Assignment Submission',
+      receiptNumber: recNo,
+      amount: String(fee.amount || '0'),
+      date: dateFormatted,
+      mode: fee.mode || 'Cash'
+    });
+    setWaCustomMessage(initialText);
+    setShowWhatsAppModal(true);
   };
+
+  // Open Interactive WhatsApp Choice Modal from Outstanding Dues Table
+  const handleOpenWhatsAppModalFromDues = (item) => {
+    setWaTargetFee(null);
+    setWaRecipientName(item.name || 'Student');
+    setWaRecipientPhone(item.phone && item.phone !== '–' ? item.phone : '');
+    setWaCourseName(item.course || 'Professional Course');
+    setWaPendingBalance(String(item.balance || '0'));
+    setWaAssignmentTopic('Module Practical / Assignment Submission');
+    setWaReceiptNumber('DUE-REMINDER');
+    setWaPaidAmount('0');
+    setWaPaymentMode('Cash');
+    setWaPaymentDate(fmtDate(new Date()));
+
+    setWaMessageType('pending_fee');
+    const initialText = buildWhatsAppText('pending_fee', {
+      name: item.name,
+      course: item.course,
+      balance: String(item.balance || '0'),
+      assignmentTopic: 'Module Practical / Assignment Submission',
+      receiptNumber: 'DUE-REMINDER',
+      amount: '0',
+      date: fmtDate(new Date()),
+      mode: 'Cash'
+    });
+    setWaCustomMessage(initialText);
+    setShowWhatsAppModal(true);
+  };
+
+  // Alias for backward compatibility
+  const handleSendToNumber = handleOpenWhatsAppModal;
 
   const handleExportFeesCSV = () => {
     const exportList = historySearchQuery.trim() ? displayedHistoryFees : filteredFees;
@@ -1405,13 +1530,13 @@ export default function PaymentsSection({
               value={dateRangeKind}
               onChange={(e) => setDateRangeKind(e.target.value)}
             >
-              <option value="all">All Time</option>
               <option value="today">Today</option>
               <option value="yesterday">Yesterday</option>
-              <option value="week">This Week</option>
               <option value="month">This Month</option>
+              <option value="week">This Week</option>
               <option value="lastmonth">Last Month</option>
               <option value="custom">Custom Range</option>
+              <option value="all">All Time</option>
             </select>
 
             {dateRangeKind === 'custom' && (
@@ -2939,26 +3064,26 @@ export default function PaymentsSection({
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                               <span style={{ fontSize: '0.88rem', color: '#334155', fontWeight: 600 }}>{item.phone}</span>
                               {item.phone && item.phone !== '–' && (
-                                <a
-                                  href={`https://wa.me/91${String(item.phone).replace(/\D/g, '')}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  title="Chat on WhatsApp"
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenWhatsAppModalFromDues(item)}
+                                  title="Send WhatsApp Reminder"
                                   style={{
                                     display: 'inline-flex',
                                     alignItems: 'center',
                                     justifyContent: 'center',
-                                    width: '24px',
-                                    height: '24px',
+                                    width: '26px',
+                                    height: '26px',
                                     borderRadius: '50%',
                                     background: '#25D366',
                                     color: '#fff',
-                                    fontSize: '11px',
-                                    textDecoration: 'none'
+                                    fontSize: '12px',
+                                    border: 'none',
+                                    cursor: 'pointer'
                                   }}
                                 >
-                                  <Icon name="whatsapp" size={13} />
-                                </a>
+                                  <Icon name="whatsapp" size={14} />
+                                </button>
                               )}
                             </div>
                           </td>
