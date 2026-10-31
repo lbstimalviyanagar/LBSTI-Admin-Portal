@@ -3,20 +3,22 @@ import Icon from './Icons';
 import {
   COURSES,
   BATCHES,
-  SOURCES,
   STANDARDIZED_SOURCES,
   normalizeLeadSource,
   canonicalCounselorName,
-  OPEN_STATUSES,
+  STATUSES,
   COUNSELORS,
   isoDay,
-  translateText
+  translateText,
+  getSuggestedFollowUpDate
 } from '../utils/helpers';
+import api from '../services/api';
 
 export default function NewEnquiryForm({
   counselorList = COUNSELORS,
   onSubmit,
-  onCancel
+  onCancel,
+  onOpenEditLead
 }) {
   const [formData, setFormData] = useState({
     date: isoDay(new Date()),
@@ -27,13 +29,32 @@ export default function NewEnquiryForm({
     batch: '',
     source: '',
     assignedTo: '',
-    status: 'New',
-    followUpDate: '',
+    status: 'New Enquiry',
+    followUpDate: getSuggestedFollowUpDate(),
     notes: ''
   });
 
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
+  const [coursesList, setCoursesList] = useState(COURSES);
+
+  // Duplicate contact detection state (Phase 2.2)
+  const [duplicateContact, setDuplicateContact] = useState(null);
+  const [allowRepeatContact, setAllowRepeatContact] = useState(false);
+  const [checkingPhone, setCheckingPhone] = useState(false);
+
+  // Fetch dynamic courses list from backend
+  useEffect(() => {
+    api.getCourses()
+      .then(data => {
+        if (Array.isArray(data) && data.length > 0) {
+          const names = data.map(c => c.name).filter(Boolean);
+          const merged = Array.from(new Set([...names, ...COURSES])).sort();
+          setCoursesList(merged);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // Apply a Set to ensure only unique counselor names are mapped to the <option> elements
   const uniqueCounselorList = useMemo(() => {
@@ -69,6 +90,24 @@ export default function NewEnquiryForm({
     nameInputRef.current?.focus();
   }, []);
 
+  // Check phone for existing contact on blur or completion
+  const handlePhoneBlur = async () => {
+    const clean = formData.phone.replace(/\D/g, '');
+    if (clean.length < 10) return;
+    setCheckingPhone(true);
+    try {
+      const res = await api.checkPhone(clean);
+      if (res && res.exists && res.enquiry) {
+        setDuplicateContact(res.enquiry);
+      } else {
+        setDuplicateContact(null);
+      }
+    } catch (e) {
+    } finally {
+      setCheckingPhone(false);
+    }
+  };
+
   // Voice speech-to-text setup
   const startVoice = () => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -100,22 +139,18 @@ export default function NewEnquiryForm({
       rec.onresult = (ev) => {
         let interim = '';
         for (let i = ev.resultIndex; i < ev.results.length; i++) {
-          const tr = ev.results[i][0].transcript;
-          if (ev.results[i].isFinal) finalText += tr.trim() + " ";
-          else interim += tr;
+          const t = ev.results[i][0].transcript;
+          if (ev.results[i].isFinal) finalText += t.trim() + " ";
+          else interim += t;
         }
-        setFormData(prev => ({ ...prev, notes: baseText + finalText + interim }));
+        setFormData(prev => ({
+          ...prev,
+          notes: baseText + finalText + interim
+        }));
       };
 
-      rec.onerror = (ev) => {
-        const errorMessages = {
-          'not-allowed': 'Microphone access blocked. Please allow mic permissions.',
-          'service-not-allowed': 'Microphone access blocked.',
-          'no-speech': 'No speech detected. Try again.',
-          'audio-capture': 'No microphone found.',
-          'network': 'Voice network service unreachable.'
-        };
-        setVoiceState(errorMessages[ev.error] || 'Voice input stopped.');
+      rec.onerror = () => {
+        setVoiceState('Microphone stopped.');
         setIsListening(false);
       };
 
@@ -174,6 +209,9 @@ export default function NewEnquiryForm({
     if (!formData.course) {
       errs.course = "Choose a course.";
     }
+    if (!formData.date) {
+      errs.date = "Please select an inquiry date.";
+    }
     setErrors(errs);
     return Object.keys(errs).length === 0;
   };
@@ -190,6 +228,8 @@ export default function NewEnquiryForm({
     setSubmitting(true);
     try {
       await onSubmit({
+        date: formData.date,
+        inquiryDate: formData.date,
         name: formData.name.trim(),
         phone: formData.phone.trim(),
         city: formData.city.trim(),
@@ -197,10 +237,15 @@ export default function NewEnquiryForm({
         batch: formData.batch,
         source: normalizeLeadSource(formData.source),
         assignedTo: canonicalCounselorName(formData.assignedTo),
-        status: formData.status || 'New',
+        status: formData.status || 'New Enquiry',
         followUpDate: formData.followUpDate || '',
-        notes: formData.notes.trim()
+        notes: formData.notes.trim(),
+        allowRepeatContact: allowRepeatContact || !!duplicateContact
       });
+    } catch (err) {
+      if (err.data && err.data.conflict && err.data.existing) {
+        setDuplicateContact(err.data.existing);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -216,10 +261,12 @@ export default function NewEnquiryForm({
       batch: '',
       source: '',
       assignedTo: '',
-      status: 'New',
-      followUpDate: '',
+      status: 'New Enquiry',
+      followUpDate: getSuggestedFollowUpDate(),
       notes: ''
     });
+    setDuplicateContact(null);
+    setAllowRepeatContact(false);
     setErrors({});
     setTranslation(null);
     setTranslationError('');
@@ -231,22 +278,62 @@ export default function NewEnquiryForm({
       <form className="card form-card" onSubmit={handleSubmit} noValidate>
         <div className="form-body">
           <h3>Add New Lead</h3>
-          <div className="fgrid new-lead-grid">
-            {/* Inquiry Date (Auto locked) */}
-            <div className="fld">
-              <label htmlFor="f-date">Inquiry Date</label>
-              <div className="locked-field">
-                <input
-                  className="input"
-                  id="f-date"
-                  type="date"
-                  value={formData.date}
-                  disabled
-                />
-                <span className="ic lock" title="Set automatically to today">
-                  <Icon name="lock" size={15} />
-                </span>
+
+          {/* Duplicate Contact Detection Banner (Phase 2.2) */}
+          {duplicateContact && (
+            <div style={{
+              background: '#fef3c7',
+              border: '1px solid #f59e0b',
+              borderRadius: '8px',
+              padding: '14px 16px',
+              marginBottom: '18px',
+              color: '#92400e'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                <div>
+                  <b style={{ fontSize: '0.95rem' }}>⚠️ Existing Contact Detected</b>
+                  <p style={{ margin: '4px 0 0', fontSize: '0.85rem' }}>
+                    A lead already exists for <b>{duplicateContact.name}</b> (Lead #{duplicateContact.id} · Course: {duplicateContact.course || 'None'} · Status: {duplicateContact.status}).
+                  </p>
+                </div>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  {onOpenEditLead && (
+                    <button
+                      type="button"
+                      className="btn sm"
+                      onClick={() => onOpenEditLead(duplicateContact.id)}
+                    >
+                      View Existing Record
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="btn sm ok"
+                    onClick={() => setAllowRepeatContact(true)}
+                  >
+                    {allowRepeatContact ? '✓ Additional Inquiry Enabled' : 'Allow Additional Inquiry'}
+                  </button>
+                </div>
               </div>
+            </div>
+          )}
+
+          <div className="fgrid new-lead-grid">
+            {/* Inquiry Date (Editable, Phase 2.1) */}
+            <div className={`fld ${errors.date ? 'bad' : ''}`}>
+              <label htmlFor="f-date">Inquiry Date <em>*</em></label>
+              <input
+                className="input"
+                id="f-date"
+                type="date"
+                value={formData.date}
+                onChange={(e) => {
+                  setFormData({ ...formData, date: e.target.value });
+                  if (errors.date) setErrors({ ...errors, date: '' });
+                }}
+                required
+              />
+              {errors.date && <div className="err">{errors.date}</div>}
             </div>
 
             {/* Student Name */}
@@ -282,8 +369,10 @@ export default function NewEnquiryForm({
                   setFormData({ ...formData, phone: e.target.value });
                   if (errors.phone) setErrors({ ...errors, phone: '' });
                 }}
+                onBlur={handlePhoneBlur}
                 autoComplete="off"
               />
+              {checkingPhone && <small style={{ color: '#64748b' }}>Checking contact history…</small>}
               {errors.phone && <div className="err">{errors.phone}</div>}
             </div>
 
@@ -301,7 +390,7 @@ export default function NewEnquiryForm({
               />
             </div>
 
-            {/* Course */}
+            {/* Course Dropdown (Phase 2.3) */}
             <div className={`fld ${errors.course ? 'bad' : ''}`}>
               <label htmlFor="f-course">Course <em>*</em></label>
               <select
@@ -315,16 +404,14 @@ export default function NewEnquiryForm({
                 }}
               >
                 <option value="">Select Course</option>
-                {COURSES.map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
+                {coursesList.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
               {errors.course && <div className="err">{errors.course}</div>}
             </div>
 
-            {/* Preferred Batch */}
+            {/* Batch Time Options (Phase 2.4: 8:00 AM to 8:00 PM) */}
             <div className="fld">
-              <label htmlFor="f-batch">Preferred Batch Time</label>
+              <label htmlFor="f-batch">Preferred Batch</label>
               <select
                 className="select"
                 id="f-batch"
@@ -332,14 +419,12 @@ export default function NewEnquiryForm({
                 value={formData.batch}
                 onChange={(e) => setFormData({ ...formData, batch: e.target.value })}
               >
-                <option value="">Select Batch</option>
-                {BATCHES.map((b) => (
-                  <option key={b} value={b}>{b}</option>
-                ))}
+                <option value="">Select Batch Slot</option>
+                {BATCHES.map(b => <option key={b} value={b}>{b}</option>)}
               </select>
             </div>
 
-            {/* Lead Source */}
+            {/* Lead Source Options (Phase 2.5) */}
             <div className="fld">
               <label htmlFor="f-source">Lead Source</label>
               <select
@@ -350,15 +435,13 @@ export default function NewEnquiryForm({
                 onChange={(e) => setFormData({ ...formData, source: e.target.value })}
               >
                 <option value="">Select Source</option>
-                {SOURCES.map((s) => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
+                {STANDARDIZED_SOURCES.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
 
-            {/* Counselor Assignment */}
+            {/* Counselor */}
             <div className="fld">
-              <label htmlFor="f-assigned">Counselor</label>
+              <label htmlFor="f-assigned">Assign Counselor</label>
               <select
                 className="select"
                 id="f-assigned"
@@ -367,15 +450,13 @@ export default function NewEnquiryForm({
                 onChange={(e) => setFormData({ ...formData, assignedTo: e.target.value })}
               >
                 <option value="">Select Counselor</option>
-                {uniqueCounselorList.map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
+                {uniqueCounselorList.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
 
-            {/* Lead Status */}
+            {/* Status (Phase 2.6) */}
             <div className="fld">
-              <label htmlFor="f-status">Lead Status</label>
+              <label htmlFor="f-status">Status</label>
               <select
                 className="select"
                 id="f-status"
@@ -383,15 +464,24 @@ export default function NewEnquiryForm({
                 value={formData.status}
                 onChange={(e) => setFormData({ ...formData, status: e.target.value })}
               >
-                {OPEN_STATUSES.map((st) => (
-                  <option key={st} value={st}>{st}</option>
-                ))}
+                {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
 
-            {/* Next Follow-up Date */}
+            {/* Next Follow-up Date (Phase 2.7: Skips Sunday) */}
             <div className="fld">
-              <label htmlFor="f-follow">Next Follow-up Date</label>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                <label htmlFor="f-follow" style={{ margin: 0 }}>Next Follow-up</label>
+                <button
+                  type="button"
+                  className="btn link sm"
+                  style={{ padding: '0 4px', fontSize: '0.75rem', height: 'auto', minHeight: 'unset' }}
+                  onClick={() => setFormData({ ...formData, followUpDate: getSuggestedFollowUpDate() })}
+                  title="Auto suggest next working day (skips Sunday)"
+                >
+                  + Next Working Day
+                </button>
+              </div>
               <input
                 className="input"
                 id="f-follow"
@@ -401,101 +491,87 @@ export default function NewEnquiryForm({
                 onChange={(e) => setFormData({ ...formData, followUpDate: e.target.value })}
               />
             </div>
-
-            {/* Remarks / Dictation & Translation */}
-            <div className="fld full">
-              <label htmlFor="f-notes">Remarks</label>
-              <div className="notes-wrap">
-                <textarea
-                  className="textarea"
-                  id="f-notes"
-                  name="notes"
-                  placeholder="Any additional notes or details..."
-                  value={formData.notes}
-                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                />
-                <button
-                  className={`mic-inline ${isListening ? 'on' : ''}`}
-                  type="button"
-                  aria-label="Dictate remarks"
-                  aria-pressed={isListening}
-                  onClick={startVoice}
-                  title="Speak notes into microphone"
-                >
-                  <span className="ic"><Icon name="mic" size={17} /></span>
-                </button>
-              </div>
-
-              <div className="notes-tools">
-                <label className="sr-only" htmlFor="fVoiceLang">Voice language</label>
-                <select
-                  className="select sm"
-                  id="fVoiceLang"
-                  value={voiceLang}
-                  onChange={(e) => setVoiceLang(e.target.value)}
-                >
-                  <option value="en-IN">English (India)</option>
-                  <option value="hi-IN">हिन्दी (Hindi)</option>
-                  <option value="en-US">English (US)</option>
-                </select>
-
-                <span className="voice-state">{voiceState}</span>
-
-                <button
-                  className="btn link sm"
-                  type="button"
-                  onClick={handleTranslate}
-                  disabled={translating}
-                >
-                  <span className="ic"><Icon name="translate" size={15} /></span>
-                  {translating ? 'Translating…' : 'Translate'}
-                </button>
-              </div>
-
-              {/* Translation Preview Box */}
-              {translation && (
-                <div className="translate-box">
-                  <div className="tr-label">Translation (English)</div>
-                  <p>{translation}</p>
-                  <div className="tr-actions">
-                    <button
-                      className="btn sm"
-                      type="button"
-                      onClick={handleInsertTranslation}
-                    >
-                      Insert below original
-                    </button>
-                    <button
-                      className="btn sm"
-                      type="button"
-                      onClick={() => setTranslation(null)}
-                    >
-                      Dismiss
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {translationError && (
-                <div className="translate-box">
-                  <div className="tr-error">{translationError}</div>
-                </div>
-              )}
-            </div>
           </div>
-        </div>
 
-        <div className="form-actions">
-          <button className="btn" type="button" onClick={handleClear}>
-            Clear form
-          </button>
-          <button
-            className="btn primary"
-            type="submit"
-            disabled={submitting}
-          >
-            {submitting ? 'Saving…' : 'Save Lead'}
-          </button>
+          {/* Remarks & Notes */}
+          <div className="fld full" style={{ marginTop: '16px' }}>
+            <label htmlFor="f-notes">Remarks / Notes</label>
+            <div className="notes-wrap">
+              <textarea
+                className="textarea"
+                id="f-notes"
+                name="notes"
+                rows="3"
+                placeholder="Initial student inquiry notes or counseling conversation..."
+                value={formData.notes}
+                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+              />
+              <button
+                className={`mic-inline ${isListening ? 'on' : ''}`}
+                type="button"
+                aria-label="Dictate notes"
+                onClick={startVoice}
+                title="Speak notes into mic"
+              >
+                <span className="ic"><Icon name="mic" size={17} /></span>
+              </button>
+            </div>
+
+            <div className="notes-tools">
+              <label className="sr-only" htmlFor="voiceLang">Voice language</label>
+              <select
+                className="select sm"
+                id="voiceLang"
+                value={voiceLang}
+                onChange={(e) => setVoiceLang(e.target.value)}
+              >
+                <option value="en-IN">English (India)</option>
+                <option value="hi-IN">हिन्दी (Hindi)</option>
+                <option value="en-US">English (US)</option>
+              </select>
+              <span className="voice-state">{voiceState}</span>
+              <button
+                className="btn link sm"
+                type="button"
+                onClick={handleTranslate}
+                disabled={translating}
+              >
+                <span className="ic"><Icon name="translate" size={15} /></span>
+                {translating ? 'Translating…' : 'Translate'}
+              </button>
+            </div>
+
+            {translation && (
+              <div className="translate-box">
+                <div className="tr-label">Translation (English)</div>
+                <p>{translation}</p>
+                <div className="tr-actions">
+                  <button className="btn sm" type="button" onClick={handleInsertTranslation}>
+                    Insert into notes
+                  </button>
+                  <button className="btn link sm" type="button" onClick={() => setTranslation(null)}>
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            )}
+            {translationError && <div className="err" style={{ marginTop: '6px' }}>{translationError}</div>}
+          </div>
+
+          {/* Form Actions */}
+          <div className="form-actions" style={{ marginTop: '20px', display: 'flex', gap: '10px' }}>
+            <button className="btn primary" type="submit" disabled={submitting}>
+              {submitting ? 'Saving…' : (allowRepeatContact ? 'Add Additional Inquiry' : 'Save Enquiry')}
+            </button>
+            <button className="btn" type="button" onClick={handleClear} disabled={submitting}>
+              Clear
+            </button>
+            {onCancel && (
+              <button className="btn" type="button" onClick={onCancel} disabled={submitting}>
+                Cancel
+              </button>
+            )}
+          </div>
         </div>
       </form>
     </section>

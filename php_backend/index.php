@@ -94,9 +94,9 @@ function requireMenuPermission($user, $requiredMenu, $pdo) {
 
     if (empty($permissions)) {
         if ($dbUser['role'] === 'teacher') {
-            $permissions = ['attendance', 'batches', 'tasks'];
+            $permissions = ['attendance', 'student_attendance', 'batches', 'tasks', 'course_content'];
         } else {
-            $permissions = ['enquiries', 'payments', 'students', 'attendance', 'tasks', 'batches'];
+            $permissions = ['enquiries', 'payments', 'students', 'student_attendance', 'attendance', 'tasks', 'batches', 'course_content', 'social_planner'];
         }
     }
 
@@ -141,7 +141,9 @@ if ($route === 'auth/login') {
     $id = isset($parts[1]) && $parts[1] !== '' ? $parts[1] : (isset($_GET['id']) ? $_GET['id'] : null);
     $subAction = isset($parts[2]) && $parts[2] !== '' ? $parts[2] : (isset($_GET['resource']) ? $_GET['resource'] : null);
     
-    if ($id === 'bulk' && $method === 'POST') {
+    if ($id === 'check-phone' && $method === 'GET') {
+        checkPhone($pdo, $_GET['phone'] ?? '');
+    } elseif ($id === 'bulk' && $method === 'POST') {
         bulkCreateEnquiries($pdo, $body);
     } elseif ($id && $subAction === 'confirm' && $method === 'POST') {
         confirmEnquiry($pdo, $id, $user);
@@ -263,6 +265,66 @@ if ($route === 'auth/login') {
     elseif ($method === "POST") createBatch($pdo, $user, $body);
     elseif ($method === "PUT" || $method === "PATCH") updateBatch($pdo, $user, $id, $body);
     elseif ($method === "DELETE") deleteBatch($pdo, $user, $id);
+} elseif (strpos($route, "courses") === 0) {
+    require "controllers/CourseContentController.php";
+    $user = requireAuth($authSecret);
+    $parts = explode("/", $route);
+    $id = isset($parts[1]) ? $parts[1] : null;
+    if ($method === "GET") getCourses($pdo);
+    elseif ($method === "POST") createCourse($pdo, $body, $user);
+    elseif ($method === "PUT" || $method === "PATCH") updateCourse($pdo, $id, $body);
+    elseif ($method === "DELETE") deleteCourse($pdo, $id);
+} elseif (strpos($route, "course-content") === 0) {
+    require "controllers/CourseContentController.php";
+    $user = requireAuth($authSecret);
+    requireMenuPermission($user, 'course_content', $pdo);
+    $parts = explode("/", $route);
+    $id = isset($parts[1]) ? $parts[1] : null;
+    if ($method === "GET") getCourseContent($pdo);
+    elseif ($method === "POST") createCourseContent($pdo, $body, $user);
+    elseif ($method === "PUT" || $method === "PATCH") updateCourseContent($pdo, $id, $body);
+    elseif ($method === "DELETE") deleteCourseContent($pdo, $id);
+} elseif (strpos($route, "course-syllabus") === 0) {
+    require "controllers/CourseContentController.php";
+    $user = requireAuth($authSecret);
+    requireMenuPermission($user, 'course_content', $pdo);
+    $parts = explode("/", $route);
+    $id = isset($parts[1]) ? $parts[1] : null;
+    if ($method === "GET") getCourseSyllabus($pdo);
+    elseif ($method === "POST") createCourseSyllabus($pdo, $body, $user);
+    elseif ($method === "PUT" || $method === "PATCH") updateCourseSyllabus($pdo, $id, $body);
+    elseif ($method === "DELETE") deleteCourseSyllabus($pdo, $id);
+} elseif (strpos($route, "course-notes") === 0) {
+    require "controllers/CourseContentController.php";
+    $user = requireAuth($authSecret);
+    requireMenuPermission($user, 'course_content', $pdo);
+    $parts = explode("/", $route);
+    $id = isset($parts[1]) ? $parts[1] : null;
+    if ($method === "GET") getCourseNotes($pdo);
+    elseif ($method === "POST") createCourseNotes($pdo, $body, $user);
+    elseif ($method === "PUT" || $method === "PATCH") updateCourseNotes($pdo, $id, $body);
+    elseif ($method === "DELETE") deleteCourseNotes($pdo, $id);
+} elseif (strpos($route, "student-attendance") === 0) {
+    require "controllers/StudentAttendanceController.php";
+    $user = requireAuth($authSecret);
+    requireMenuPermission($user, 'student_attendance', $pdo);
+    $parts = explode("/", $route);
+    $id = isset($parts[1]) ? $parts[1] : null;
+    if ($method === "GET" && $id === "history") getStudentAttendanceHistory($pdo);
+    elseif ($method === "GET" && $id === "summary") getStudentAttendanceSummary($pdo);
+    elseif ($method === "GET") getStudentAttendance($pdo);
+    elseif ($method === "POST") recordStudentAttendance($pdo, $body, $user);
+    elseif ($method === "PUT" || $method === "PATCH") updateStudentAttendance($pdo, $id, $body);
+} elseif (strpos($route, "social-planner") === 0) {
+    require "controllers/SocialPlannerController.php";
+    $user = requireAuth($authSecret);
+    requireMenuPermission($user, 'social_planner', $pdo);
+    $parts = explode("/", $route);
+    $id = isset($parts[1]) ? $parts[1] : null;
+    if ($method === "GET") getSocialPosts($pdo);
+    elseif ($method === "POST") createSocialPost($pdo, $body, $user);
+    elseif ($method === "PUT" || $method === "PATCH") updateSocialPost($pdo, $id, $body);
+    elseif ($method === "DELETE") deleteSocialPost($pdo, $id);
 } elseif ($route === "search-students") {
     require_once 'controllers/StudentController.php';
     ensureStudentsAndEnrollmentsTables($pdo);

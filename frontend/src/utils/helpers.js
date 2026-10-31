@@ -1,7 +1,36 @@
 export const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-export const STATUSES = ["New", "No Response", "Counseling Scheduled", "Counseling done", "Confirmed", "Dropped"];
-export const OPEN_STATUSES = ["New", "No Response", "Counseling Scheduled", "Counseling done"];
+export const STATUSES = [
+  "New Enquiry",
+  "In Discussion",
+  "Campus Visit Booked",
+  "Admission Confirmed",
+  "Deferred / Follow-up",
+  "Lost / Closed"
+];
+export const OPEN_STATUSES = [
+  "New Enquiry",
+  "In Discussion",
+  "Campus Visit Booked",
+  "Deferred / Follow-up",
+  "New",
+  "No Response",
+  "Counseling Scheduled",
+  "Counseling done"
+];
+
+export function normalizeStatus(st) {
+  if (!st) return "New Enquiry";
+  const s = String(st).trim();
+  const lower = s.toLowerCase();
+  if (lower === "new" || lower === "new enquiry") return "New Enquiry";
+  if (lower === "in discussion" || lower === "counseling scheduled" || lower === "counseling done") return "In Discussion";
+  if (lower === "campus visit booked" || lower === "visit booked") return "Campus Visit Booked";
+  if (lower === "admission confirmed" || lower === "confirmed" || lower === "admitted" || lower === "enrolled") return "Admission Confirmed";
+  if (lower === "deferred / follow-up" || lower === "deferred" || lower === "follow-up" || lower === "followup" || lower === "no response") return "Deferred / Follow-up";
+  if (lower === "lost / closed" || lower === "lost" || lower === "closed" || lower === "dropped") return "Lost / Closed";
+  return s;
+}
 
 export const COURSES = [
   "ADCA (12 Months)", "DIT (12 Months)", "CTT (18 Months)", "NPTC (24 Months)", "NTC (12 Months)",
@@ -26,32 +55,42 @@ export const COURSES = [
 
 export const STANDARDIZED_SOURCES = [
   "Website",
-  "Meta Ads",
+  "Google",
   "Google Ads",
-  "Walk-in",
+  "Meta Ads",
   "Referral",
-  "Phone call",
-  "Education fair",
-  "Other"
+  "Walk-in",
+  "Rejoin",
+  "Others"
 ];
 
 export const SOURCES = STANDARDIZED_SOURCES;
 
 export const BATCHES = [
-  "Morning (7 AM - 10 AM)",
-  "Late Morning (10 AM - 1 PM)",
-  "Afternoon (1 PM - 4 PM)",
-  "Evening (4 PM - 7 PM)",
-  "Weekend"
+  "08:00 AM - 09:00 AM",
+  "09:00 AM - 10:00 AM",
+  "10:00 AM - 11:00 AM",
+  "11:00 AM - 12:00 PM",
+  "12:00 PM - 01:00 PM",
+  "01:00 PM - 02:00 PM",
+  "02:00 PM - 03:00 PM",
+  "03:00 PM - 04:00 PM",
+  "04:00 PM - 05:00 PM",
+  "05:00 PM - 06:00 PM",
+  "06:00 PM - 07:00 PM",
+  "07:00 PM - 08:00 PM"
 ];
 
 export function normalizeLeadSource(src) {
-  if (!src) return "Other";
+  if (!src) return "Others";
   const s = String(src).trim();
-  if (!s) return "Other";
+  if (!s) return "Others";
   const lower = s.toLowerCase();
 
-  // Walk-in variations: walkin, walk-in, walk in, direct, walk_in, center visit, walk
+  if (lower.includes("rejoin") || lower.includes("re-join") || lower.includes("old student")) {
+    return "Rejoin";
+  }
+
   if (
     lower === "walkin" ||
     lower === "walk-in" ||
@@ -64,7 +103,6 @@ export function normalizeLeadSource(src) {
     return "Walk-in";
   }
 
-  // Referral variations: refrence, referral, reference, referal, student reference, friend
   if (
     lower.includes("ref") ||
     lower.includes("friend") ||
@@ -74,19 +112,23 @@ export function normalizeLeadSource(src) {
     return "Referral";
   }
 
-  // Google Ads variations: google ads, google, adwords, gads
   if (
     lower === "google ads" ||
     lower === "google ad" ||
-    lower === "google" ||
-    lower.includes("google") ||
     lower.includes("adword") ||
     lower === "gads"
   ) {
     return "Google Ads";
   }
 
-  // Meta Ads variations: meta ads, meta, facebook, fb, instagram, insta
+  if (
+    lower === "google" ||
+    lower === "google search" ||
+    lower === "organic"
+  ) {
+    return "Google";
+  }
+
   if (
     lower === "meta ads" ||
     lower === "meta ad" ||
@@ -101,7 +143,6 @@ export function normalizeLeadSource(src) {
     return "Meta Ads";
   }
 
-  // Website variations: website, site, web, portal, landing page, lbsti
   if (
     lower === "website" ||
     lower === "web" ||
@@ -115,36 +156,13 @@ export function normalizeLeadSource(src) {
     return "Website";
   }
 
-  // Phone call variations: phone call, phone, call, calling, telephonic, inbound
-  if (
-    lower === "phone call" ||
-    lower === "phone" ||
-    lower === "call" ||
-    lower.includes("phone") ||
-    lower.includes("call") ||
-    lower.includes("tele")
-  ) {
-    return "Phone call";
-  }
-
-  // Education fair variations: fair, expo, seminar, exhibition
-  if (
-    lower === "education fair" ||
-    lower.includes("fair") ||
-    lower.includes("expo") ||
-    lower.includes("seminar") ||
-    lower.includes("event") ||
-    lower.includes("exhibit")
-  ) {
-    return "Education fair";
-  }
-
-  // Case-insensitive match against standardized sources
   for (const std of STANDARDIZED_SOURCES) {
     if (lower === std.toLowerCase()) return std;
   }
 
-  return "Other";
+  if (lower === "other" || lower === "others" || lower === "unknown") return "Others";
+
+  return s;
 }
 
 export function canonicalCounselorName(rawName) {
@@ -180,6 +198,12 @@ export const FEE_ITEMS = [
 export const FEE_MODES = ["Cash", "Online", "Card", "Cheque", "UPI"];
 
 export const SCOL = {
+  "New Enquiry": "#2563eb",
+  "In Discussion": "#7c3aed",
+  "Campus Visit Booked": "#0d9488",
+  "Admission Confirmed": "#047857",
+  "Deferred / Follow-up": "#d97706",
+  "Lost / Closed": "#b91c1c",
   "New": "#2563eb",
   "No Response": "#64748b",
   "Counseling Scheduled": "#7c3aed",
@@ -407,6 +431,10 @@ export function rangeOf(kind, from, to) {
     return { start: s, end: addDays(s, 7) };
   }
   if (kind === "month") {
+    // Current calendar month: 1st day of month through end of current day (today)
+    return { start: new Date(today.getFullYear(), today.getMonth(), 1), end: addDays(today, 1) };
+  }
+  if (kind === "fullmonth") {
     return { start: new Date(today.getFullYear(), today.getMonth(), 1), end: new Date(today.getFullYear(), today.getMonth() + 1, 1) };
   }
   if (kind === "lastmonth") {
@@ -422,7 +450,7 @@ export function rangeOf(kind, from, to) {
 
 export function inRange(e, r) {
   if (!r.start && !r.end) return true;
-  const d = parseDate(e.createdAt);
+  const d = parseDate(e.inquiryDate || e.createdAt);
   if (!d) return false;
   return (!r.start || d >= r.start) && (!r.end || d < r.end);
 }
@@ -494,4 +522,41 @@ export async function translateText(text, targetLang = "en") {
   const translated = data?.responseData?.translatedText;
   if (!translated) throw new Error("No translation was returned.");
   return translated;
+}
+
+
+// Auto-suggest next follow-up date (skips Sunday -> moves to Monday) (Phase 2.7)
+export function getSuggestedFollowUpDate(fromDate = new Date()) {
+  const d = new Date(fromDate);
+  d.setDate(d.getDate() + 1);
+  if (d.getDay() === 0) {
+    d.setDate(d.getDate() + 1);
+  }
+  return isoDay(d);
+}
+
+// Phone normalization for validation, dialer, and WhatsApp (Phase 2.2 & 2.8)
+export function normalizePhone(phone) {
+  if (!phone) return "";
+  const digits = String(phone).replace(/\D/g, "");
+  if (digits.length === 10) return "91" + digits;
+  if (digits.length === 12 && digits.startsWith("91")) return digits;
+  if (digits.length === 11 && digits.startsWith("0")) return "91" + digits.slice(1);
+  return digits;
+}
+
+export function getTelUrl(phone) {
+  if (!phone) return null;
+  const digits = String(phone).replace(/\D/g, "");
+  if (!digits || digits.length < 10) return null;
+  const clean = digits.length === 10 ? "+91" + digits : (digits.startsWith("91") ? "+" + digits : digits);
+  return `tel:${clean}`;
+}
+
+export function getWhatsAppUrl(phone, text = "") {
+  if (!phone) return null;
+  const normalized = normalizePhone(phone);
+  if (!normalized || normalized.length < 10) return null;
+  const query = text ? `?text=${encodeURIComponent(text)}` : "";
+  return `https://wa.me/${normalized}${query}`;
 }

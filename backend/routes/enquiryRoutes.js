@@ -6,6 +6,7 @@ const { requireAuth } = require('../middleware/auth');
 router.use(requireAuth);
 
 // Enquiries CRUD
+router.get('/check-phone', enquiryController.checkPhone);
 router.get('/', enquiryController.getEnquiries);
 router.post('/bulk', enquiryController.bulkCreateEnquiries);
 router.post('/', enquiryController.createEnquiry);

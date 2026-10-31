@@ -3,18 +3,19 @@ import Icon from './Icons';
 import {
   COURSES,
   BATCHES,
-  SOURCES,
   STANDARDIZED_SOURCES,
   normalizeLeadSource,
   canonicalCounselorName,
-  OPEN_STATUSES,
   STATUSES,
   fmtDate,
   fmtDateTime,
   initials,
   avColor,
   slug,
-  translateText
+  translateText,
+  getSuggestedFollowUpDate,
+  getTelUrl,
+  getWhatsAppUrl
 } from '../utils/helpers';
 import api from '../services/api';
 
@@ -36,6 +37,19 @@ export default function EditLeadModal({
   const [remarksError, setRemarksError] = useState('');
   const [newRemarkText, setNewRemarkText] = useState('');
   const [saving, setSaving] = useState(false);
+  const [coursesList, setCoursesList] = useState(COURSES);
+
+  useEffect(() => {
+    api.getCourses()
+      .then(data => {
+        if (Array.isArray(data) && data.length > 0) {
+          const names = data.map(c => c.name).filter(Boolean);
+          const merged = Array.from(new Set([...names, ...COURSES, lead?.course].filter(Boolean))).sort();
+          setCoursesList(merged);
+        }
+      })
+      .catch(() => {});
+  }, [lead?.course]);
 
   // Notes dictation & translation
   const [notesMicOn, setNotesMicOn] = useState(false);
@@ -84,6 +98,7 @@ export default function EditLeadModal({
         status: lead.status || 'New',
         assignedTo: canonicalCounselorName(lead.assignedTo),
         followUpDate: lead.followUpDate ? String(lead.followUpDate).slice(0, 10) : '',
+        inquiryDate: lead.inquiryDate ? String(lead.inquiryDate).slice(0, 10) : (lead.createdAt ? String(lead.createdAt).slice(0, 10) : ''),
         notes: lead.notes || ''
       };
       setFormData(snap);
@@ -311,7 +326,7 @@ export default function EditLeadModal({
     }
   };
 
-  const isConfirmed = formData.status === "Confirmed" || lead?.status === "Confirmed";
+  const isConfirmed = formData.status === "Admission Confirmed" || formData.status === "Confirmed" || lead?.status === "Admission Confirmed" || lead?.status === "Confirmed";
 
   return (
     <div
@@ -331,19 +346,46 @@ export default function EditLeadModal({
         <header>
           <div className="t">
             <h3 id="mTitle">{formData.name || "Edit lead"}</h3>
-            <small>Enquired on {fmtDate(lead.createdAt)}</small>
+            <small>
+              Inquiry: {formData.inquiryDate ? fmtDate(formData.inquiryDate) : fmtDate(lead.createdAt)}
+              {lead.createdAt && <span style={{ opacity: 0.75, marginLeft: '6px' }}>(Created: {fmtDateTime(lead.createdAt)})</span>}
+            </small>
           </div>
-          <span className={`pill s-${slug(formData.status)}`}>
-            {formData.status}
-          </span>
-          <button
-            className="icon-btn"
-            type="button"
-            aria-label="Close"
-            onClick={onClose}
-          >
-            <span className="ic"><Icon name="x" size={18} /></span>
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {formData.phone && (
+              <>
+                <a
+                  href={getTelUrl(formData.phone)}
+                  className="btn sm icon"
+                  title={`Call ${formData.name} (${formData.phone})`}
+                  style={{ textDecoration: 'none' }}
+                >
+                  <Icon name="phone" size={15} />
+                </a>
+                <a
+                  href={getWhatsAppUrl(formData.phone, `Hello ${formData.name || ''}, greetings from LBSTI!`)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn sm icon"
+                  style={{ color: '#16a34a', textDecoration: 'none' }}
+                  title={`WhatsApp ${formData.name}`}
+                >
+                  <Icon name="whatsapp" size={16} />
+                </a>
+              </>
+            )}
+            <span className={`pill s-${slug(formData.status)}`}>
+              {formData.status}
+            </span>
+            <button
+              className="icon-btn"
+              type="button"
+              aria-label="Close"
+              onClick={onClose}
+            >
+              <span className="ic"><Icon name="x" size={18} /></span>
+            </button>
+          </div>
         </header>
 
         {/* Modal Body: Left column (details) + Right column (timeline & remarks) */}
@@ -393,6 +435,19 @@ export default function EditLeadModal({
             <div>
               <h4>Enquiry details</h4>
               <div className="fgrid">
+                {/* Inquiry Date Editing (Phase 2.1) */}
+                <div className="fld">
+                  <label htmlFor="e-inquiry-date">Inquiry Date <em>*</em></label>
+                  <input
+                    className="input"
+                    id="e-inquiry-date"
+                    type="date"
+                    value={formData.inquiryDate || ''}
+                    onChange={(e) => setFormData({ ...formData, inquiryDate: e.target.value })}
+                    required
+                  />
+                </div>
+
                 <div className="fld">
                   <label htmlFor="e-course">Course <em>*</em></label>
                   <select
@@ -402,7 +457,7 @@ export default function EditLeadModal({
                     onChange={(e) => setFormData({ ...formData, course: e.target.value })}
                   >
                     <option value="">Select Course</option>
-                    {COURSES.map(c => <option key={c} value={c}>{c}</option>)}
+                    {coursesList.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
 
@@ -414,8 +469,10 @@ export default function EditLeadModal({
                     value={formData.batch}
                     onChange={(e) => setFormData({ ...formData, batch: e.target.value })}
                   >
-                    <option value="">Select Batch</option>
-                    {BATCHES.map(b => <option key={b} value={b}>{b}</option>)}
+                    <option value="">Select Batch Slot</option>
+                    {Array.from(new Set([...BATCHES, formData.batch].filter(Boolean))).map(b => (
+                      <option key={b} value={b}>{b}</option>
+                    ))}
                   </select>
                 </div>
 
@@ -428,7 +485,9 @@ export default function EditLeadModal({
                     onChange={(e) => setFormData({ ...formData, source: e.target.value })}
                   >
                     <option value="">Select Source</option>
-                    {STANDARDIZED_SOURCES.map(s => <option key={s} value={s}>{s}</option>)}
+                    {Array.from(new Set([...STANDARDIZED_SOURCES, formData.source].filter(Boolean))).map(s => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
                   </select>
                 </div>
 
@@ -455,12 +514,25 @@ export default function EditLeadModal({
                     title={isConfirmed ? "Use Confirm admission to manage confirmed status" : ""}
                     onChange={(e) => setFormData({ ...formData, status: e.target.value })}
                   >
-                    {STATUSES.map(st => <option key={st} value={st}>{st}</option>)}
+                    {Array.from(new Set([...STATUSES, formData.status].filter(Boolean))).map(st => (
+                      <option key={st} value={st}>{st}</option>
+                    ))}
                   </select>
                 </div>
 
                 <div className="fld">
-                  <label htmlFor="e-follow">Next follow-up</label>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                    <label htmlFor="e-follow" style={{ margin: 0 }}>Next follow-up</label>
+                    <button
+                      type="button"
+                      className="btn link sm"
+                      style={{ padding: '0 4px', fontSize: '0.75rem', height: 'auto', minHeight: 'unset' }}
+                      onClick={() => setFormData({ ...formData, followUpDate: getSuggestedFollowUpDate() })}
+                      title="Auto suggest next working day (skips Sunday)"
+                    >
+                      + Next Working Day
+                    </button>
+                  </div>
                   <input
                     className="input"
                     id="e-follow"

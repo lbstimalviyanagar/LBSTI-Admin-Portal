@@ -12,10 +12,11 @@ function normalizeEnquiry(row) {
     course: row.course || '',
     batch: row.batch || '',
     source: row.source || '',
-    status: row.status || 'New',
+    status: row.status || 'New Enquiry',
     assignedTo: row.assigned_to || '',
     followUpDate: row.follow_up_date ? String(row.follow_up_date).slice(0, 10) : '',
     notes: row.notes || '',
+    inquiryDate: row.inquiry_date ? String(row.inquiry_date).slice(0, 10) : (row.created_at ? String(row.created_at).slice(0, 10) : new Date().toISOString().slice(0, 10)),
     createdAt: row.created_at || new Date().toISOString(),
     updatedAt: row.updated_at || row.created_at || new Date().toISOString()
   };
@@ -82,10 +83,19 @@ async function createEnquiry(req, res) {
       return res.status(400).json({ message: 'Student name and contact phone number are required.' });
     }
 
-    // Check for duplicate phone number
-    const existingCheck = await client.query('SELECT id, name FROM enquiries WHERE phone = ?', [phone]);
-    if (existingCheck.rows && existingCheck.rows.length > 0) {
-      return res.status(409).json({ message: `An enquiry for "${existingCheck.rows[0].name}" with this contact number already exists.` });
+    // Check for duplicate phone number (Phase 2.2)
+    const digits = phone.replace(/\D/g, '');
+    const last10 = digits.length >= 10 ? digits.slice(-10) : digits;
+    const existingCheck = await client.query('SELECT * FROM enquiries WHERE phone LIKE ? OR phone LIKE ? ORDER BY id DESC LIMIT 1', ['%' + last10, '%' + phone + '%']);
+    const existing = existingCheck.rows && existingCheck.rows.length > 0 ? existingCheck.rows[0] : null;
+
+    if (existing && !body.allowRepeatContact) {
+      return res.status(409).json({
+        error: true,
+        conflict: true,
+        message: `An enquiry for "${existing.name}" with this contact number already exists.`,
+        existing: normalizeEnquiry(existing)
+      });
     }
 
     const sql = `
@@ -156,14 +166,14 @@ async function updateEnquiry(req, res) {
 
     const updates = { ...existing, ...incoming, updatedAt: now };
     const fields = [
-      'name', 'phone', 'email', 'city', 'course', 'batch', 'source', 'status', 'assignedTo', 'followUpDate', 'notes'
+      'name', 'phone', 'email', 'city', 'course', 'batch', 'source', 'status', 'assignedTo', 'followUpDate', 'notes', 'inquiryDate'
     ];
 
     const values = [];
     const setClauses = [];
 
     for (const key of fields) {
-      const dbKey = key === 'assignedTo' ? 'assigned_to' : key === 'followUpDate' ? 'follow_up_date' : key;
+      const dbKey = key === 'assignedTo' ? 'assigned_to' : key === 'followUpDate' ? 'follow_up_date' : key === 'inquiryDate' ? 'inquiry_date' : key;
       let val = updates[key] !== undefined ? updates[key] : existing[key];
       if (key === 'followUpDate' && val) {
         val = String(val).slice(0, 10);
@@ -333,7 +343,27 @@ async function bulkCreateEnquiries(req, res) {
   }
 }
 
+
+async function checkPhone(req, res) {
+  try {
+    const phone = String(req.query.phone || '').trim();
+    if (!phone) return res.json({ exists: false });
+    const client = db.getClient();
+    const digits = phone.replace(/\D/g, '');
+    const last10 = digits.length >= 10 ? digits.slice(-10) : digits;
+    const result = await client.query('SELECT * FROM enquiries WHERE phone LIKE ? OR phone LIKE ? ORDER BY id DESC LIMIT 1', ['%' + last10, '%' + phone + '%']);
+    if (result.rows && result.rows.length > 0) {
+      return res.json({ exists: true, enquiry: normalizeEnquiry(result.rows[0]) });
+    }
+    res.json({ exists: false });
+  } catch (error) {
+    console.error('[CHECK PHONE ERROR]', error);
+    res.status(500).json({ message: 'Error checking phone.' });
+  }
+}
+
 module.exports = {
+  checkPhone,
   getEnquiries,
   createEnquiry,
   updateEnquiry,

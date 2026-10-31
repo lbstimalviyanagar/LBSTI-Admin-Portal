@@ -1,5 +1,15 @@
 <?php
 
+function ensureEnquiriesTableSchema($pdo) {
+    try {
+        $colCheck = $pdo->query("SHOW COLUMNS FROM `enquiries` LIKE 'inquiry_date'");
+        if (!$colCheck || $colCheck->rowCount() === 0) {
+            $pdo->exec("ALTER TABLE `enquiries` ADD COLUMN `inquiry_date` DATE DEFAULT NULL AFTER `assigned_to`");
+            $pdo->exec("UPDATE `enquiries` SET `inquiry_date` = DATE(`created_at`) WHERE `inquiry_date` IS NULL");
+        }
+    } catch (Exception $e) {}
+}
+
 function normalizeEnquiry($row) {
     return [
         "id" => (int)$row['id'],
@@ -14,6 +24,7 @@ function normalizeEnquiry($row) {
         "assignedTo" => $row['assigned_to'],
         "followUpDate" => $row['follow_up_date'],
         "notes" => $row['notes'],
+        "inquiryDate" => !empty($row['inquiry_date']) ? $row['inquiry_date'] : substr($row['created_at'], 0, 10),
         "createdAt" => $row['created_at'],
         "updatedAt" => $row['updated_at']
     ];
@@ -35,6 +46,7 @@ function ensureRemarksTable($pdo) {
 }
 
 function getEnquiries($pdo, $id = null, $resource = null) {
+    ensureEnquiriesTableSchema($pdo);
     if ($id && $resource === 'remarks') {
         getRemarks($pdo, $id);
         return;
@@ -52,7 +64,7 @@ function getEnquiries($pdo, $id = null, $resource = null) {
         return;
     }
     
-    $stmt = $pdo->query("SELECT * FROM enquiries ORDER BY created_at DESC");
+    $stmt = $pdo->query("SELECT * FROM enquiries ORDER BY COALESCE(inquiry_date, DATE(created_at)) DESC, created_at DESC");
     $enquiries = [];
     while ($row = $stmt->fetch()) {
         $enquiries[] = normalizeEnquiry($row);
@@ -62,6 +74,7 @@ function getEnquiries($pdo, $id = null, $resource = null) {
 
 function confirmEnquiry($pdo, $id, $user = null) {
     try {
+        ensureEnquiriesTableSchema($pdo);
         $id = (int)$id;
         if (!$id) {
             http_response_code(400);
@@ -81,8 +94,8 @@ function confirmEnquiry($pdo, $id, $user = null) {
 
         $now = date('Y-m-d H:i:s');
 
-        // Permanently persist Confirmed status in database
-        $updateStmt = $pdo->prepare("UPDATE enquiries SET status = 'Confirmed', updated_at = ? WHERE id = ?");
+        // Permanently persist Admission Confirmed status in database
+        $updateStmt = $pdo->prepare("UPDATE enquiries SET status = 'Admission Confirmed', updated_at = ? WHERE id = ?");
         $updateStmt->execute([$now, $id]);
 
         // Add confirmation activity to remarks history
@@ -107,6 +120,7 @@ function confirmEnquiry($pdo, $id, $user = null) {
 
 function updateEnquiry($pdo, $id, $body) {
     try {
+        ensureEnquiriesTableSchema($pdo);
         $id = (int)$id;
         if (!$id) {
             http_response_code(400);
@@ -172,6 +186,15 @@ function updateEnquiry($pdo, $id, $body) {
         if (array_key_exists('notes', $body)) {
             $fields[] = "notes = ?";
             $params[] = $body['notes'] !== null ? trim($body['notes']) : null;
+        }
+
+        // Support editing inquiry_date (Phase 2.1) without modifying original created_at
+        if (array_key_exists('inquiryDate', $body) || array_key_exists('inquiry_date', $body) || array_key_exists('date', $body)) {
+            $val = $body['inquiryDate'] ?? $body['inquiry_date'] ?? $body['date'] ?? null;
+            if (!empty($val) && preg_match('/^\d{4}-\d{2}-\d{2}$/', trim($val))) {
+                $fields[] = "inquiry_date = ?";
+                $params[] = trim($val);
+            }
         }
 
         if (empty($fields)) {
@@ -254,7 +277,41 @@ function addRemark($pdo, $id, $body, $user = null) {
     }
 }
 
+function checkPhone($pdo, $phone) {
+    ensureEnquiriesTableSchema($pdo);
+    $phone = trim($phone ?? '');
+    if (!$phone) {
+        echo json_encode(["exists" => false]);
+        return;
+    }
+    $digits = preg_replace('/\D/', '', $phone);
+    $last10 = strlen($digits) >= 10 ? substr($digits, -10) : $digits;
+
+    $stmt = $pdo->prepare("SELECT id, name, phone, course, status, created_at, inquiry_date FROM enquiries WHERE phone LIKE ? OR phone LIKE ? ORDER BY id DESC LIMIT 1");
+    $stmt->execute(["%{$last10}", "%{$phone}%"]);
+    $existing = $stmt->fetch();
+    if ($existing) {
+        echo json_encode([
+            "exists" => true,
+            "enquiry" => [
+                "id" => (int)$existing['id'],
+                "name" => $existing['name'],
+                "phone" => $existing['phone'],
+                "course" => $existing['course'],
+                "status" => $existing['status'],
+                "inquiryDate" => !empty($existing['inquiry_date']) ? $existing['inquiry_date'] : substr($existing['created_at'], 0, 10),
+                "createdAt" => $existing['created_at']
+            ]
+        ]);
+    } else {
+        echo json_encode(["exists" => false]);
+    }
+}
+
 function createEnquiry($pdo, $body) {
+    ensureEnquiriesTableSchema($pdo);
+    ensureRemarksTable($pdo);
+
     $name = trim($body['name'] ?? '');
     $phone = trim($body['phone'] ?? '');
     if (!$name || !$phone) {
@@ -262,24 +319,68 @@ function createEnquiry($pdo, $body) {
         die(json_encode(["message" => "Name and phone required."]));
     }
     
-    $stmt = $pdo->prepare("SELECT id, name FROM enquiries WHERE phone = ?");
-    $stmt->execute([$phone]);
-    if ($existing = $stmt->fetch()) {
+    $digits = preg_replace('/\D/', '', $phone);
+    $last10 = strlen($digits) >= 10 ? substr($digits, -10) : $digits;
+
+    // Check for existing contacts before creating a duplicate record (Phase 2.2)
+    $stmt = $pdo->prepare("SELECT id, name, phone, course, status, created_at, inquiry_date FROM enquiries WHERE phone LIKE ? OR phone LIKE ? ORDER BY id DESC LIMIT 1");
+    $stmt->execute(["%{$last10}", "%{$phone}%"]);
+    $existing = $stmt->fetch();
+
+    $allowRepeat = !empty($body['allowRepeatContact']);
+
+    if ($existing && !$allowRepeat) {
+        // Prevent accidental rapid duplicate submissions (identical phone and course in last 5 minutes)
+        $course = trim($body['course'] ?? '');
+        $recentStmt = $pdo->prepare("SELECT id FROM enquiries WHERE (phone LIKE ? OR phone LIKE ?) AND course = ? AND created_at >= DATE_SUB(NOW(), INTERVAL 5 MINUTE)");
+        $recentStmt->execute(["%{$last10}", "%{$phone}%", $course]);
+        if ($recent = $recentStmt->fetch()) {
+            getEnquiries($pdo, $recent['id']);
+            return;
+        }
+
         http_response_code(409);
-        die(json_encode(["message" => "An enquiry with this phone already exists."]));
+        echo json_encode([
+            "error" => true,
+            "conflict" => true,
+            "message" => "A contact with phone {$phone} already exists for {$existing['name']}.",
+            "existing" => [
+                "id" => (int)$existing['id'],
+                "name" => $existing['name'],
+                "phone" => $existing['phone'],
+                "course" => $existing['course'],
+                "status" => $existing['status'],
+                "inquiryDate" => !empty($existing['inquiry_date']) ? $existing['inquiry_date'] : substr($existing['created_at'], 0, 10),
+                "createdAt" => $existing['created_at']
+            ]
+        ]);
+        return;
     }
     
+    $inquiryDate = !empty($body['date']) ? trim($body['date']) : (!empty($body['inquiryDate']) ? trim($body['inquiryDate']) : date('Y-m-d'));
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $inquiryDate)) {
+        $inquiryDate = date('Y-m-d');
+    }
+
     $now = date('Y-m-d H:i:s');
-    $sql = "INSERT INTO enquiries (name, phone, email, city, course, batch, source, status, assigned_to, follow_up_date, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+    $sql = "INSERT INTO enquiries (name, phone, email, city, course, batch, source, status, assigned_to, follow_up_date, notes, inquiry_date, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
     $stmt = $pdo->prepare($sql);
     $stmt->execute([
         $name, $phone, $body['email'] ?? null, $body['city'] ?? null, $body['course'] ?? null,
-        $body['batch'] ?? null, $body['source'] ?? null, $body['status'] ?? 'New',
+        $body['batch'] ?? null, $body['source'] ?? null, $body['status'] ?? 'New Enquiry',
         $body['assignedTo'] ?? null, $body['followUpDate'] ?? null, $body['notes'] ?? null,
-        $now, $now
+        $inquiryDate, $now, $now
     ]);
     
     $id = $pdo->lastInsertId();
+
+    if ($existing && $allowRepeat) {
+        try {
+            $remStmt = $pdo->prepare("INSERT INTO remarks (enquiry_id, text, author, created_at) VALUES (?, ?, 'System', ?)");
+            $remStmt->execute([$id, "Additional inquiry recorded for existing contact {$existing['name']} (Previous Lead #{$existing['id']})", $now]);
+        } catch (Exception $e) {}
+    }
+
     getEnquiries($pdo, $id);
 }
 
@@ -295,6 +396,7 @@ function deleteEnquiry($pdo, $id) {
 }
 
 function bulkCreateEnquiries($pdo, $body) {
+    ensureEnquiriesTableSchema($pdo);
     $leads = $body['leads'] ?? [];
     if (!is_array($leads) || count($leads) === 0) {
         http_response_code(400);
@@ -305,7 +407,7 @@ function bulkCreateEnquiries($pdo, $body) {
     $skipCount = 0;
     
     $checkStmt = $pdo->prepare("SELECT id FROM enquiries WHERE phone = ?");
-    $insertStmt = $pdo->prepare("INSERT INTO enquiries (name, phone, email, city, course, batch, source, status, assigned_to, follow_up_date, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    $insertStmt = $pdo->prepare("INSERT INTO enquiries (name, phone, email, city, course, batch, source, status, assigned_to, follow_up_date, notes, inquiry_date, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
 
     foreach ($leads as $lead) {
         $name = trim($lead['name'] ?? '');
@@ -323,11 +425,14 @@ function bulkCreateEnquiries($pdo, $body) {
         }
 
         $now = date('Y-m-d H:i:s');
+        $inqDate = !empty($lead['date']) ? trim($lead['date']) : (!empty($lead['inquiryDate']) ? trim($lead['inquiryDate']) : date('Y-m-d'));
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $inqDate)) $inqDate = date('Y-m-d');
+
         $insertStmt->execute([
             $name, $phone, trim($lead['email'] ?? ''), trim($lead['city'] ?? ''), trim($lead['course'] ?? ''),
-            trim($lead['batch'] ?? ''), trim($lead['source'] ?? ''), trim($lead['status'] ?? 'New'),
+            trim($lead['batch'] ?? ''), trim($lead['source'] ?? ''), trim($lead['status'] ?? 'New Enquiry'),
             trim($lead['assignedTo'] ?? ''), trim($lead['followUpDate'] ?? '') ?: null, trim($lead['notes'] ?? ''),
-            $now, $now
+            $inqDate, $now, $now
         ]);
         $successCount++;
     }

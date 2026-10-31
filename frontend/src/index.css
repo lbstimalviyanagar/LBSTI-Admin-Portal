@@ -1341,6 +1341,12 @@ tbody tr:last-child td {
   background: var(--c);
 }
 
+.s-newenquiry { --c: #2563eb; }
+.s-indiscussion { --c: #7c3aed; }
+.s-campusvisitbooked { --c: #0d9488; }
+.s-admissionconfirmed { --c: #047857; }
+.s-deferredfollowup { --c: #d97706; }
+.s-lostclosed { --c: #b91c1c; }
 .s-new { --c: #2563eb; }
 .s-noresponse { --c: #64748b; }
 .s-counselingscheduled { --c: #7c3aed; }

@@ -382,6 +382,132 @@ export const api = {
   },
   async deleteBatch(id) {
     return request(`/batches/${id}`, { method: "DELETE" });
+  },
+
+  // Check Phone Duplicate (Phase 2.2)
+  async checkPhone(phone) {
+    if (!phone) return null;
+    try {
+      return await request(`/enquiries/check-phone?phone=${encodeURIComponent(phone.trim())}`, { method: "GET" });
+    } catch (e) {
+      return null;
+    }
+  },
+
+  // Course Management (Phase 2.3 & Phase 4)
+  async getCourses() {
+    try {
+      const data = await request("/courses", { method: "GET" });
+      return Array.isArray(data) ? data : data?.data || [];
+    } catch (e) {
+      return [];
+    }
+  },
+  async createCourse(data) {
+    return request("/courses", { method: "POST", body: data });
+  },
+  async updateCourse(id, patch) {
+    return request(`/courses/${id}`, { method: "PATCH", body: patch });
+  },
+  async deleteCourse(id) {
+    return request(`/courses/${id}`, { method: "DELETE" });
+  },
+
+  // Course Content Modules (Phase 4)
+  async getCourseContent(courseId = null) {
+    const q = courseId ? `?course_id=${courseId}` : "";
+    const data = await request(`/course-content${q}`, { method: "GET" });
+    return Array.isArray(data) ? data : [];
+  },
+  async createCourseContent(data) {
+    return request("/course-content", { method: "POST", body: data });
+  },
+  async updateCourseContent(id, patch) {
+    return request(`/course-content/${id}`, { method: "PATCH", body: patch });
+  },
+  async deleteCourseContent(id) {
+    return request(`/course-content/${id}`, { method: "DELETE" });
+  },
+
+  // Syllabus (Phase 4)
+  async getCourseSyllabus(courseId = null) {
+    const q = courseId ? `?course_id=${courseId}` : "";
+    const data = await request(`/course-syllabus${q}`, { method: "GET" });
+    return Array.isArray(data) ? data : [];
+  },
+  async createCourseSyllabus(data) {
+    return request("/course-syllabus", { method: "POST", body: data });
+  },
+  async updateCourseSyllabus(id, patch) {
+    return request(`/course-syllabus/${id}`, { method: "PATCH", body: patch });
+  },
+  async deleteCourseSyllabus(id) {
+    return request(`/course-syllabus/${id}`, { method: "DELETE" });
+  },
+
+  // Notes (Phase 4)
+  async getCourseNotes(courseId = null) {
+    const q = courseId ? `?course_id=${courseId}` : "";
+    const data = await request(`/course-notes${q}`, { method: "GET" });
+    return Array.isArray(data) ? data : [];
+  },
+  async createCourseNotes(data) {
+    return request("/course-notes", { method: "POST", body: data });
+  },
+  async updateCourseNotes(id, patch) {
+    return request(`/course-notes/${id}`, { method: "PATCH", body: patch });
+  },
+  async deleteCourseNotes(id) {
+    return request(`/course-notes/${id}`, { method: "DELETE" });
+  },
+
+  // Student Attendance (Phase 5)
+  async getStudentAttendance(filters = {}) {
+    const params = new URLSearchParams();
+    if (filters.date) params.append("date", filters.date);
+    if (filters.course && filters.course !== "All") params.append("course", filters.course);
+    if (filters.batch_time && filters.batch_time !== "All") params.append("batch_time", filters.batch_time);
+    if (filters.student_id) params.append("student_id", filters.student_id);
+    if (filters.status && filters.status !== "All") params.append("status", filters.status);
+    if (filters.q) params.append("q", filters.q);
+    const qs = params.toString();
+    return request(`/student-attendance${qs ? '?' + qs : ''}`, { method: "GET" });
+  },
+  async recordStudentAttendance(data) {
+    return request("/student-attendance", { method: "POST", body: data });
+  },
+  async updateStudentAttendance(id, patch) {
+    return request(`/student-attendance/${id}`, { method: "PATCH", body: patch });
+  },
+  async getStudentAttendanceHistory(studentId) {
+    return request(`/student-attendance/history?student_id=${encodeURIComponent(studentId)}`, { method: "GET" });
+  },
+  async getStudentAttendanceSummary(filters = {}) {
+    const params = new URLSearchParams();
+    if (filters.month) params.append("month", filters.month);
+    if (filters.course && filters.course !== "All") params.append("course", filters.course);
+    const qs = params.toString();
+    return request(`/student-attendance/summary${qs ? '?' + qs : ''}`, { method: "GET" });
+  },
+
+  // Social Media Content Planner (Bonus Feature)
+  async getSocialPosts(filters = {}) {
+    const params = new URLSearchParams();
+    if (filters.platform && filters.platform !== "All") params.append("platform", filters.platform);
+    if (filters.status && filters.status !== "All") params.append("status", filters.status);
+    if (filters.month) params.append("month", filters.month);
+    if (filters.q) params.append("q", filters.q);
+    const qs = params.toString();
+    return request(`/social-planner${qs ? '?' + qs : ''}`, { method: "GET" });
+  },
+  async createSocialPost(data) {
+    return request("/social-planner", { method: "POST", body: data });
+  },
+  async updateSocialPost(id, patch) {
+    return request(`/social-planner/${id}`, { method: "PATCH", body: patch });
+  },
+  async deleteSocialPost(id) {
+    return request(`/social-planner/${id}`, { method: "DELETE" });
   }
 };
 
