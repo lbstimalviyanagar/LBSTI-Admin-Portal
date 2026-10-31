@@ -1115,3 +1115,4 @@ export default function CourseContentPage({ user, onToast }) {
     </div>
   );
 }
+

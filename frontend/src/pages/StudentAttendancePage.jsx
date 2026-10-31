@@ -927,3 +927,4 @@ export default function StudentAttendancePage({ user, onToast }) {
     </div>
   );
 }
+
