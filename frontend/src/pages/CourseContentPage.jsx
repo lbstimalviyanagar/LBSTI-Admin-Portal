@@ -929,14 +929,14 @@ export default function CourseContentPage({ user, onToast }) {
       {/* Modal: Add/Edit Module */}
       {showModuleModal && (
         <div className="modal-backdrop" onClick={() => setShowModuleModal(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '540px' }}>
+          <div className="modal" role="dialog" aria-modal="true" aria-labelledby="module-modal-title" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '540px' }}>
             <div className="modal-head">
-              <h3>{moduleFormData.id ? 'Edit Curriculum Module' : 'Add Curriculum Module'}</h3>
-              <button className="btn close-btn" onClick={() => setShowModuleModal(false)}>×</button>
+              <h3 id="module-modal-title">{moduleFormData.id ? 'Edit Curriculum Module' : 'Add Curriculum Module'}</h3>
+              <button className="btn close-btn" type="button" onClick={() => setShowModuleModal(false)}>×</button>
             </div>
             <form onSubmit={handleSaveModule}>
-              <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '100px 1fr', gap: '0.75rem' }}>
+              <div className="modal-body curriculum-module-fields">
+                <div className="curriculum-module-grid">
                   <div>
                     <label className="label">Module #</label>
                     <input
@@ -1115,4 +1115,3 @@ export default function CourseContentPage({ user, onToast }) {
     </div>
   );
 }
-

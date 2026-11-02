@@ -1548,6 +1548,15 @@ export default function PaymentsSection({
               <option value="all">All Time</option>
             </select>
 
+            <button
+              className="btn primary"
+              type="button"
+              onClick={() => setFeeTab('payment')}
+            >
+              <span className="ic"><Icon name="plus" size={18} /></span>
+              Record Payment
+            </button>
+
             {dateRangeKind === 'custom' && (
               <div className="custom-range" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <input
@@ -1591,15 +1600,6 @@ export default function PaymentsSection({
           onClick={() => setFeeTab('dashboard')}
         >
           Dashboard
-        </button>
-        <button
-          className="fee-tab"
-          type="button"
-          role="tab"
-          aria-selected={feeTab === 'payment'}
-          onClick={() => setFeeTab('payment')}
-        >
-          Record Payment
         </button>
         <button
           className="fee-tab"
@@ -1968,7 +1968,7 @@ export default function PaymentsSection({
         </section>
       )}
 
-      {/* 2. Record Payment Tab */}
+      {/* Record Payment form */}
       {feeTab === 'payment' && (
         <section>
           <form className="card form-card" onSubmit={handleSubmitPayment} noValidate>
@@ -2803,7 +2803,7 @@ export default function PaymentsSection({
                               ? 'Try searching by a different student name, course, or receiver.'
                               : (hasDateFilter
                                 ? 'Try picking another date range or clear the filter.'
-                                : 'Record your first fee payment using the Record Payment tab.')}
+                                  : 'Record your first fee payment using the Record Payment button above.')}
                           </span>
                           <div style={{ marginTop: '12px', display: 'flex', gap: '8px', justifyContent: 'center' }}>
                             {historySearchQuery.trim() && (

@@ -472,6 +472,15 @@ export default function App() {
                     <option value="all">All Time</option>
                   </select>
 
+                  <button
+                    className="btn primary"
+                    type="button"
+                    onClick={() => setTab('new')}
+                  >
+                    <span className="ic"><Icon name="plus" size={18} /></span>
+                    New Enquiry
+                  </button>
+
                   {dashRangeKind === 'custom' && (
                     <div className="custom-range">
                       <input
@@ -514,15 +523,6 @@ export default function App() {
               >
                 <span className="ic"><Icon name="dashboard" size={18} /></span>
                 Dashboard
-              </button>
-              <button
-                className="tab"
-                role="tab"
-                aria-selected={tab === 'new'}
-                onClick={() => setTab('new')}
-              >
-                <span className="ic"><Icon name="plus" size={18} /></span>
-                New Enquiry
               </button>
               <button
                 className="tab"

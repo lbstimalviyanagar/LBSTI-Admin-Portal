@@ -13,6 +13,7 @@ const STATUS_COLORS = { "Active": "#0088FE", "Completed": "#00C49F", "Dropped": 
 
 export default function StudentsSection({ students = [], enrollments = [], loading, onRefresh }) {
   const [tab, setTab] = useState("dashboard");
+  const [summaryDateRange, setSummaryDateRange] = useState("month");
   const { addToast } = useToast();
   const { width: windowWidth, isMobile } = useResponsive();
   const [courseInsightsMode, setCourseInsightsMode] = useState('auto'); // 'auto' | 'bars' (horizontal rows) | 'columns' (vertical bars)
@@ -73,6 +74,28 @@ export default function StudentsSection({ students = [], enrollments = [], loadi
     });
     return map;
   }, [students]);
+
+  const summaryEnrollments = useMemo(() => {
+    const dateRange = rangeOf(summaryDateRange);
+    if (!dateRange.start && !dateRange.end) return enrollments;
+
+    return enrollments.filter(enrollment => {
+      const date = parseDate(enrollment.doa) || parseDate(enrollment.createdAt);
+      return date && (!dateRange.start || date >= dateRange.start) &&
+        (!dateRange.end || date < dateRange.end);
+    });
+  }, [enrollments, summaryDateRange]);
+
+  const enrollmentStatusCounts = useMemo(() => {
+    const counts = { active: 0, dropped: 0, completed: 0 };
+    summaryEnrollments.forEach(enrollment => {
+      const status = String(enrollment.status || "Active").trim().toLowerCase();
+      if (status === "active") counts.active += 1;
+      if (status === "dropped") counts.dropped += 1;
+      if (status === "completed") counts.completed += 1;
+    });
+    return counts;
+  }, [summaryEnrollments]);
 
   // Filtered students for Students List tab
   const filteredStudents = useMemo(() => {
@@ -438,12 +461,31 @@ export default function StudentsSection({ students = [], enrollments = [], loadi
           <h2>Enrolled Students</h2>
           <p>Manage students, enrollments, and their details.</p>
         </div>
+        <div className="controls">
+          <label className="sr-only" htmlFor="students-summary-range">Enrollment summary time range</label>
+          <select
+            className="select"
+            id="students-summary-range"
+            value={summaryDateRange}
+            onChange={(e) => setSummaryDateRange(e.target.value)}
+          >
+            <option value="month">This Month</option>
+            <option value="all">All Time</option>
+          </select>
+          <button
+            className="btn primary"
+            type="button"
+            onClick={() => setTab("new_enrollment")}
+          >
+            <span className="ic"><Icon name="plus" size={18} /></span>
+            New Enrollment
+          </button>
+        </div>
       </div>
 
       <div className="tabs fees-tabs" role="tablist">
         <button className="fee-tab" aria-selected={tab === "dashboard"} onClick={() => setTab("dashboard")}>Dashboard</button>
         <button className="fee-tab" aria-selected={tab === "students"} onClick={() => setTab("students")}>Students List</button>
-        <button className="fee-tab" aria-selected={tab === "new_enrollment" || tab === "new_student"} onClick={() => setTab("new_enrollment")}>New Enrollment</button>
         <button className="fee-tab" aria-selected={tab === "enrollments"} onClick={() => setTab("enrollments")}>Enrollments</button>
       </div>
 
@@ -462,7 +504,28 @@ export default function StudentsSection({ students = [], enrollments = [], loadi
                 <span className="stat-ico"><Icon name="award" size={20} /></span>
                 <span className="stat-label">Total Enrollments</span>
               </div>
-              <div className="stat-val">{enrollments.length}</div>
+              <div className="stat-val">{summaryEnrollments.length}</div>
+            </div>
+            <div className="card stat">
+              <div className="stat-top">
+                <span className="stat-ico"><Icon name="userCheck" size={20} /></span>
+                <span className="stat-label">Active enrollments</span>
+              </div>
+              <div className="stat-val">{enrollmentStatusCounts.active}</div>
+            </div>
+            <div className="card stat">
+              <div className="stat-top">
+                <span className="stat-ico"><Icon name="userX" size={20} /></span>
+                <span className="stat-label">Dropped enrollments</span>
+              </div>
+              <div className="stat-val">{enrollmentStatusCounts.dropped}</div>
+            </div>
+            <div className="card stat">
+              <div className="stat-top">
+                <span className="stat-ico"><Icon name="award" size={20} /></span>
+                <span className="stat-label">Completed enrollments</span>
+              </div>
+              <div className="stat-val">{enrollmentStatusCounts.completed}</div>
             </div>
           </div>
           

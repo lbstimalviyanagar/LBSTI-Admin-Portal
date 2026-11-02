@@ -1543,6 +1543,79 @@ tbody tr:last-child td {
   overflow: hidden;
 }
 
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(3, 10, 28, .55);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+}
+
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--line);
+  flex: none;
+}
+
+.modal-head h3 {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 800;
+}
+
+.modal-head .close-btn {
+  flex: none;
+  padding: 5px 10px;
+  font-size: 1.25rem;
+}
+
+.modal-backdrop > .modal > form {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.modal-backdrop .modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: .9rem;
+  padding: 20px 22px;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.modal-backdrop .modal-body .label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: .86rem;
+  font-weight: 700;
+}
+
+.curriculum-module-grid {
+  display: grid;
+  grid-template-columns: minmax(84px, 100px) minmax(0, 1fr);
+  gap: .75rem;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 22px;
+  border-top: 1px solid var(--line);
+  background: var(--card-2);
+  flex: none;
+}
+
 @keyframes up {
   from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: none; }
@@ -1933,7 +2006,7 @@ tbody tr:last-child td {
   .search {
     flex-basis: 100%;
   }
-  .modal {
+  .overlay .modal {
     width: 100% !important;
     max-width: 100% !important;
     max-height: 94vh !important;
@@ -1944,7 +2017,7 @@ tbody tr:last-child td {
     padding: 0;
     align-items: flex-end;
   }
-  .modal-body {
+  .overlay .modal-body {
     grid-template-columns: 1fr;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
@@ -1962,15 +2035,21 @@ tbody tr:last-child td {
   .timeline {
     overflow: visible;
   }
-  .modal > footer {
+  .overlay .modal > footer {
     flex-wrap: wrap;
     padding: 12px 16px;
   }
-  .modal > footer .spacer {
+  .overlay .modal > footer .spacer {
     display: none;
   }
-  .modal > footer .btn {
+  .overlay .modal > footer .btn {
     flex: 1;
+  }
+  .modal-backdrop {
+    padding: 12px;
+  }
+  .modal-backdrop > .modal {
+    max-height: calc(100vh - 24px);
   }
   /* Responsive KPI metric cards: 2 columns on mobile instead of full-page stack */
   .stats {
@@ -2291,21 +2370,21 @@ td:has(.empty), td:has(.skel) {
   .stat-val {
     font-size: 1.8rem;
   }
-  .modal > footer {
+  .overlay .modal > footer {
     flex-wrap: nowrap;
     gap: 8px;
   }
-  .modal > footer .btn {
+  .overlay .modal > footer .btn {
     white-space: nowrap;
     padding: 10px 12px;
   }
-  .modal > footer #mDelete {
+  .overlay .modal > footer #mDelete {
     flex: none;
   }
-  .modal > footer #mDelete .lbl {
+  .overlay .modal > footer #mDelete .lbl {
     display: none;
   }
-  .modal > footer #mCancel, .modal > footer #mSave {
+  .overlay .modal > footer #mCancel, .overlay .modal > footer #mSave {
     flex: 1;
   }
   th:last-child, td:last-child {
@@ -3252,4 +3331,3 @@ td:has(.empty), td:has(.skel) {
   align-items: center;
   gap: 5px;
 }
-
