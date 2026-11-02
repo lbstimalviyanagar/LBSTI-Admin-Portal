@@ -723,7 +723,7 @@ export default function PaymentsSection({
     });
   }, [baseFeesList, hasDateFilter, activeRange]);
 
-  const historyFees = filteredFees;
+  const historyFees = baseFeesList;
 
   // Auto-initialize selectedReceiptPaymentId to first available record if unset
   useEffect(() => {
@@ -1601,6 +1601,17 @@ export default function PaymentsSection({
                     Clear Filter ✕
                   </button>
                 )}
+                <button
+                  className="btn sm"
+                  type="button"
+                  onClick={() => {
+                    setHistorySearchQuery('');
+                    setFeeTab('history');
+                  }}
+                  title="View all payment transactions"
+                >
+                  View all <Icon name="chevR" size={14} />
+                </button>
               </div>
             </div>
 
@@ -2577,58 +2588,11 @@ export default function PaymentsSection({
       {/* 3. Payment History Tab */}
       {feeTab === 'history' && (
         <section>
-          {hasDateFilter && (
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                flexWrap: 'wrap',
-                gap: '8px',
-                background: '#eff6ff',
-                border: '1px solid #bfdbfe',
-                padding: '10px 18px',
-                borderRadius: '8px',
-                marginBottom: '16px',
-                fontSize: '0.88rem'
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                <span style={{ fontWeight: 700, color: '#1e40af' }}>Active Date Filter:</span>
-                <span style={{ color: '#1e293b' }}>
-                  Showing collections for <b>{rangeLabel}</b>
-                </span>
-                <span style={{ color: '#64748b', fontSize: '0.82rem' }}>
-                  ({displayedHistoryFees.length} {displayedHistoryFees.length === 1 ? 'record' : 'records'} · Total: ₹{displayedHistoryFees.reduce((sum, f) => sum + (Number(f.amount) || 0), 0).toLocaleString('en-IN')})
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={handleClearDateFilter}
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  color: '#2563eb',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  textDecoration: 'underline',
-                  fontSize: '0.84rem'
-                }}
-              >
-                Reset to all dates ✕
-              </button>
-            </div>
-          )}
-
           <div className="card section">
             <div className="card-head">
               <div>
                 <h3>Payment history</h3>
-                <p>
-                  {hasDateFilter
-                    ? `Fee payments recorded for ${rangeLabel}`
-                    : "All fee payments recorded, newest first."}
-                </p>
+                <p>All fee payments recorded, newest first.</p>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                 {/* Real-time search input for Payment History */}
@@ -2645,16 +2609,6 @@ export default function PaymentsSection({
                   />
                 </div>
 
-                {hasDateFilter && (
-                  <button
-                    className="btn sm"
-                    type="button"
-                    onClick={handleClearDateFilter}
-                    style={{ color: '#b91c1c', borderColor: '#fca5a5' }}
-                  >
-                    Clear Filter ✕
-                  </button>
-                )}
                 <button
                   className="btn"
                   type="button"
@@ -2695,14 +2649,12 @@ export default function PaymentsSection({
                           <b>
                             {historySearchQuery.trim()
                               ? `No payments found matching "${historySearchQuery}"`
-                              : `No payments recorded ${hasDateFilter ? 'in this date range' : 'yet'}`}
+                              : 'No payments recorded yet'}
                           </b>
                           <span>
                             {historySearchQuery.trim()
                               ? 'Try searching by a different student name, course, or receiver.'
-                              : (hasDateFilter
-                                ? 'Try picking another date range or clear the filter.'
-                                  : 'Record your first fee payment using the Record Payment button above.')}
+                              : 'Record your first fee payment using the Record Payment button above.'}
                           </span>
                           <div style={{ marginTop: '12px', display: 'flex', gap: '8px', justifyContent: 'center' }}>
                             {historySearchQuery.trim() && (

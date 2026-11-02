@@ -360,6 +360,13 @@ export default function EnquiryDashboard({
                 Clear filter ✕
               </button>
             )}
+            <button
+              className="btn sm"
+              type="button"
+              onClick={() => onDrillIntoTable(activeSourceFilter ? { source: activeSourceFilter } : {})}
+            >
+              View all <Icon name="chevR" size={16} />
+            </button>
           </div>
         </div>
 
