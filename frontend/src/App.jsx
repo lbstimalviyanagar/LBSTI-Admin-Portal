@@ -42,7 +42,7 @@ export default function App() {
   const getInitialTab = () => {
     try {
       const hash = window.location.hash.replace(/^#\/?/, '').trim();
-      const validTabs = ['dashboard', 'new', 'table', 'payments', 'students', 'student-attendance', 'attendance', 'course-content', 'social-planner', 'tasks', 'batches', 'users'];
+      const validTabs = ['dashboard', 'new', 'payments', 'students', 'student-attendance', 'attendance', 'course-content', 'social-planner', 'tasks', 'batches', 'users'];
       if (hash && validTabs.includes(hash)) return hash;
       const saved = localStorage.getItem('lbstimn_active_tab');
       if (saved && validTabs.includes(saved)) return saved;
@@ -65,7 +65,7 @@ export default function App() {
   useEffect(() => {
     const onHashChange = () => {
       const hash = window.location.hash.replace(/^#\/?/, '').trim();
-      const validTabs = ['dashboard', 'new', 'table', 'payments', 'students', 'student-attendance', 'attendance', 'course-content', 'social-planner', 'tasks', 'batches', 'users'];
+      const validTabs = ['dashboard', 'new', 'payments', 'students', 'student-attendance', 'attendance', 'course-content', 'social-planner', 'tasks', 'batches', 'users'];
       if (hash && validTabs.includes(hash)) {
         setTabState(hash);
         try { localStorage.setItem('lbstimn_active_tab', hash); } catch (e) {}
@@ -124,6 +124,7 @@ export default function App() {
     source: 'All',
     counselor: 'All',
     status: 'All',
+    dashboardCategory: 'all',
     dateKind: 'all',
     from: '',
     to: '',
@@ -361,6 +362,7 @@ export default function App() {
       source: 'All',
       counselor: 'All',
       status: 'All',
+      dashboardCategory: 'all',
       dateKind: dashRangeKind,
       from: dashFrom,
       to: dashTo,
@@ -368,7 +370,9 @@ export default function App() {
       ...patch
     }));
     setTab('table');
-    if (Object.keys(patch).length > 0) {
+    if (patch.dashboardCategory && patch.dashboardCategory !== 'all') {
+      addToast(`Filtered by ${patch.dashboardCategory}`);
+    } else if (Object.keys(patch).length > 0) {
       addToast(`Filtered by ${Object.values(patch)[0]}`);
     }
   };
@@ -501,16 +505,6 @@ export default function App() {
                 <span className="ic"><Icon name="dashboard" size={18} /></span>
                 Dashboard
               </button>
-              <button
-                className="tab"
-                role="tab"
-                aria-selected={tab === 'table'}
-                onClick={() => setTab('table')}
-              >
-                <span className="ic"><Icon name="table" size={18} /></span>
-                Enquiries Table
-                <span className="count"> ({enquiries.length})</span>
-              </button>
             </div>
           )}
 
@@ -539,6 +533,7 @@ export default function App() {
               onConfirmAdmission={handleConfirmAdmission}
               onDrillIntoTable={handleDrillIntoTable}
               onGoToNewLead={() => setTab('new')}
+              onToast={addToast}
             />
           )}
 

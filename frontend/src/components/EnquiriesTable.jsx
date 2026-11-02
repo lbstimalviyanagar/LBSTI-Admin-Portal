@@ -41,6 +41,7 @@ export default function EnquiriesTable({
     source,
     counselor,
     status,
+    dashboardCategory = 'all',
     dateKind,
     from,
     to,
@@ -76,6 +77,7 @@ export default function EnquiriesTable({
     (source !== "All" ? 1 : 0) +
     (counselor !== "All" ? 1 : 0) +
     (status !== "All" ? 1 : 0) +
+    (dashboardCategory !== "all" ? 1 : 0) +
     (dateKind !== "all" ? 1 : 0)
   );
 
@@ -84,6 +86,11 @@ export default function EnquiriesTable({
   const dateRange = rangeOf(dateKind, from, to);
 
   const filteredRows = enquiries.filter((e) => {
+    const normalizedStatus = normalizeStatus(e.status);
+    if (dashboardCategory === 'active' && !OPEN_STATUSES.includes(normalizedStatus)) return false;
+    if (dashboardCategory === 'dropped' && normalizedStatus !== 'Lost / Closed') return false;
+    if (dashboardCategory === 'confirmed' && normalizedStatus !== 'Admission Confirmed') return false;
+    if (dashboardCategory === 'pending' && !isPendingFU(e)) return false;
     if (course !== "All" && e.course !== course) return false;
     if (source !== "All" && normalizeLeadSource(e.source) !== source) return false;
     if (counselor !== "All" && canonicalCounselorName(e.assignedTo) !== counselor && e.assignedTo !== counselor) return false;
@@ -151,6 +158,7 @@ export default function EnquiriesTable({
       source: "All",
       counselor: "All",
       status: "All",
+      dashboardCategory: "all",
       dateKind: "all",
       from: "",
       to: "",
@@ -202,9 +210,35 @@ export default function EnquiriesTable({
     { key: "action", label: "Action", sortable: false }
   ];
 
+  const dashboardCategoryLabels = {
+    all: 'All Enquiries',
+    active: 'Active Enquiries',
+    dropped: 'Dropped Enquiries',
+    confirmed: 'Confirmed Enquiries',
+    pending: 'Pending Enquiries'
+  };
+  const activeDashboardCategory = dashboardCategoryLabels[dashboardCategory];
+
   return (
     <section>
       <div className="card">
+        {activeDashboardCategory && (
+          <div className="card-head enquiry-filter-summary">
+            <div>
+              <h3>{activeDashboardCategory}</h3>
+              <p>{sortedRows.length} matching {sortedRows.length === 1 ? 'enquiry' : 'enquiries'}</p>
+            </div>
+            {dashboardCategory !== 'all' && (
+              <button
+                className="btn sm"
+                type="button"
+                onClick={() => setFilterParams(prev => ({ ...prev, dashboardCategory: 'all', page: 1 }))}
+              >
+                Clear filter
+              </button>
+            )}
+          </div>
+        )}
         {/* Toolbar */}
         <div className="toolbar">
           <div className="search">

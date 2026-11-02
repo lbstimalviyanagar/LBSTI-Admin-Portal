@@ -34,7 +34,9 @@ import {
   STANDARDIZED_SOURCES,
   normalizeLeadSource,
   normalizeStatus,
-  canonicalCounselorName
+  canonicalCounselorName,
+  getTelUrl,
+  getWhatsAppUrl
 } from '../utils/helpers';
 
 export default function EnquiryDashboard({
@@ -67,7 +69,7 @@ export default function EnquiryDashboard({
 
   const total = list.length;
   const openLeads = list.filter(e => OPEN_STATUSES.includes(normalizeStatus(e.status)));
-  const active = openLeads.filter(e => e.assignedTo).length;
+  const active = openLeads.length;
   const dropped = list.filter(e => normalizeStatus(e.status) === "Lost / Closed").length;
   const confirmed = list.filter(e => normalizeStatus(e.status) === "Admission Confirmed").length;
   const inCounseling = list.filter(e => {
@@ -192,7 +194,7 @@ export default function EnquiryDashboard({
 
   // Filtered recent leads (filtered by activeSourceFilter when clicked on chart)
   const displayedLeads = useMemo(() => {
-    const pool = list.length > 0 ? list : enquiries;
+    const pool = list;
     let filteredList = pool;
 
     if (activeSourceFilter) {
@@ -228,58 +230,83 @@ export default function EnquiryDashboard({
           ))
         ) : (
           <>
-            <div className="card stat">
+            <button
+              className="card stat kpi-interactive"
+              type="button"
+              onClick={() => onDrillIntoTable({ dashboardCategory: 'all' })}
+              title="Show all enquiries in the selected date range"
+            >
               <div className="stat-top">
                 <span className="stat-ico"><Icon name="users" size={20} /></span>
                 <span className="stat-label">Total enquiries</span>
               </div>
               <div className="stat-val">{total}</div>
               <div className="stat-sub">{totalSub}</div>
-            </div>
+            </button>
 
-            <div className="card stat">
+            <button
+              className="card stat kpi-interactive"
+              type="button"
+              onClick={() => onDrillIntoTable({ dashboardCategory: 'active' })}
+              title="Show active enquiries"
+            >
               <div className="stat-top">
                 <span className="stat-ico"><Icon name="userCheck" size={20} /></span>
-                <span className="stat-label">Active / assigned</span>
+                <span className="stat-label">Active Enquiries</span>
               </div>
               <div className="stat-val">{active}</div>
               <div className="stat-sub">
-                {openLeads.length ? `of ${openLeads.length} open leads` : "No open leads"}
+                {openLeads.length ? "Open leads" : "No open leads"}
               </div>
-            </div>
+            </button>
 
-            <div className="card stat">
+            <button
+              className="card stat kpi-interactive"
+              type="button"
+              onClick={() => onDrillIntoTable({ dashboardCategory: 'dropped' })}
+              title="Show dropped enquiries"
+            >
               <div className="stat-top">
                 <span className="stat-ico"><Icon name="userX" size={20} /></span>
-                <span className="stat-label">Dropped</span>
+                <span className="stat-label">Dropped Enquiries</span>
               </div>
               <div className="stat-val">{dropped}</div>
               <div className="stat-sub">
                 {total ? `${Math.round((dropped / total) * 100)}% of enquiries` : "No enquiries yet"}
               </div>
-            </div>
+            </button>
 
-            <div className="card stat">
+            <button
+              className="card stat kpi-interactive"
+              type="button"
+              onClick={() => onDrillIntoTable({ dashboardCategory: 'confirmed' })}
+              title="Show confirmed enquiries"
+            >
               <div className="stat-top">
                 <span className="stat-ico"><Icon name="award" size={20} /></span>
-                <span className="stat-label">Confirmed admissions</span>
+                <span className="stat-label">Confirmed Enquiries</span>
               </div>
               <div className="stat-val">{confirmed}</div>
               <div className="stat-sub">
                 {inCounseling} in counseling{total ? ` · ${Math.round((confirmed / total) * 1000) / 10}% conversion` : ""}
               </div>
-            </div>
+            </button>
 
-            <div className="card stat">
+            <button
+              className="card stat kpi-interactive"
+              type="button"
+              onClick={() => onDrillIntoTable({ dashboardCategory: 'pending' })}
+              title="Show enquiries with pending follow-ups"
+            >
               <div className="stat-top">
                 <span className="stat-ico"><Icon name="clock" size={20} /></span>
-                <span className="stat-label">Pending follow-ups</span>
+                <span className="stat-label">Pending Enquiries</span>
               </div>
               <div className="stat-val">{pending.length}</div>
               <div className="stat-sub">
                 {overdue ? <span className="overdue">{overdue} overdue</span> : "None overdue"}
               </div>
-            </div>
+            </button>
           </>
         )}
       </div>
@@ -333,13 +360,6 @@ export default function EnquiryDashboard({
                 Clear filter ✕
               </button>
             )}
-            <button
-              className="btn sm"
-              type="button"
-              onClick={() => onDrillIntoTable(activeSourceFilter ? { source: activeSourceFilter } : {})}
-            >
-              View all <Icon name="chevR" size={16} />
-            </button>
           </div>
         </div>
 
@@ -476,6 +496,50 @@ export default function EnquiryDashboard({
                       <td>{fmtDay(e.createdAt)}</td>
                       <td>
                         <div className="acts">
+                          {getTelUrl(e.phone) ? (
+                            <a
+                              className="btn sm icon"
+                              href={getTelUrl(e.phone)}
+                              title={`Call ${e.name} (${e.phone})`}
+                              aria-label={`Call ${e.name}`}
+                              style={{ textDecoration: 'none' }}
+                            >
+                              <Icon name="phone" size={15} />
+                            </a>
+                          ) : (
+                            <button
+                              className="btn sm icon"
+                              type="button"
+                              disabled
+                              title="No valid phone number"
+                              aria-label={`Call ${e.name} unavailable`}
+                            >
+                              <Icon name="phone" size={15} />
+                            </button>
+                          )}
+                          {getWhatsAppUrl(e.phone) ? (
+                            <a
+                              className="btn sm icon"
+                              href={getWhatsAppUrl(e.phone, `Hello ${e.name || ''}, greetings from LBSTI!`)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title={`WhatsApp ${e.name}`}
+                              aria-label={`WhatsApp ${e.name}`}
+                              style={{ color: '#16a34a', textDecoration: 'none' }}
+                            >
+                              <Icon name="whatsapp" size={16} />
+                            </a>
+                          ) : (
+                            <button
+                              className="btn sm icon"
+                              type="button"
+                              disabled
+                              title="No valid phone number"
+                              aria-label={`WhatsApp ${e.name} unavailable`}
+                            >
+                              <Icon name="whatsapp" size={16} />
+                            </button>
+                          )}
                           <button
                             className="btn sm"
                             type="button"

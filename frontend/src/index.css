@@ -961,6 +961,37 @@ img.avatar {
   padding: 20px 22px;
 }
 
+.kpi-interactive {
+  appearance: none;
+  width: 100%;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease;
+}
+
+.kpi-interactive:hover {
+  transform: translateY(-2px);
+  border-color: #b8c8e8;
+  box-shadow: 0 8px 20px rgba(15, 37, 87, .12);
+}
+
+.kpi-interactive:focus-visible {
+  outline: 3px solid rgba(36, 86, 200, .35);
+  outline-offset: 2px;
+}
+
+.enquiry-filter-summary {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.enquiry-filter-summary p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: .86rem;
+}
+
 .stat-top {
   display: flex;
   align-items: center;

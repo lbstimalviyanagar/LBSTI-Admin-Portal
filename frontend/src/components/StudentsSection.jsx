@@ -14,6 +14,7 @@ const STATUS_COLORS = { "Active": "#0088FE", "Completed": "#00C49F", "Dropped": 
 
 export default function StudentsSection({ students = [], enrollments = [], loading, onRefresh }) {
   const [tab, setTab] = useState("dashboard");
+  const [studentCategoryFilter, setStudentCategoryFilter] = useState("all");
   const [summaryDateRange, setSummaryDateRange] = useState("month");
   const [summaryCustomFrom, setSummaryCustomFrom] = useState("");
   const [summaryCustomTo, setSummaryCustomTo] = useState("");
@@ -100,11 +101,29 @@ export default function StudentsSection({ students = [], enrollments = [], loadi
     return counts;
   }, [summaryEnrollments]);
 
+  const categoryStudentIds = useMemo(() => {
+    const ids = { enrolled: new Set(), active: new Set(), dropped: new Set(), completed: new Set() };
+    summaryEnrollments.forEach(enrollment => {
+      const studentId = String(enrollment.studentId || "").trim().toLowerCase();
+      if (!studentId) return;
+      ids.enrolled.add(studentId);
+      const status = String(enrollment.status || "Active").trim().toLowerCase();
+      if (status === "active") ids.active.add(studentId);
+      if (status === "dropped") ids.dropped.add(studentId);
+      if (status === "completed") ids.completed.add(studentId);
+    });
+    return ids;
+  }, [summaryEnrollments]);
+
   // Filtered students for Students List tab
   const filteredStudents = useMemo(() => {
-    if (!studentSearchQuery || !studentSearchQuery.trim()) return students;
     const q = studentSearchQuery.toLowerCase().trim();
     return students.filter(st => {
+      if (studentCategoryFilter !== "all") {
+        const categoryIds = categoryStudentIds[studentCategoryFilter];
+        if (!categoryIds?.has(String(st.studentId || "").trim().toLowerCase())) return false;
+      }
+      if (!q) return true;
       const idMatch = String(st.studentId || "").toLowerCase().includes(q);
       const nameMatch = String(st.name || "").toLowerCase().includes(q);
       const guardianMatch = String(st.guardianName || "").toLowerCase().includes(q);
@@ -113,7 +132,7 @@ export default function StudentsSection({ students = [], enrollments = [], loadi
       const remarksMatch = String(st.remarks || "").toLowerCase().includes(q);
       return idMatch || nameMatch || guardianMatch || phoneMatch || emailMatch || remarksMatch;
     });
-  }, [students, studentSearchQuery]);
+  }, [students, studentSearchQuery, studentCategoryFilter, categoryStudentIds]);
 
   // Unique course options for Enrollments filter
   const enrollmentCourseOptions = useMemo(() => {
@@ -195,6 +214,19 @@ export default function StudentsSection({ students = [], enrollments = [], loadi
   const sortedStudents = useMemo(() => {
     return sortStudents(filteredStudents);
   }, [filteredStudents, sortStudents]);
+
+  const studentFilterLabels = {
+    all: 'All students',
+    enrolled: 'Enrolled students',
+    active: 'Active enrollments',
+    dropped: 'Dropped enrollments',
+    completed: 'Completed enrollments'
+  };
+  const openStudentCategory = (category) => {
+    setStudentCategoryFilter(category);
+    setStudentSearchQuery("");
+    setTab("students");
+  };
 
   // Sorting state for Enrollments tab
   const {
@@ -488,41 +520,66 @@ export default function StudentsSection({ students = [], enrollments = [], loadi
       {tab === "dashboard" && (
         <div style={{display: "flex", flexDirection: "column", gap: "20px"}}>
           <div className="stats">
-            <div className="card stat">
+            <button
+              className="card stat kpi-interactive"
+              type="button"
+              onClick={() => openStudentCategory("all")}
+              title="Show all students"
+            >
               <div className="stat-top">
                 <span className="stat-ico"><Icon name="users" size={20} /></span>
                 <span className="stat-label">Total Students</span>
               </div>
               <div className="stat-val">{students.length}</div>
-            </div>
-            <div className="card stat">
+            </button>
+            <button
+              className="card stat kpi-interactive"
+              type="button"
+              onClick={() => openStudentCategory("enrolled")}
+              title="Show students with enrollments in this date range"
+            >
               <div className="stat-top">
                 <span className="stat-ico"><Icon name="award" size={20} /></span>
                 <span className="stat-label">Total Enrollments</span>
               </div>
               <div className="stat-val">{summaryEnrollments.length}</div>
-            </div>
-            <div className="card stat">
+            </button>
+            <button
+              className="card stat kpi-interactive"
+              type="button"
+              onClick={() => openStudentCategory("active")}
+              title="Show students with active enrollments in this date range"
+            >
               <div className="stat-top">
                 <span className="stat-ico"><Icon name="userCheck" size={20} /></span>
                 <span className="stat-label">Active enrollments</span>
               </div>
               <div className="stat-val">{enrollmentStatusCounts.active}</div>
-            </div>
-            <div className="card stat">
+            </button>
+            <button
+              className="card stat kpi-interactive"
+              type="button"
+              onClick={() => openStudentCategory("dropped")}
+              title="Show students with dropped enrollments in this date range"
+            >
               <div className="stat-top">
                 <span className="stat-ico"><Icon name="userX" size={20} /></span>
                 <span className="stat-label">Dropped enrollments</span>
               </div>
               <div className="stat-val">{enrollmentStatusCounts.dropped}</div>
-            </div>
-            <div className="card stat">
+            </button>
+            <button
+              className="card stat kpi-interactive"
+              type="button"
+              onClick={() => openStudentCategory("completed")}
+              title="Show students with completed enrollments in this date range"
+            >
               <div className="stat-top">
                 <span className="stat-ico"><Icon name="award" size={20} /></span>
                 <span className="stat-label">Completed enrollments</span>
               </div>
               <div className="stat-val">{enrollmentStatusCounts.completed}</div>
-            </div>
+            </button>
           </div>
           
           <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "20px" }}>
@@ -840,10 +897,20 @@ export default function StudentsSection({ students = [], enrollments = [], loadi
             <div>
               <h3>Students Database</h3>
               <p style={{ margin: "2px 0 0", fontSize: "0.84rem", color: "var(--muted)" }}>
-                {filteredStudents.length} {filteredStudents.length === 1 ? "student" : "students"} recorded
+                {filteredStudents.length} {filteredStudents.length === 1 ? "student" : "students"} {studentCategoryFilter === "all" ? "in all students" : `matching ${studentFilterLabels[studentCategoryFilter]}`}
               </p>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+              {studentCategoryFilter !== "all" && (
+                <button
+                  type="button"
+                  className="btn sm"
+                  onClick={() => setStudentCategoryFilter("all")}
+                  title="Clear dashboard card filter"
+                >
+                  Clear {studentFilterLabels[studentCategoryFilter]} filter
+                </button>
+              )}
               {/* Comprehensive search bar */}
               <div className="search" style={{ minWidth: "240px", maxWidth: "380px" }}>
                 <span className="si"><Icon name="search" size={18} /></span>

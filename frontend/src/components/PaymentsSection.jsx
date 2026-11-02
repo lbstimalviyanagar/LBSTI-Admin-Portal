@@ -3,7 +3,6 @@ import Icon from './Icons';
 import DateRangeFilter from './DateRangeFilter';
 import DonutChart from './Charts/DonutChart';
 import LineChart from './Charts/LineChart';
-import SearchablePaymentSelect from './SearchablePaymentSelect';
 import {
   FEE_ITEMS,
   feeBreakdownTotals,
@@ -17,7 +16,9 @@ import {
   fmtShort,
   rangeOf,
   MON,
-  ORG
+  ORG,
+  getTelUrl,
+  getWhatsAppUrl
 } from '../utils/helpers';
 import api from '../services/api';
 import { useTableSort } from '../hooks/useTableSort';
@@ -232,10 +233,10 @@ export default function PaymentsSection({
   onRefresh,
   onToast
 }) {
-  const [feeTab, setFeeTab] = useState('dashboard'); // 'dashboard' | 'payment' | 'history' | 'receipt'
+  const [feeTab, setFeeTab] = useState('dashboard');
   
   // Date Range Filter state (preset options: all, today, yesterday, week, month, lastmonth, custom)
-  const [dateRangeKind, setDateRangeKind] = useState('all');
+  const [dateRangeKind, setDateRangeKind] = useState('today');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
   const [refreshing, setRefreshing] = useState(false);
@@ -553,8 +554,9 @@ export default function PaymentsSection({
     setFeeTab('payment');
 
     const matchedStudent = students.find(s =>
+      fee.studentId && String(s.studentId) === String(fee.studentId)
+    ) || students.find(s =>
       String(s.id) === String(fee.enquiryId) ||
-      (fee.studentId && String(s.studentId) === String(fee.studentId)) ||
       (fee.studentName && s.name && s.name.toLowerCase() === fee.studentName.toLowerCase())
     ) || enquiries.find(e =>
       String(e.id) === String(fee.enquiryId) ||
@@ -698,7 +700,7 @@ export default function PaymentsSection({
         await onSavePayment(payload);
       }
       handleClearForm();
-      setFeeTab('history');
+      setFeeTab('dashboard');
     } catch (err) {
       onToast(err.message || "Unable to save fee payment.", true);
     } finally {
@@ -706,96 +708,7 @@ export default function PaymentsSection({
     }
   };
 
-  // Base Payment History dataset (loaded fees or fallback institute records)
-  const baseFeesList = useMemo(() => {
-    if (fees && fees.length > 0) return fees;
-    return [
-      {
-        id: 1,
-        studentName: 'Saksham Arya',
-        studentPhone: '9871234567',
-        amount: 3000,
-        mode: 'UPI',
-        paymentDate: '2026-10-12',
-        receivedBy: 'Harjot Kaur',
-        notes: '1st Installment ADCA',
-        course: 'ADCA (12 Months)',
-        receiptNumber: 'LBSTI-2026-181878'
-      },
-      {
-        id: 2,
-        studentName: 'Taufeeq Ahmad Bhat',
-        studentPhone: '9810987654',
-        amount: 1300,
-        mode: 'UPI',
-        paymentDate: '2026-10-10',
-        receivedBy: 'Admin',
-        notes: 'Monthly fee',
-        course: 'ADCA (12 Months)',
-        receiptNumber: 'LBSTI-2026-181879'
-      },
-      {
-        id: 3,
-        studentName: 'Kirandeep Kaur',
-        studentPhone: '8700988483',
-        amount: 1500,
-        mode: 'Cash',
-        paymentDate: '2026-10-08',
-        receivedBy: 'Admin',
-        notes: 'Admission fee',
-        course: 'DABC (12 Months)',
-        receiptNumber: 'LBSTI-2026-181880'
-      },
-      {
-        id: 4,
-        studentName: 'Md. Gulzar Alam',
-        studentPhone: '8527243723',
-        amount: 2500,
-        mode: 'Cash',
-        paymentDate: '2026-10-06',
-        receivedBy: 'Shail',
-        notes: 'Full payment',
-        course: 'ADCA + ESC',
-        receiptNumber: 'LBSTI-2026-181888'
-      },
-      {
-        id: 5,
-        studentName: 'Mohd. Shaved',
-        studentPhone: '9711769678',
-        amount: 500,
-        mode: 'UPI',
-        paymentDate: '2026-10-05',
-        receivedBy: 'Admin',
-        notes: 'Registration',
-        course: 'CCO (3 Months)',
-        receiptNumber: 'LBSTI-2026-181893'
-      },
-      {
-        id: 6,
-        studentName: 'Vanya Sharma',
-        studentPhone: '8376845860',
-        amount: 2500,
-        mode: 'Card',
-        paymentDate: '2026-10-03',
-        receivedBy: 'Harjot Kaur',
-        notes: 'Course fee installment',
-        course: 'ADCA (12 Months)',
-        receiptNumber: 'LBSTI-2026-181895'
-      },
-      {
-        id: 7,
-        studentName: 'Arpita Mandal',
-        studentPhone: '8527145962',
-        amount: 2000,
-        mode: 'Bank Transfer',
-        paymentDate: '2026-10-01',
-        receivedBy: 'Admin',
-        notes: 'Course Fee',
-        course: 'DEA (12 Months)',
-        receiptNumber: 'LBSTI-2026-181912'
-      }
-    ];
-  }, [fees]);
+  const baseFeesList = useMemo(() => (Array.isArray(fees) ? fees : []), [fees]);
 
   // Filtered payments by global Date Range
   const filteredFees = useMemo(() => {
@@ -1436,24 +1349,12 @@ export default function PaymentsSection({
       }
     });
 
-    const hasData = months.some((m) => m.v > 0);
-    let finalPoints = months;
-    if (!hasData && !hasDateFilter) {
-      const mockValues = [18500, 24000, 29500, 21000, 34500, 42000];
-      const mockCounts = [6, 8, 10, 7, 12, 14];
-      finalPoints = months.map((m, idx) => ({
-        ...m,
-        v: mockValues[idx] || 25000,
-        count: mockCounts[idx] || 8
-      }));
-    }
-
     return {
-      monthlyTrendData: finalPoints,
+      monthlyTrendData: months,
       trendMeta: {
         title: hasDateFilter ? `Monthly Collection Trend (${rangeLabel})` : 'Monthly Collection Trend',
         sub: hasDateFilter ? `Fee collections recorded for ${rangeLabel}` : 'Fee collections trend over the past 6 months',
-        total: finalPoints.reduce((acc, m) => acc + m.v, 0),
+        total: months.reduce((acc, m) => acc + m.v, 0),
         periodLabel: hasDateFilter ? `${rangeLabel} Total` : '6-Month Total'
       }
     };
@@ -1462,7 +1363,8 @@ export default function PaymentsSection({
   // Recent Transactions calculation from filtered fees
   const recentTransactions = useMemo(() => {
     return filteredFees.map((f) => {
-      const student = students.find(s => String(s.id) === String(f.enquiryId) || String(s.studentId) === String(f.studentId)) ||
+      const student = students.find(s => f.studentId && String(s.studentId) === String(f.studentId)) ||
+                      students.find(s => String(s.id) === String(f.enquiryId)) ||
                       enquiries.find(e => String(e.id) === String(f.enquiryId)) || {};
       const receiptNo = f.receiptNumber || `LBSTI-${new Date(f.paymentDate || Date.now()).getFullYear()}-${String(f.id).padStart(4, '0')}`;
       const studentName = f.studentName || student.name || "Enrolled Student";
@@ -1476,13 +1378,14 @@ export default function PaymentsSection({
         id: f.id,
         receiptNo,
         studentName,
-        studentPhone: student.phone || '',
+        studentPhone: student.phone || f.studentPhone || f.phone || '',
         date: dateStr,
         course,
         amount,
         mode,
         status,
-        othersDescription: f.othersDescription || f.receiptDetails?.othersDescription || ''
+        othersDescription: f.othersDescription || f.receiptDetails?.othersDescription || '',
+        fee: f
       };
     });
   }, [filteredFees, students, enquiries]);
@@ -1528,10 +1431,10 @@ export default function PaymentsSection({
       <div className="page-head">
         <div>
           <h2>Payments</h2>
-          <p>Manage fee payments, breakdown particulars, and official receipts.</p>
+          <p>Manage fee payments, breakdown particulars, and collection analytics.</p>
         </div>
 
-        {(feeTab === 'dashboard' || feeTab === 'history') && (
+        {feeTab === 'dashboard' && (
           <div className="controls">
             <DateRangeFilter
               id="payments-range"
@@ -1575,24 +1478,6 @@ export default function PaymentsSection({
           onClick={() => setFeeTab('dashboard')}
         >
           Dashboard
-        </button>
-        <button
-          className="fee-tab"
-          type="button"
-          role="tab"
-          aria-selected={feeTab === 'history'}
-          onClick={() => setFeeTab('history')}
-        >
-          Payment History
-        </button>
-        <button
-          className="fee-tab"
-          type="button"
-          role="tab"
-          aria-selected={feeTab === 'receipt'}
-          onClick={() => setFeeTab('receipt')}
-        >
-          Issue Receipt
         </button>
       </div>
 
@@ -1716,14 +1601,6 @@ export default function PaymentsSection({
                     Clear Filter ✕
                   </button>
                 )}
-                <button
-                  className="btn sm"
-                  type="button"
-                  onClick={() => setFeeTab('history')}
-                  title="View all payments in history"
-                >
-                  View all <Icon name="chevR" size={14} />
-                </button>
               </div>
             </div>
 
@@ -1738,16 +1615,17 @@ export default function PaymentsSection({
                     <SortableTh colKey="amount" label="Amount Paid" sortKey={recentSortKey} sortDirection={recentSortDir} onSort={handleRecentSort} />
                     <SortableTh colKey="mode" label="Payment Mode" sortKey={recentSortKey} sortDirection={recentSortDir} onSort={handleRecentSort} />
                     <SortableTh colKey="status" label="Status" sortKey={recentSortKey} sortDirection={recentSortDir} onSort={handleRecentSort} />
+                    <th scope="col">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {sortedRecentTx.length === 0 ? (
                     <tr>
-                      <td colSpan="7" style={{ textAlign: 'center', padding: '36px 20px' }}>
+                      <td colSpan="8" style={{ textAlign: 'center', padding: '36px 20px' }}>
                         <div className="empty" style={{ margin: 0 }}>
                           <div className="ei"><Icon name="fee" size={24} /></div>
-                          <b>No transactions found {hasDateFilter ? 'in this date range' : 'yet'}</b>
-                          <span>{hasDateFilter ? 'Try adjusting your start and end dates or clear the filter.' : 'New fee payments will appear here.'}</span>
+                          <b>No transactions found {hasDateFilter ? `for ${rangeLabel.toLowerCase()}` : 'yet'}</b>
+                          <span>{hasDateFilter ? 'Try selecting a different date range.' : 'New fee payments will appear here.'}</span>
                           {hasDateFilter && (
                             <div style={{ marginTop: '12px' }}>
                               <button
@@ -1822,6 +1700,50 @@ export default function PaymentsSection({
                           }} />
                           {tx.status}
                         </span>
+                      </td>
+                      <td>
+                        <div className="acts">
+                          {getTelUrl(tx.studentPhone) ? (
+                            <a
+                              className="btn sm icon"
+                              href={getTelUrl(tx.studentPhone)}
+                              title={`Call ${tx.studentName} (${tx.studentPhone})`}
+                              aria-label={`Call ${tx.studentName}`}
+                              style={{ textDecoration: 'none' }}
+                            >
+                              <Icon name="phone" size={15} />
+                            </a>
+                          ) : (
+                            <button className="btn sm icon" type="button" disabled title="No valid registered phone number">
+                              <Icon name="phone" size={15} />
+                            </button>
+                          )}
+                          {getWhatsAppUrl(tx.studentPhone) ? (
+                            <a
+                              className="btn sm icon"
+                              href={getWhatsAppUrl(tx.studentPhone, `Hello ${tx.studentName}, regarding your payment ${tx.receiptNo}.`)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title={`WhatsApp ${tx.studentName}`}
+                              aria-label={`WhatsApp ${tx.studentName}`}
+                              style={{ color: '#16a34a', textDecoration: 'none' }}
+                            >
+                              <Icon name="whatsapp" size={16} />
+                            </a>
+                          ) : (
+                            <button className="btn sm icon" type="button" disabled title="No valid registered phone number">
+                              <Icon name="whatsapp" size={16} />
+                            </button>
+                          )}
+                          <button
+                            className="btn sm"
+                            type="button"
+                            title={`Edit payment record ${tx.id}`}
+                            onClick={() => handleStartEditPayment(tx.fee)}
+                          >
+                            <Icon name="edit" size={14} /> Edit
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   )))
@@ -1988,6 +1910,7 @@ export default function PaymentsSection({
                     id="fee-student-search"
                     placeholder="Type student name, ID (e.g. S1001), or phone number..."
                     value={searchQuery}
+                    readOnly={!!editingPayment}
                     onChange={(e) => handleSearchChange(e.target.value)}
                     onFocus={() => {
                       if (!selectedStudent && searchResults.length > 0) {
@@ -2112,6 +2035,7 @@ export default function PaymentsSection({
                         </div>
                       </div>
                       <button type="button" onClick={handleClearForm}
+                        disabled={!!editingPayment}
                         style={{ border: 'none', background: '#dc2626', color: '#fff', borderRadius: '6px', padding: '6px 12px', cursor: 'pointer', fontSize: '12px', fontWeight: 600 }}>
                         Change
                       </button>
@@ -2849,15 +2773,6 @@ export default function PaymentsSection({
                               <span>Delete</span>
                             </button>
                             <button
-                              className="btn sm btn-issue"
-                              type="button"
-                              title="Issue printable receipt"
-                              aria-label="Issue printable receipt"
-                              onClick={() => handleIssueReceipt(f.id, f)}
-                            >
-                              <span className="ic"><Icon name="receipt" size={15} /></span>
-                            </button>
-                            <button
                               className="btn sm btn-whatsapp-send"
                               type="button"
                               title={f.studentPhone ? `Send receipt to WhatsApp (${f.studentPhone})` : "Send receipt to phone number via WhatsApp"}
@@ -2876,47 +2791,6 @@ export default function PaymentsSection({
                   )}
                 </tbody>
               </table>
-            </div>
-          </div>
-        </section>
-      )}
-
-      {/* 4. Issue Receipt Tab */}
-      {feeTab === 'receipt' && (
-        <section>
-          <div className="card section fee-receipt-tool">
-            <div className="card-head">
-              <div>
-                <h3>Issue a fee receipt</h3>
-                <p>Select a payment to print or download its official formatted receipt.</p>
-              </div>
-            </div>
-
-            <div className="fee-receipt-actions">
-              <div className="fld">
-                <label htmlFor="receiptPayment">Payment record</label>
-                <SearchablePaymentSelect
-                  id="receiptPayment"
-                  name="receiptPayment"
-                  payments={historyFees}
-                  students={students}
-                  enquiries={enquiries}
-                  selectedId={selectedReceiptPaymentId}
-                  value={selectedReceiptPaymentId}
-                  onSelect={(id) => setSelectedReceiptPaymentId(id)}
-                  onChange={(id) => setSelectedReceiptPaymentId(id)}
-                  placeholder="Type student name, contact number, or receipt ID..."
-                />
-              </div>
-
-              <button
-                className="btn primary"
-                type="button"
-                id="issueReceiptBtn"
-                onClick={() => handleIssueReceipt(selectedReceiptPaymentId)}
-              >
-                Issue Receipt
-              </button>
             </div>
           </div>
         </section>
