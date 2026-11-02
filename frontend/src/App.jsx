@@ -37,6 +37,7 @@ export default function App() {
   const [usersList, setUsersList] = useState([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState('');
+  const [feeLoadError, setFeeLoadError] = useState('');
 
   // Navigation & View state (Persistent via URL Hash and localStorage fallback)
   const getInitialTab = () => {
@@ -149,16 +150,24 @@ export default function App() {
   const loadData = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     setLoadError('');
+    setFeeLoadError('');
     try {
-      const [enquiryList, feeList, studentList, enrollmentList, usersRes] = await Promise.all([
+      const [enquiryList, feeResult, studentList, enrollmentList, usersRes] = await Promise.all([
         api.getEnquiries(),
-        api.getFees().catch(() => []),
+        api.getFees()
+          .then(data => ({ data, error: null }))
+          .catch(error => ({ data: [], error })),
         api.getStudents().catch(() => []),
         api.getEnrollments().catch(() => []),
         api.getUsers().catch(() => [])
       ]);
+      if (feeResult.error?.code === 401) {
+        logout();
+        return;
+      }
       setEnquiries(enquiryList || []);
-      setFees(feeList || []);
+      setFees(feeResult.data || []);
+      setFeeLoadError(feeResult.error ? feeResult.error.message || "Couldn't load payment records." : '');
       setStudents(studentList || []);
       setEnrollments(enrollmentList || []);
       setUsersList(usersRes || []);
@@ -563,6 +572,7 @@ export default function App() {
           {tab === 'payments' && (
             <PaymentsPage
               fees={fees}
+              feeLoadError={feeLoadError}
               enquiries={enquiries}
               students={students}
               enrollments={enrollments}

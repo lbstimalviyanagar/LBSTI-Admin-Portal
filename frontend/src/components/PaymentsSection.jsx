@@ -223,6 +223,7 @@ export const matchStudentCriteria = (s, term) => {
 
 export default function PaymentsSection({
   fees = [],
+  feeLoadError = '',
   enquiries = [],
   students = [],
   enrollments = [],
@@ -1468,6 +1469,18 @@ export default function PaymentsSection({
         )}
       </div>
 
+      {feeLoadError && (
+        <div className="banner" role="alert">
+          <div>
+            <b>Couldn't load payment records</b>
+            <span>{feeLoadError}</span>
+          </div>
+          <button className="btn" type="button" onClick={handleRefresh}>
+            Try again
+          </button>
+        </div>
+      )}
+
       {/* Sub Tabs Container */}
       <div className="tabs fees-tabs" role="tablist" style={{ marginBottom: '20px' }}>
         <button
@@ -1635,8 +1648,16 @@ export default function PaymentsSection({
                       <td colSpan="8" style={{ textAlign: 'center', padding: '36px 20px' }}>
                         <div className="empty" style={{ margin: 0 }}>
                           <div className="ei"><Icon name="fee" size={24} /></div>
-                          <b>No transactions found {hasDateFilter ? `for ${rangeLabel.toLowerCase()}` : 'yet'}</b>
-                          <span>{hasDateFilter ? 'Try selecting a different date range.' : 'New fee payments will appear here.'}</span>
+                          <b>
+                            {feeLoadError
+                              ? 'Payment records could not be loaded'
+                              : `No transactions found ${hasDateFilter ? `for ${rangeLabel.toLowerCase()}` : 'yet'}`}
+                          </b>
+                          <span>
+                            {feeLoadError
+                              ? 'Retry loading payments to view recent transactions.'
+                              : (hasDateFilter ? 'Try selecting a different date range.' : 'New fee payments will appear here.')}
+                          </span>
                           {hasDateFilter && (
                             <div style={{ marginTop: '12px' }}>
                               <button
@@ -2649,11 +2670,15 @@ export default function PaymentsSection({
                           <b>
                             {historySearchQuery.trim()
                               ? `No payments found matching "${historySearchQuery}"`
+                              : feeLoadError
+                                ? 'Payment records could not be loaded'
                               : 'No payments recorded yet'}
                           </b>
                           <span>
                             {historySearchQuery.trim()
                               ? 'Try searching by a different student name, course, or receiver.'
+                              : feeLoadError
+                                ? 'Retry loading payments to view the transaction history.'
                               : 'Record your first fee payment using the Record Payment button above.'}
                           </span>
                           <div style={{ marginTop: '12px', display: 'flex', gap: '8px', justifyContent: 'center' }}>

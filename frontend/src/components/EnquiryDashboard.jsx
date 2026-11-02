@@ -363,7 +363,12 @@ export default function EnquiryDashboard({
             <button
               className="btn sm"
               type="button"
-              onClick={() => onDrillIntoTable(activeSourceFilter ? { source: activeSourceFilter } : {})}
+              onClick={() => onDrillIntoTable({
+                source: activeSourceFilter || 'All',
+                dateKind: 'all',
+                from: '',
+                to: ''
+              })}
             >
               View all <Icon name="chevR" size={16} />
             </button>

@@ -3,6 +3,7 @@ import PaymentsSection from '../components/PaymentsSection';
 
 export default function PaymentsPage({
   fees,
+  feeLoadError,
   enquiries,
   students,
   enrollments,
@@ -16,6 +17,7 @@ export default function PaymentsPage({
   return (
     <PaymentsSection
       fees={fees}
+      feeLoadError={feeLoadError}
       enquiries={enquiries}
       students={students}
       enrollments={enrollments}
