@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from "react";
 import Icon from "./Icons";
+import DateRangeFilter from "./DateRangeFilter";
 import api from "../services/api";
 import { useToast } from "../hooks/useToast";
 import { useTableSort } from "../hooks/useTableSort";
@@ -14,6 +15,8 @@ const STATUS_COLORS = { "Active": "#0088FE", "Completed": "#00C49F", "Dropped": 
 export default function StudentsSection({ students = [], enrollments = [], loading, onRefresh }) {
   const [tab, setTab] = useState("dashboard");
   const [summaryDateRange, setSummaryDateRange] = useState("month");
+  const [summaryCustomFrom, setSummaryCustomFrom] = useState("");
+  const [summaryCustomTo, setSummaryCustomTo] = useState("");
   const { addToast } = useToast();
   const { width: windowWidth, isMobile } = useResponsive();
   const [courseInsightsMode, setCourseInsightsMode] = useState('auto'); // 'auto' | 'bars' (horizontal rows) | 'columns' (vertical bars)
@@ -76,7 +79,7 @@ export default function StudentsSection({ students = [], enrollments = [], loadi
   }, [students]);
 
   const summaryEnrollments = useMemo(() => {
-    const dateRange = rangeOf(summaryDateRange);
+    const dateRange = rangeOf(summaryDateRange, summaryCustomFrom, summaryCustomTo);
     if (!dateRange.start && !dateRange.end) return enrollments;
 
     return enrollments.filter(enrollment => {
@@ -84,7 +87,7 @@ export default function StudentsSection({ students = [], enrollments = [], loadi
       return date && (!dateRange.start || date >= dateRange.start) &&
         (!dateRange.end || date < dateRange.end);
     });
-  }, [enrollments, summaryDateRange]);
+  }, [enrollments, summaryDateRange, summaryCustomFrom, summaryCustomTo]);
 
   const enrollmentStatusCounts = useMemo(() => {
     const counts = { active: 0, dropped: 0, completed: 0 };
@@ -404,7 +407,7 @@ export default function StudentsSection({ students = [], enrollments = [], loadi
   // Data Aggregations for Charts
   const courseData = useMemo(() => {
     const courses = {};
-    enrollments.forEach(en => {
+    summaryEnrollments.forEach(en => {
       if (!en.course) return;
       const c = en.course.toUpperCase();
       const s = (en.status || 'Active').charAt(0).toUpperCase() + (en.status || 'Active').slice(1).toLowerCase();
@@ -421,38 +424,32 @@ export default function StudentsSection({ students = [], enrollments = [], loadi
       courses[c].Total++;
     });
     return Object.values(courses).sort((a, b) => b.Total - a.Total);
-  }, [enrollments]);
+  }, [summaryEnrollments]);
 
   const statusData = useMemo(() => {
     const counts = { Active: 0, Completed: 0, Dropped: 0 };
-    enrollments.forEach(en => {
-      if (!en.status) return;
-      const s = en.status.charAt(0).toUpperCase() + en.status.slice(1).toLowerCase();
+    summaryEnrollments.forEach(en => {
+      const status = String(en.status || 'Active');
+      const s = status.charAt(0).toUpperCase() + status.slice(1).toLowerCase();
       counts[s] = (counts[s] || 0) + 1;
     });
     return Object.keys(counts).map(k => ({ name: k, value: counts[k] }));
-  }, [enrollments]);
+  }, [summaryEnrollments]);
 
   const enrollmentsTrend = useMemo(() => {
     const counts = {};
-    enrollments.forEach(en => {
-      if (!en.doa) return;
-      const parts = en.doa.split('-');
-      if (parts.length >= 2) {
-        const y = parts[0];
-        const m = parts[1];
-        if (y.length === 4) {
-          const key = `${y}-${m}`;
-          counts[key] = (counts[key] || 0) + 1;
-        }
-      }
+    summaryEnrollments.forEach(en => {
+      const date = parseDate(en.doa) || parseDate(en.createdAt);
+      if (!date) return;
+      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      counts[key] = (counts[key] || 0) + 1;
     });
     return Object.keys(counts).sort().map(k => {
       const [y, m] = k.split('-');
       const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
       return { name: `${months[parseInt(m, 10)-1]} ${y}`, "Enrollments": counts[k] };
     });
-  }, [enrollments]);
+  }, [summaryEnrollments]);
 
   return (
     <section>
@@ -462,16 +459,15 @@ export default function StudentsSection({ students = [], enrollments = [], loadi
           <p>Manage students, enrollments, and their details.</p>
         </div>
         <div className="controls">
-          <label className="sr-only" htmlFor="students-summary-range">Enrollment summary time range</label>
-          <select
-            className="select"
+          <DateRangeFilter
             id="students-summary-range"
             value={summaryDateRange}
-            onChange={(e) => setSummaryDateRange(e.target.value)}
-          >
-            <option value="month">This Month</option>
-            <option value="all">All Time</option>
-          </select>
+            onChange={setSummaryDateRange}
+            from={summaryCustomFrom}
+            to={summaryCustomTo}
+            onFromChange={setSummaryCustomFrom}
+            onToChange={setSummaryCustomTo}
+          />
           <button
             className="btn primary"
             type="button"
@@ -1014,42 +1010,16 @@ export default function StudentsSection({ students = [], enrollments = [], loadi
 
               {/* Any date dropdown */}
               <div className="fl">
-                <select
-                  className="select"
+                <DateRangeFilter
+                  id="enrollments-date-range"
                   value={enrollmentDateFilter}
-                  onChange={(e) => setEnrollmentDateFilter(e.target.value)}
-                  aria-label="Filter by date range"
-                >
-                  <option value="today">Today</option>
-                  <option value="yesterday">Yesterday</option>
-                  <option value="month">This month</option>
-                  <option value="week">This week</option>
-                  <option value="lastmonth">Last month</option>
-                  <option value="custom">Custom range</option>
-                  <option value="all">All Time</option>
-                </select>
+                  onChange={setEnrollmentDateFilter}
+                  from={enrollmentCustomFrom}
+                  to={enrollmentCustomTo}
+                  onFromChange={setEnrollmentCustomFrom}
+                  onToChange={setEnrollmentCustomTo}
+                />
               </div>
-
-              {enrollmentDateFilter === "custom" && (
-                <div className="fl custom" style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                  <input
-                    className="input"
-                    type="date"
-                    value={enrollmentCustomFrom}
-                    onChange={(e) => setEnrollmentCustomFrom(e.target.value)}
-                    aria-label="From date"
-                    style={{ width: "auto" }}
-                  />
-                  <input
-                    className="input"
-                    type="date"
-                    value={enrollmentCustomTo}
-                    onChange={(e) => setEnrollmentCustomTo(e.target.value)}
-                    aria-label="To date"
-                    style={{ width: "auto" }}
-                  />
-                </div>
-              )}
 
               {/* Clear filters button */}
               <button

@@ -17,6 +17,7 @@ import BatchesPage from './pages/BatchesPage';
 import EditLeadModal from './components/EditLeadModal';
 import ConfirmDialog from './components/ConfirmDialog';
 import DailyReminder from './components/DailyReminder';
+import DateRangeFilter from './components/DateRangeFilter';
 import ToastContainer from './components/ToastContainer';
 import Icon from './components/Icons';
 import { useAuth } from './hooks/useAuth';
@@ -456,21 +457,15 @@ export default function App() {
 
               {tab === 'dashboard' && (
                 <div className="controls">
-                  <label className="sr-only" htmlFor="range">Time range</label>
-                  <select
-                    className="select"
+                  <DateRangeFilter
                     id="range"
                     value={dashRangeKind}
-                    onChange={(e) => setDashRangeKind(e.target.value)}
-                  >
-                    <option value="today">Today</option>
-                    <option value="yesterday">Yesterday</option>
-                    <option value="month">This Month</option>
-                    <option value="week">This Week</option>
-                    <option value="lastmonth">Last Month</option>
-                    <option value="custom">Custom Range</option>
-                    <option value="all">All Time</option>
-                  </select>
+                    onChange={setDashRangeKind}
+                    from={dashFrom}
+                    to={dashTo}
+                    onFromChange={setDashFrom}
+                    onToChange={setDashTo}
+                  />
 
                   <button
                     className="btn primary"
@@ -480,24 +475,6 @@ export default function App() {
                     <span className="ic"><Icon name="plus" size={18} /></span>
                     New Enquiry
                   </button>
-
-                  {dashRangeKind === 'custom' && (
-                    <div className="custom-range">
-                      <input
-                        className="input"
-                        type="date"
-                        value={dashFrom}
-                        onChange={(e) => setDashFrom(e.target.value)}
-                      />
-                      <span className="muted">to</span>
-                      <input
-                        className="input"
-                        type="date"
-                        value={dashTo}
-                        onChange={(e) => setDashTo(e.target.value)}
-                      />
-                    </div>
-                  )}
 
                   <button
                     className="btn"

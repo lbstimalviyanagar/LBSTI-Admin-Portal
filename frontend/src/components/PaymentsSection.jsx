@@ -1,5 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import Icon from './Icons';
+import DateRangeFilter from './DateRangeFilter';
 import DonutChart from './Charts/DonutChart';
 import LineChart from './Charts/LineChart';
 import SearchablePaymentSelect from './SearchablePaymentSelect';
@@ -1532,21 +1533,15 @@ export default function PaymentsSection({
 
         {(feeTab === 'dashboard' || feeTab === 'history') && (
           <div className="controls">
-            <label className="sr-only" htmlFor="payments-range">Time range</label>
-            <select
-              className="select"
+            <DateRangeFilter
               id="payments-range"
               value={dateRangeKind}
-              onChange={(e) => setDateRangeKind(e.target.value)}
-            >
-              <option value="today">Today</option>
-              <option value="yesterday">Yesterday</option>
-              <option value="month">This Month</option>
-              <option value="week">This Week</option>
-              <option value="lastmonth">Last Month</option>
-              <option value="custom">Custom Range</option>
-              <option value="all">All Time</option>
-            </select>
+              onChange={setDateRangeKind}
+              from={customFrom}
+              to={customTo}
+              onFromChange={setCustomFrom}
+              onToChange={setCustomTo}
+            />
 
             <button
               className="btn primary"
@@ -1556,26 +1551,6 @@ export default function PaymentsSection({
               <span className="ic"><Icon name="plus" size={18} /></span>
               Record Payment
             </button>
-
-            {dateRangeKind === 'custom' && (
-              <div className="custom-range" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <input
-                  className="input"
-                  type="date"
-                  value={customFrom}
-                  onChange={(e) => setCustomFrom(e.target.value)}
-                  title="From date"
-                />
-                <span className="muted">to</span>
-                <input
-                  className="input"
-                  type="date"
-                  value={customTo}
-                  onChange={(e) => setCustomTo(e.target.value)}
-                  title="To date"
-                />
-              </div>
-            )}
 
             <button
               className="btn"

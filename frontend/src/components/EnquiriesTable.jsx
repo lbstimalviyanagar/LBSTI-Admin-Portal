@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import Icon from './Icons';
 import CsvUploader from './CsvUploader';
+import DateRangeFilter from './DateRangeFilter';
 import {
   STATUSES,
   rangeOf,
@@ -303,47 +304,16 @@ export default function EnquiriesTable({
 
             {/* Date range Filter */}
             <div className="fl">
-              <label htmlFor="tDate">Date range</label>
-              <select
-                className="select"
+              <DateRangeFilter
                 id="tDate"
                 value={dateKind}
-                onChange={(e) => setFilterParams(prev => ({ ...prev, dateKind: e.target.value, page: 1 }))}
-              >
-                <option value="today">Today</option>
-                <option value="yesterday">Yesterday</option>
-                <option value="month">This month</option>
-                <option value="week">This week</option>
-                <option value="lastmonth">Last month</option>
-                <option value="custom">Custom range</option>
-                <option value="all">All Time</option>
-              </select>
+                onChange={(value) => setFilterParams(prev => ({ ...prev, dateKind: value, page: 1 }))}
+                from={from}
+                to={to}
+                onFromChange={(value) => setFilterParams(prev => ({ ...prev, from: value, page: 1 }))}
+                onToChange={(value) => setFilterParams(prev => ({ ...prev, to: value, page: 1 }))}
+              />
             </div>
-
-            {dateKind === "custom" && (
-              <div className="fl custom">
-                <div>
-                  <label htmlFor="tFrom">From</label>
-                  <input
-                    className="input"
-                    type="date"
-                    id="tFrom"
-                    value={from}
-                    onChange={(e) => setFilterParams(prev => ({ ...prev, from: e.target.value, page: 1 }))}
-                  />
-                </div>
-                <div>
-                  <label htmlFor="tTo">To</label>
-                  <input
-                    className="input"
-                    type="date"
-                    id="tTo"
-                    value={to}
-                    onChange={(e) => setFilterParams(prev => ({ ...prev, to: e.target.value, page: 1 }))}
-                  />
-                </div>
-              </div>
-            )}
 
             <div className="filters-foot">
               <button className="btn" type="button" onClick={clearFilters}>
