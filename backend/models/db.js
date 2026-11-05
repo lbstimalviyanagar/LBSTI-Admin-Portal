@@ -6,6 +6,22 @@ const config = require('../config/env');
 let dbClient = null;
 let dbType = 'sqlite'; // 'postgres' | 'mysql' | 'sqlite'
 
+const DEFAULT_EXPENSE_CATEGORIES = [
+  'Stationery',
+  'Pantry',
+  'Marketing',
+  'Google Ads',
+  "Teachers' Payments",
+  'Employee Salaries',
+  'Office Rent',
+  'Water Bills',
+  'Electricity Bills',
+  'Internet & Wi-Fi',
+  'Maintenance',
+  'Transportation',
+  'Miscellaneous'
+];
+
 function assertRemoteDatabaseConfiguration() {
   const configuredUrl = config.databaseUrl || config.mysqlUrl;
   if (!configuredUrl && !config.dbHost) throw new Error('Configure a hosted PostgreSQL or MySQL database.');
@@ -186,6 +202,37 @@ async function createTablesAndSeed() {
         created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
     `);
+
+    await dbClient.query(`
+      CREATE TABLE IF NOT EXISTS expense_categories (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(120) NOT NULL UNIQUE,
+        is_default BOOLEAN NOT NULL DEFAULT FALSE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    await dbClient.query(`
+      CREATE TABLE IF NOT EXISTS expenses (
+        id SERIAL PRIMARY KEY,
+        title VARCHAR(190) NOT NULL,
+        category_id INTEGER NOT NULL REFERENCES expense_categories(id) ON DELETE RESTRICT,
+        amount NUMERIC(12,2) NOT NULL CHECK (amount > 0),
+        expense_date DATE NOT NULL,
+        payment_method VARCHAR(40) NOT NULL,
+        payment_status VARCHAR(16) NOT NULL CHECK (payment_status IN ('Paid', 'Pending')),
+        vendor_name VARCHAR(190) NOT NULL,
+        description TEXT,
+        receipt_data BYTEA,
+        receipt_mime VARCHAR(80),
+        receipt_name VARCHAR(255),
+        created_by VARCHAR(190) NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    await dbClient.query('CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses (expense_date, id)');
+    await dbClient.query('CREATE INDEX IF NOT EXISTS idx_expenses_category ON expenses (category_id, expense_date)');
+    await dbClient.query('CREATE INDEX IF NOT EXISTS idx_expenses_status ON expenses (payment_status, expense_date)');
   } else if (dbType === 'mysql') {
     await dbClient.query(`
       CREATE TABLE IF NOT EXISTS enquiries (
@@ -249,6 +296,41 @@ async function createTablesAndSeed() {
         UNIQUE KEY uq_portal_users_username (username)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     `);
+
+    await dbClient.query(`
+      CREATE TABLE IF NOT EXISTS expense_categories (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+        name VARCHAR(120) NOT NULL,
+        is_default TINYINT(1) NOT NULL DEFAULT 0,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        UNIQUE KEY uq_expense_categories_name (name)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
+    await dbClient.query(`
+      CREATE TABLE IF NOT EXISTS expenses (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+        title VARCHAR(190) NOT NULL,
+        category_id BIGINT UNSIGNED NOT NULL,
+        amount DECIMAL(12,2) NOT NULL,
+        expense_date DATE NOT NULL,
+        payment_method VARCHAR(40) NOT NULL,
+        payment_status VARCHAR(16) NOT NULL,
+        vendor_name VARCHAR(190) NOT NULL,
+        description TEXT DEFAULT NULL,
+        receipt_data LONGBLOB DEFAULT NULL,
+        receipt_mime VARCHAR(80) DEFAULT NULL,
+        receipt_name VARCHAR(255) DEFAULT NULL,
+        created_by VARCHAR(190) NOT NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        KEY idx_expenses_date (expense_date, id),
+        KEY idx_expenses_category (category_id, expense_date),
+        KEY idx_expenses_status (payment_status, expense_date),
+        CONSTRAINT fk_expenses_category FOREIGN KEY (category_id) REFERENCES expense_categories(id) ON DELETE RESTRICT
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
   } else {
     // SQLite
     await dbClient.query(`
@@ -308,6 +390,51 @@ async function createTablesAndSeed() {
         created_at TEXT NOT NULL
       )
     `);
+
+    await dbClient.query(`
+      CREATE TABLE IF NOT EXISTS expense_categories (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+        is_default INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await dbClient.query(`
+      CREATE TABLE IF NOT EXISTS expenses (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        category_id INTEGER NOT NULL,
+        amount NUMERIC NOT NULL CHECK (amount > 0),
+        expense_date TEXT NOT NULL,
+        payment_method TEXT NOT NULL,
+        payment_status TEXT NOT NULL CHECK (payment_status IN ('Paid', 'Pending')),
+        vendor_name TEXT NOT NULL,
+        description TEXT,
+        receipt_data BLOB,
+        receipt_mime TEXT,
+        receipt_name TEXT,
+        created_by TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (category_id) REFERENCES expense_categories(id) ON DELETE RESTRICT
+      )
+    `);
+    await dbClient.query('CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses (expense_date, id)');
+    await dbClient.query('CREATE INDEX IF NOT EXISTS idx_expenses_category ON expenses (category_id, expense_date)');
+    await dbClient.query('CREATE INDEX IF NOT EXISTS idx_expenses_status ON expenses (payment_status, expense_date)');
+  }
+
+  for (const name of DEFAULT_EXPENSE_CATEGORIES) {
+    const existing = await dbClient.query(
+      'SELECT id FROM expense_categories WHERE LOWER(name) = LOWER(?)',
+      [name]
+    );
+    if (existing.rows.length === 0) {
+      await dbClient.query(
+        'INSERT INTO expense_categories (name, is_default) VALUES (?, ?)',
+        [name, dbType === 'postgres']
+      );
+    }
   }
 
   // Seed accounts only when explicit bootstrap credentials are configured.

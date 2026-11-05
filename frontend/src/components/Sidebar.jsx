@@ -103,6 +103,19 @@ export default function Sidebar({
           </button>
         )}
 
+        {isAdmin && (
+          <button
+            className="nav-item"
+            type="button"
+            aria-current={tab === 'expenses' ? 'page' : undefined}
+            onClick={() => { setTab('expenses'); if (onNavClick) onNavClick(); }}
+            data-tooltip-right={collapsed ? "Expenses" : undefined}
+          >
+            <span className="ic"><Icon name="fee" size={20} /></span>
+            <span className="label">Expenses</span>
+          </button>
+        )}
+
         {hasMenuAccess(user, 'students') && (
           <button
             className="nav-item"
@@ -222,4 +235,3 @@ export default function Sidebar({
     </aside>
   );
 }
-

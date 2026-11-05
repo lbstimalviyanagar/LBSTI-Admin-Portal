@@ -85,6 +85,40 @@ CREATE TABLE IF NOT EXISTS `receipts` (
     ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS `expense_categories` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `name` VARCHAR(120) NOT NULL,
+  `is_default` TINYINT(1) NOT NULL DEFAULT 0,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_expense_categories_name` (`name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `expenses` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `title` VARCHAR(190) NOT NULL,
+  `category_id` BIGINT UNSIGNED NOT NULL,
+  `amount` DECIMAL(12,2) NOT NULL,
+  `expense_date` DATE NOT NULL,
+  `payment_method` VARCHAR(40) NOT NULL,
+  `payment_status` VARCHAR(16) NOT NULL,
+  `vendor_name` VARCHAR(190) NOT NULL,
+  `description` TEXT DEFAULT NULL,
+  `receipt_data` LONGBLOB DEFAULT NULL,
+  `receipt_mime` VARCHAR(80) DEFAULT NULL,
+  `receipt_name` VARCHAR(255) DEFAULT NULL,
+  `created_by` VARCHAR(190) NOT NULL,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_expenses_date` (`expense_date`, `id`),
+  KEY `idx_expenses_category` (`category_id`, `expense_date`),
+  KEY `idx_expenses_status` (`payment_status`, `expense_date`),
+  CONSTRAINT `fk_expenses_category`
+    FOREIGN KEY (`category_id`) REFERENCES `expense_categories` (`id`)
+    ON DELETE RESTRICT ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Students are confirmed/enrolled enquiry records in this portal, not a second copy.
 CREATE OR REPLACE VIEW `students` AS
 SELECT

@@ -186,6 +186,56 @@ export const api = {
     });
   },
 
+  // Expenses
+  async getExpenses() {
+    const data = await request("/expenses", { method: "GET" });
+    return Array.isArray(data) ? data : [];
+  },
+  async getExpenseCategories() {
+    const data = await request("/expenses/categories", { method: "GET" });
+    return Array.isArray(data) ? data : [];
+  },
+  async createExpense(data) {
+    return request("/expenses", { method: "POST", body: data });
+  },
+  async updateExpense(id, patch) {
+    return request(`/expenses/${id}`, { method: "PUT", body: patch });
+  },
+  async deleteExpense(id) {
+    return request(`/expenses/${id}`, { method: "DELETE" });
+  },
+  async createExpenseCategory(data) {
+    return request("/expenses/categories", { method: "POST", body: data });
+  },
+  async updateExpenseCategory(id, patch) {
+    return request(`/expenses/categories/${id}`, { method: "PATCH", body: patch });
+  },
+  async deleteExpenseCategory(id) {
+    return request(`/expenses/categories/${id}`, { method: "DELETE" });
+  },
+  async getExpenseReceipt(id, fallbackName = "receipt") {
+    const response = await fetch(`${getApiBase()}/expenses/${encodeURIComponent(id)}/receipt`, {
+      headers: { Authorization: `Bearer ${getToken()}` }
+    });
+    if (!response.ok) {
+      let message = `Unable to open the receipt (HTTP ${response.status}).`;
+      try {
+        const data = await response.json();
+        if (data?.message) message = data.message;
+      } catch (error) {
+        // Keep the HTTP status message when the server does not return JSON.
+      }
+      const requestError = new Error(message);
+      requestError.code = response.status;
+      throw requestError;
+    }
+    const disposition = response.headers.get("Content-Disposition") || "";
+    const encodedFilename = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+    const quotedFilename = disposition.match(/filename="([^"]+)"/i)?.[1];
+    const filename = (encodedFilename && decodeURIComponent(encodedFilename)) || quotedFilename || fallbackName;
+    return { blob: await response.blob(), filename };
+  },
+
   // Receipts
   async issueReceipt(paymentId) {
     return request("/receipts", {

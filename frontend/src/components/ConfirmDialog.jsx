@@ -7,6 +7,7 @@ export default function ConfirmDialog({
   confirmText = "Confirm",
   danger = false,
   success = false,
+  className = '',
   onConfirm,
   onCancel
 }) {
@@ -22,7 +23,7 @@ export default function ConfirmDialog({
 
   return (
     <div
-      className="overlay confirm"
+      className={`overlay confirm ${className}`.trim()}
       onMouseDown={(e) => {
         if (e.target.classList.contains('overlay')) onCancel();
       }}

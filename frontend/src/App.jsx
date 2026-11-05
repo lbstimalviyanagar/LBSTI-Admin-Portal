@@ -5,6 +5,7 @@ import DashboardPage from './pages/DashboardPage';
 import NewEnquiryPage from './pages/NewEnquiryPage';
 import EnquiriesPage from './pages/EnquiriesPage';
 import PaymentsPage from './pages/PaymentsPage';
+import ExpensesPage from './pages/ExpensesPage';
 import StudentsPage from './pages/StudentsPage';
 import LoginPage from './pages/LoginPage';
 import UserManagementPage from './pages/UserManagementPage';
@@ -43,7 +44,7 @@ export default function App() {
   const getInitialTab = () => {
     try {
       const hash = window.location.hash.replace(/^#\/?/, '').trim();
-      const validTabs = ['dashboard', 'new', 'table', 'payments', 'students', 'student-attendance', 'attendance', 'course-content', 'social-planner', 'tasks', 'batches', 'users'];
+      const validTabs = ['dashboard', 'new', 'table', 'payments', 'expenses', 'students', 'student-attendance', 'attendance', 'course-content', 'social-planner', 'tasks', 'batches', 'users'];
       if (hash && validTabs.includes(hash)) return hash;
       const saved = localStorage.getItem('lbstimn_active_tab');
       if (saved && validTabs.includes(saved)) return saved;
@@ -66,7 +67,7 @@ export default function App() {
   useEffect(() => {
     const onHashChange = () => {
       const hash = window.location.hash.replace(/^#\/?/, '').trim();
-      const validTabs = ['dashboard', 'new', 'table', 'payments', 'students', 'student-attendance', 'attendance', 'course-content', 'social-planner', 'tasks', 'batches', 'users'];
+      const validTabs = ['dashboard', 'new', 'table', 'payments', 'expenses', 'students', 'student-attendance', 'attendance', 'course-content', 'social-planner', 'tasks', 'batches', 'users'];
       if (hash && validTabs.includes(hash)) {
         setTabState(hash);
         try { localStorage.setItem('lbstimn_active_tab', hash); } catch (e) {}
@@ -84,6 +85,7 @@ export default function App() {
       new: 'enquiries',
       table: 'enquiries',
       payments: 'payments',
+      expenses: 'admin',
       students: 'students',
       'student-attendance': 'student_attendance',
       attendance: 'attendance',
@@ -95,15 +97,15 @@ export default function App() {
     };
 
     const requiredPermission = TAB_PERMISSION_MAP[tab];
-    const isAllowed = requiredPermission === 'admin' 
-      ? user.role === 'admin' 
+    const isAllowed = requiredPermission === 'admin'
+      ? String(user.role || '').toLowerCase() === 'admin'
       : hasMenuAccess(user, requiredPermission);
 
     if (!isAllowed) {
       const fallbackTabs = ['attendance', 'batches', 'tasks', 'dashboard', 'payments', 'students'];
       const nextAllowedTab = fallbackTabs.find(t => {
         const perm = TAB_PERMISSION_MAP[t];
-        return perm === 'admin' ? user.role === 'admin' : hasMenuAccess(user, perm);
+        return perm === 'admin' ? String(user.role || '').toLowerCase() === 'admin' : hasMenuAccess(user, perm);
       }) || 'attendance';
 
       setTab(nextAllowedTab);
@@ -581,6 +583,13 @@ export default function App() {
               onUpdatePayment={handleUpdatePayment}
               onDeletePayment={handleDeletePayment}
               onRefresh={() => loadData(false)}
+              onToast={addToast}
+            />
+          )}
+
+          {tab === 'expenses' && (
+            <ExpensesPage
+              user={user}
               onToast={addToast}
             />
           )}

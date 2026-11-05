@@ -15,6 +15,7 @@ const enquiryRoutes = require('./routes/enquiryRoutes');
 const feeRoutes = require('./routes/feeRoutes');
 const receiptRoutes = require('./routes/receiptRoutes');
 const userRoutes = require('./routes/userRoutes');
+const expenseRoutes = require('./routes/expenseRoutes');
 
 const app = express();
 
@@ -60,6 +61,7 @@ app.use('/api/enquiries', enquiryRoutes);
 app.use('/api/fees', feeRoutes);
 app.use('/api/receipts', receiptRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/expenses', expenseRoutes);
 
 // Optional: Serve frontend static build if frontend/dist exists
 const frontendDist = path.join(__dirname, '..', 'frontend', 'dist');
