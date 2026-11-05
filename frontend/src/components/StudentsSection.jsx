@@ -2,7 +2,6 @@ import React, { useState, useMemo } from "react";
 import Icon from "./Icons";
 import DateRangeFilter from "./DateRangeFilter";
 import api from "../services/api";
-import { useToast } from "../hooks/useToast";
 import { useTableSort } from "../hooks/useTableSort";
 import { useResponsive } from "../hooks/useResponsive";
 import { SortableTh } from "./SortableHeader";
@@ -12,13 +11,13 @@ import { PieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer, B
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ffc658', '#d0ed57', '#a4de6c'];
 const STATUS_COLORS = { "Active": "#0088FE", "Completed": "#00C49F", "Dropped": "#FF8042" };
 
-export default function StudentsSection({ students = [], enrollments = [], loading, onRefresh }) {
+export default function StudentsSection({ students = [], enrollments = [], loading, onRefresh, onToast }) {
   const [tab, setTab] = useState("dashboard");
   const [studentCategoryFilter, setStudentCategoryFilter] = useState("all");
   const [summaryDateRange, setSummaryDateRange] = useState("month");
   const [summaryCustomFrom, setSummaryCustomFrom] = useState("");
   const [summaryCustomTo, setSummaryCustomTo] = useState("");
-  const { addToast } = useToast();
+  const addToast = onToast || (() => {});
   const { width: windowWidth, isMobile } = useResponsive();
   const [courseInsightsMode, setCourseInsightsMode] = useState('auto'); // 'auto' | 'bars' (horizontal rows) | 'columns' (vertical bars)
 
@@ -78,6 +77,21 @@ export default function StudentsSection({ students = [], enrollments = [], loadi
     });
     return map;
   }, [students]);
+
+  const enrollmentDetailsByStudent = useMemo(() => {
+    const details = new Map();
+    enrollments.forEach(enrollment => {
+      const id = String(enrollment.studentId || "").trim().toLowerCase();
+      if (!id) return;
+      const current = details.get(id) || { courses: new Set(), faculty: new Set() };
+      if (enrollment.course) current.courses.add(String(enrollment.course).trim());
+      const facultyName = enrollment.facultyName || enrollment.faculty ||
+        enrollment.instructorName || enrollment.assignedFaculty || enrollment.assignedTo;
+      if (facultyName) current.faculty.add(String(facultyName).trim());
+      details.set(id, current);
+    });
+    return details;
+  }, [enrollments]);
 
   const summaryEnrollments = useMemo(() => {
     const dateRange = rangeOf(summaryDateRange, summaryCustomFrom, summaryCustomTo);
@@ -939,6 +953,8 @@ export default function StudentsSection({ students = [], enrollments = [], loadi
                   <SortableTh colKey="guardianName" label="Guardian Name" sortKey={studentSortKey} sortDirection={studentSortDir} onSort={handleStudentSort} />
                   <SortableTh colKey="phone" label="Phone" sortKey={studentSortKey} sortDirection={studentSortDir} onSort={handleStudentSort} />
                   <SortableTh colKey="email" label="Email" sortKey={studentSortKey} sortDirection={studentSortDir} onSort={handleStudentSort} />
+                  <th scope="col">Course Name</th>
+                  <th scope="col">Faculty</th>
                   <SortableTh colKey="remarks" label="Remarks" sortKey={studentSortKey} sortDirection={studentSortDir} onSort={handleStudentSort} />
                   <th>Actions</th>
                 </tr>
@@ -946,7 +962,7 @@ export default function StudentsSection({ students = [], enrollments = [], loadi
               <tbody>
                 {sortedStudents.length === 0 ? (
                   <tr>
-                    <td colSpan="7" style={{ textAlign: "center", padding: "2.5rem 1rem", color: "var(--muted)" }}>
+                    <td colSpan="9" style={{ textAlign: "center", padding: "2.5rem 1rem", color: "var(--muted)" }}>
                       {studentSearchQuery ? (
                         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}>
                           <span>No students found matching "{studentSearchQuery}".</span>
@@ -960,39 +976,53 @@ export default function StudentsSection({ students = [], enrollments = [], loadi
                     </td>
                   </tr>
                 ) : (
-                  sortedStudents.map(st => (
-                    <tr key={st.id}>
-                      {editingStudent?.id === st.id ? (
-                        <td colSpan="7">
-                          <form onSubmit={handleUpdateStudent} style={{display:"flex", gap: "10px", flexWrap: "wrap"}}>
-                            <input className="input" value={editingStudent.studentId} onChange={e=>setEditingStudent({...editingStudent, studentId: e.target.value})} placeholder="Student ID" />
-                            <input className="input" value={editingStudent.name} onChange={e=>setEditingStudent({...editingStudent, name: e.target.value})} placeholder="Name" />
-                            <input className="input" value={editingStudent.guardianName} onChange={e=>setEditingStudent({...editingStudent, guardianName: e.target.value})} placeholder="Guardian Name" />
-                            <input className="input" value={editingStudent.phone} onChange={e=>setEditingStudent({...editingStudent, phone: e.target.value})} placeholder="Phone" />
-                            <input className="input" value={editingStudent.email} onChange={e=>setEditingStudent({...editingStudent, email: e.target.value})} placeholder="Email" />
-                            <input className="input" value={editingStudent.remarks} onChange={e=>setEditingStudent({...editingStudent, remarks: e.target.value})} placeholder="Remarks" />
-                            <button type="submit" className="btn primary sm">Save</button>
-                            <button type="button" className="btn sm" onClick={()=>setEditingStudent(null)}>Cancel</button>
-                          </form>
-                        </td>
-                      ) : (
-                        <>
-                          <td style={{ fontWeight: "600", color: "#1e293b" }}>{st.studentId}</td>
-                          <td><strong>{st.name}</strong></td>
-                          <td>{st.guardianName || "–"}</td>
-                          <td>{st.phone || "–"}</td>
-                          <td>{st.email || "–"}</td>
-                          <td>{st.remarks || "–"}</td>
-                          <td>
-                            <div style={{ display: "flex", gap: "6px" }}>
-                              <button className="btn sm" onClick={() => setEditingStudent(st)}>Edit</button>
-                              <button className="btn sm danger" onClick={() => handleDeleteStudent(st.id)}>Del</button>
-                            </div>
+                  sortedStudents.map(st => {
+                    const details = enrollmentDetailsByStudent.get(String(st.studentId || "").trim().toLowerCase());
+                    const courses = [...(details?.courses || [])];
+                    if (!courses.length) {
+                      const fallbackCourse = st.courseDetails || st.courses || st.course;
+                      if (fallbackCourse) courses.push(String(fallbackCourse));
+                    }
+                    const faculty = [...(details?.faculty || [])];
+                    const fallbackFaculty = st.facultyName || st.faculty || st.instructorName || st.assignedFaculty;
+                    if (!faculty.length && fallbackFaculty) faculty.push(String(fallbackFaculty));
+
+                    return (
+                      <tr key={st.id}>
+                        {editingStudent?.id === st.id ? (
+                          <td colSpan="9">
+                            <form onSubmit={handleUpdateStudent} style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                              <input className="input" value={editingStudent.studentId} onChange={e => setEditingStudent({ ...editingStudent, studentId: e.target.value })} placeholder="Student ID" />
+                              <input className="input" value={editingStudent.name} onChange={e => setEditingStudent({ ...editingStudent, name: e.target.value })} placeholder="Name" />
+                              <input className="input" value={editingStudent.guardianName} onChange={e => setEditingStudent({ ...editingStudent, guardianName: e.target.value })} placeholder="Guardian Name" />
+                              <input className="input" value={editingStudent.phone} onChange={e => setEditingStudent({ ...editingStudent, phone: e.target.value })} placeholder="Phone" />
+                              <input className="input" value={editingStudent.email} onChange={e => setEditingStudent({ ...editingStudent, email: e.target.value })} placeholder="Email" />
+                              <input className="input" value={editingStudent.remarks} onChange={e => setEditingStudent({ ...editingStudent, remarks: e.target.value })} placeholder="Remarks" />
+                              <button type="submit" className="btn primary sm">Save</button>
+                              <button type="button" className="btn sm" onClick={() => setEditingStudent(null)}>Cancel</button>
+                            </form>
                           </td>
-                        </>
-                      )}
-                    </tr>
-                  ))
+                        ) : (
+                          <>
+                            <td style={{ fontWeight: "600", color: "#1e293b" }}>{st.studentId}</td>
+                            <td><strong>{st.name}</strong></td>
+                            <td>{st.guardianName || "–"}</td>
+                            <td>{st.phone || "–"}</td>
+                            <td>{st.email || "–"}</td>
+                            <td>{courses.length ? courses.join(", ") : "–"}</td>
+                            <td>{faculty.length ? faculty.join(", ") : "–"}</td>
+                            <td>{st.remarks || "–"}</td>
+                            <td>
+                              <div style={{ display: "flex", gap: "6px" }}>
+                                <button className="btn sm" onClick={() => setEditingStudent(st)}>Edit</button>
+                                <button className="btn sm danger" onClick={() => handleDeleteStudent(st.id)}>Del</button>
+                              </div>
+                            </td>
+                          </>
+                        )}
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>

@@ -6,7 +6,8 @@ export default function StudentsPage({
   students,
   enrollments,
   loading,
-  onRefresh
+  onRefresh,
+  onToast
 }) {
   return (
     <StudentsSection
@@ -14,7 +15,7 @@ export default function StudentsPage({
       enrollments={enrollments}
       loading={loading}
       onRefresh={onRefresh}
+      onToast={onToast}
     />
   );
 }
-

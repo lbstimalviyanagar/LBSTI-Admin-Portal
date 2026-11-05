@@ -43,7 +43,7 @@ export default function App() {
   const getInitialTab = () => {
     try {
       const hash = window.location.hash.replace(/^#\/?/, '').trim();
-      const validTabs = ['dashboard', 'new', 'payments', 'students', 'student-attendance', 'attendance', 'course-content', 'social-planner', 'tasks', 'batches', 'users'];
+      const validTabs = ['dashboard', 'new', 'table', 'payments', 'students', 'student-attendance', 'attendance', 'course-content', 'social-planner', 'tasks', 'batches', 'users'];
       if (hash && validTabs.includes(hash)) return hash;
       const saved = localStorage.getItem('lbstimn_active_tab');
       if (saved && validTabs.includes(saved)) return saved;
@@ -66,7 +66,7 @@ export default function App() {
   useEffect(() => {
     const onHashChange = () => {
       const hash = window.location.hash.replace(/^#\/?/, '').trim();
-      const validTabs = ['dashboard', 'new', 'payments', 'students', 'student-attendance', 'attendance', 'course-content', 'social-planner', 'tasks', 'batches', 'users'];
+      const validTabs = ['dashboard', 'new', 'table', 'payments', 'students', 'student-attendance', 'attendance', 'course-content', 'social-planner', 'tasks', 'batches', 'users'];
       if (hash && validTabs.includes(hash)) {
         setTabState(hash);
         try { localStorage.setItem('lbstimn_active_tab', hash); } catch (e) {}
@@ -591,6 +591,7 @@ export default function App() {
               enrollments={enrollments}
               loading={loading}
               onRefresh={loadData}
+              onToast={addToast}
             />
           )}
 
