@@ -679,24 +679,25 @@ export default function CourseContentPage({ user, onToast }) {
                         </div>
                       </div>
 
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '0.6rem', borderTop: '1px solid #f1f5f9' }}>
-                        {documentUrl ? (
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '0.35rem', paddingTop: '0.6rem', borderTop: '1px solid #f1f5f9' }}>
+                        {documentUrl && (
                           <a
                             href={documentUrl}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="btn primary"
-                            style={{ fontSize: '0.8rem', padding: '0.35rem 0.75rem', textDecoration: 'none' }}
+                            style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem', textDecoration: 'none' }}
                           >
                             <span className="ic"><Icon name="download" size={13} /></span>
-                            Download File
+                            Open Link
                           </a>
-                        ) : syl.document_url ? (
-                          <span style={{ fontSize: '0.8rem', color: '#b91c1c' }}>Invalid document URL</span>
-                        ) : (
-                          <span style={{ fontSize: '0.8rem', color: '#94a3b8', fontStyle: 'italic' }}>Text only</span>
                         )}
-
+                        {syl.document_url && !documentUrl && (
+                          <span style={{ fontSize: '0.8rem', color: '#b91c1c' }}>Invalid document URL</span>
+                        )}
+                        {!syl.document_url && (
+                          <span style={{ fontSize: '0.8rem', color: '#94a3b8', fontStyle: 'italic', marginRight: 'auto' }}>Text only</span>
+                        )}
                         <div style={{ display: 'flex', gap: '0.35rem' }}>
                           <button
                             className="btn"
@@ -774,7 +775,9 @@ export default function CourseContentPage({ user, onToast }) {
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-                  {notesList.map((note) => (
+                  {notesList.map((note) => {
+                    const attachmentUrl = normalizeDocumentUrl(note.attachment_url);
+                    return (
                     <div
                       key={note.id}
                       style={{
@@ -803,17 +806,17 @@ export default function CourseContentPage({ user, onToast }) {
                         </div>
 
                         <div style={{ display: 'flex', gap: '0.35rem' }}>
-                          {note.attachment_url && (
+                          {attachmentUrl && (
                             <a
-                              href={note.attachment_url}
+                              href={attachmentUrl}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="btn"
+                              className="btn primary"
                               style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem', color: '#2563eb' }}
                               title="Open attachment"
                             >
                               <span className="ic"><Icon name="download" size={13} /></span>
-                              File
+                              View File
                             </a>
                           )}
                           <button
@@ -855,7 +858,8 @@ export default function CourseContentPage({ user, onToast }) {
                         </div>
                       )}
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
