@@ -60,7 +60,7 @@ Provision a persistent PostgreSQL database (for example, Neon, Render PostgreSQL
 - `DATABASE_URL=mysql://...` for MySQL
 - `DATABASE_HOST`, `DATABASE_PORT`, `DATABASE_USER`, `DATABASE_PASSWORD`, and `DATABASE_NAME` for MySQL
 
-The backend creates the required `enquiries`, `remarks`, `fees`, and `portal_users` tables at startup. To run schema setup separately after configuring the backend environment:
+The Node backend creates the required `enquiries`, `remarks`, `fees`, `portal_users`, `expense_categories`, and `expenses` tables at startup. The deployed PHP API creates the expense tables and predefined categories on its first Expenses request. To run Node schema setup separately after configuring the backend environment:
 
 ```powershell
 npm --prefix backend run migrate
@@ -120,6 +120,9 @@ The API requires a Bearer token for enquiry, remark, fee, and receipt operations
 - `GET|POST /api/enquiries/:id/remarks`
 - `GET|POST /api/fees`, `DELETE /api/fees/:id`
 - `POST /api/receipts`
+- `GET|POST /api/expenses`, `GET|PUT|DELETE /api/expenses/:id`
+- `GET|POST /api/expenses/categories`, `PATCH|DELETE /api/expenses/categories/:id`
+- `GET /api/expenses/:id/receipt`
 - `GET /api/health`
 
 Build the frontend:

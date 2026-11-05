@@ -207,6 +207,45 @@ if ($route === 'auth/login') {
     
     if ($method === 'GET') getReceipt($pdo, $id);
 
+} elseif (strpos($route, 'expenses') === 0) {
+    require 'controllers/ExpenseController.php';
+    $user = requireAuth($authSecret);
+    if (strtolower($user['role'] ?? '') !== 'admin') {
+        http_response_code(403);
+        echo json_encode(["message" => "Access denied. Expense management is limited to administrators."]);
+        exit();
+    }
+
+    ensureExpenseTables($pdo);
+    $parts = array_values(array_filter(explode('/', trim($route, '/')), 'strlen'));
+    $isCategoryRoute = isset($parts[1]) && $parts[1] === 'categories';
+    $idPart = $isCategoryRoute ? ($parts[2] ?? null) : ($parts[1] ?? null);
+    $id = validExpenseId($idPart);
+
+    if ($isCategoryRoute && count($parts) === 2 && $method === 'GET') {
+        getExpenseCategories($pdo);
+    } elseif ($isCategoryRoute && count($parts) === 2 && $method === 'POST') {
+        createExpenseCategory($pdo, is_array($body) ? $body : []);
+    } elseif ($isCategoryRoute && count($parts) === 3 && $id !== null && ($method === 'PUT' || $method === 'PATCH')) {
+        updateExpenseCategory($pdo, $id, is_array($body) ? $body : []);
+    } elseif ($isCategoryRoute && count($parts) === 3 && $id !== null && $method === 'DELETE') {
+        deleteExpenseCategory($pdo, $id);
+    } elseif (!$isCategoryRoute && count($parts) === 1 && $method === 'GET') {
+        getExpenses($pdo);
+    } elseif (!$isCategoryRoute && count($parts) === 1 && $method === 'POST') {
+        createExpense($pdo, $body, $user);
+    } elseif (!$isCategoryRoute && count($parts) === 2 && $id !== null && $method === 'GET') {
+        getExpenses($pdo, $id);
+    } elseif (!$isCategoryRoute && count($parts) === 2 && $id !== null && ($method === 'PUT' || $method === 'PATCH')) {
+        updateExpense($pdo, $id, is_array($body) ? $body : []);
+    } elseif (!$isCategoryRoute && count($parts) === 2 && $id !== null && $method === 'DELETE') {
+        deleteExpense($pdo, $id);
+    } elseif (!$isCategoryRoute && count($parts) === 3 && $parts[2] === 'receipt' && $id !== null && $method === 'GET') {
+        getExpenseReceipt($pdo, $id);
+    } else {
+        http_response_code(404);
+        echo json_encode(["message" => "Expense endpoint not found."]);
+    }
 } elseif (strpos($route, "students") === 0) {
     require "controllers/StudentController.php";
     $user = requireAuth($authSecret);
