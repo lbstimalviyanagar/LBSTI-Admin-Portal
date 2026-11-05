@@ -3,6 +3,66 @@ import api, { normalizeDocumentUrl } from '../services/api';
 import Icon from '../components/Icons';
 import { fmtDay, fmtShort } from '../utils/helpers';
 
+function getResourceFileDetails(resource, url) {
+  const fileName = resource.file_name || resource.fileName || '';
+  let urlName = '';
+  let urlHost = '';
+  if (url) {
+    try {
+      const parsed = new URL(url);
+      urlName = decodeURIComponent(parsed.pathname.split('/').filter(Boolean).pop() || '');
+      urlHost = parsed.hostname;
+    } catch {
+      urlName = '';
+    }
+  }
+
+  const extension = (fileName || urlName).match(/\.([a-z0-9]{1,10})$/i)?.[1]?.toUpperCase() || '';
+  const declaredType = String(resource.file_type || resource.fileType || '').trim();
+  const mimeType = declaredType.toLowerCase();
+  const mimeLabels = {
+    'application/pdf': 'PDF',
+    pdf: 'PDF',
+    'application/msword': 'DOC',
+    doc: 'DOC',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'DOCX',
+    docx: 'DOCX',
+    'application/vnd.ms-powerpoint': 'PPT',
+    ppt: 'PPT',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'PPTX',
+    pptx: 'PPTX',
+    'application/octet-stream': 'File'
+  };
+  const knownMimeLabel = mimeLabels[mimeType];
+  const fileType = extension
+    || knownMimeLabel
+    || (mimeType.startsWith('image/') ? mimeType.split('/')[1].toUpperCase() : mimeType.split('/').pop().toUpperCase())
+    || (url ? 'External link' : '');
+
+  return {
+    fileName: fileName || urlName || urlHost,
+    fileType,
+    isFile: Boolean(fileName || (url && (extension || knownMimeLabel || mimeType.startsWith('image/'))))
+  };
+}
+
+function formatResourceFileSize(value) {
+  const size = Number(value);
+  if (!Number.isFinite(size) || size <= 0) return '';
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function CourseDataError({ message, onRetry }) {
+  return (
+    <div role="alert" style={{ padding: '1.5rem', textAlign: 'center', color: '#b91c1c' }}>
+      <p>{message}</p>
+      <button className="btn" type="button" onClick={onRetry}>Retry</button>
+    </div>
+  );
+}
+
 export default function CourseContentPage({ user, onToast }) {
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -14,6 +74,7 @@ export default function CourseContentPage({ user, onToast }) {
   const [syllabusList, setSyllabusList] = useState([]);
   const [notesList, setNotesList] = useState([]);
   const [subLoading, setSubLoading] = useState(false);
+  const [resourceLoadErrors, setResourceLoadErrors] = useState({});
 
   // Search & Filter
   const [searchQuery, setSearchQuery] = useState('');
@@ -30,7 +91,7 @@ export default function CourseContentPage({ user, onToast }) {
   const [syllabusFormData, setSyllabusFormData] = useState({ id: null, title: 'Standard Syllabus', version: '1.0', document_url: '', description: '' });
 
   const [showNoteModal, setShowNoteModal] = useState(false);
-  const [noteFormData, setNoteFormData] = useState({ id: null, title: '', topic: '', content: '', attachment_url: '', file_type: 'pdf' });
+  const [noteFormData, setNoteFormData] = useState({ id: null, title: '', topic: '', content: '', attachment_url: '', file_type: '' });
 
   // Load all courses
   const loadCourses = useCallback(async () => {
@@ -58,15 +119,29 @@ export default function CourseContentPage({ user, onToast }) {
   const loadCourseData = useCallback(async (courseId) => {
     if (!courseId) return;
     setSubLoading(true);
+    setResourceLoadErrors({});
     try {
-      const [contents, syllabuses, notes] = await Promise.all([
-        api.getCourseContent(courseId).catch(() => []),
-        api.getCourseSyllabus(courseId).catch(() => []),
-        api.getCourseNotes(courseId).catch(() => [])
+      const results = await Promise.allSettled([
+        api.getCourseContent(courseId),
+        api.getCourseSyllabus(courseId),
+        api.getCourseNotes(courseId)
       ]);
-      setContentList(Array.isArray(contents) ? contents : (contents?.data || []));
-      setSyllabusList(Array.isArray(syllabuses) ? syllabuses : (syllabuses?.data || []));
-      setNotesList(Array.isArray(notes) ? notes : (notes?.data || []));
+      const errors = {};
+      const [contents, syllabuses, notes] = results.map((result, index) => {
+        if (result.status === 'rejected') {
+          const section = ['modules', 'syllabus', 'notes'][index];
+          errors[section] = result.reason?.message || 'Unable to load course resources.';
+          return [];
+        }
+        return Array.isArray(result.value) ? result.value : (result.value?.data || []);
+      });
+      setContentList(contents);
+      setSyllabusList(syllabuses);
+      setNotesList(notes);
+      setResourceLoadErrors(errors);
+      if (Object.keys(errors).length && onToast) {
+        onToast('Some course resources could not be loaded. Please retry.', true);
+      }
     } catch (err) {
       console.error(err);
       if (onToast) onToast('Failed to load course details', true);
@@ -239,9 +314,15 @@ export default function CourseContentPage({ user, onToast }) {
       if (onToast) onToast('Note title is required', true);
       return;
     }
+    const attachmentUrl = normalizeDocumentUrl(noteFormData.attachment_url);
+    if (noteFormData.attachment_url.trim() && !attachmentUrl) {
+      if (onToast) onToast('Enter a valid HTTP or HTTPS resource URL', true);
+      return;
+    }
     try {
       const payload = {
         ...noteFormData,
+        attachment_url: attachmentUrl,
         course_id: selectedCourseId
       };
       if (noteFormData.id) {
@@ -508,6 +589,8 @@ export default function CourseContentPage({ user, onToast }) {
                   <div className="spinner" style={{ margin: '0 auto 0.5rem' }} />
                   <span>Loading curriculum...</span>
                 </div>
+              ) : resourceLoadErrors.modules ? (
+                <CourseDataError message={resourceLoadErrors.modules} onRetry={() => loadCourseData(selectedCourseId)} />
               ) : contentList.length === 0 ? (
                 <div style={{ padding: '2.5rem', textAlign: 'center', border: '1.5px dashed #cbd5e1', borderRadius: '8px', color: '#64748b' }}>
                   <p style={{ margin: '0 0 0.75rem' }}>No modules defined yet for {selectedCourse.name}.</p>
@@ -627,6 +710,8 @@ export default function CourseContentPage({ user, onToast }) {
                   <div className="spinner" style={{ margin: '0 auto 0.5rem' }} />
                   <span>Loading syllabus documents...</span>
                 </div>
+              ) : resourceLoadErrors.syllabus ? (
+                <CourseDataError message={resourceLoadErrors.syllabus} onRetry={() => loadCourseData(selectedCourseId)} />
               ) : syllabusList.length === 0 ? (
                 <div style={{ padding: '2.5rem', textAlign: 'center', border: '1.5px dashed #cbd5e1', borderRadius: '8px', color: '#64748b' }}>
                   <p style={{ margin: '0 0 0.75rem' }}>No syllabus documents attached yet for {selectedCourse.name}.</p>
@@ -645,6 +730,8 @@ export default function CourseContentPage({ user, onToast }) {
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
                   {syllabusList.map((syl) => {
                     const documentUrl = normalizeDocumentUrl(syl.document_url);
+                    const fileDetails = getResourceFileDetails(syl, documentUrl);
+                    const fileSize = formatResourceFileSize(syl.file_size);
                     return (
                     <div
                       key={syl.id}
@@ -669,18 +756,49 @@ export default function CourseContentPage({ user, onToast }) {
                             </span>
                           )}
                         </div>
-                        {syl.description && (
+                        {(syl.description || syl.summary) && (
                           <p style={{ margin: '0.4rem 0 0', fontSize: '0.85rem', color: '#475569', lineHeight: '1.4' }}>
-                            {syl.description}
+                            {syl.description || syl.summary}
                           </p>
                         )}
                         <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.6rem' }}>
-                          Updated: {fmtDay(syl.updated_at || syl.created_at || new Date())}
+                          Uploaded: {syl.created_at || syl.updated_at ? fmtDay(syl.created_at || syl.updated_at) : 'Date unavailable'}
                         </div>
+                        {(syl.file_name || syl.document_url) && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap', marginTop: '0.45rem', fontSize: '0.78rem', color: '#475569' }}>
+                            <span className="ic"><Icon name={fileDetails.fileType === 'PDF' ? 'book' : 'download'} size={14} /></span>
+                            <span>{fileDetails.fileName || 'Document link'}</span>
+                            {fileDetails.fileType && <span>· {fileDetails.fileType}</span>}
+                            {fileSize && <span>· {fileSize}</span>}
+                          </div>
+                        )}
                       </div>
 
-                      <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '0.35rem', paddingTop: '0.6rem', borderTop: '1px solid #f1f5f9' }}>
-                        {documentUrl && (
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', flexWrap: 'wrap', gap: '0.35rem', paddingTop: '0.6rem', borderTop: '1px solid #f1f5f9' }}>
+                        {documentUrl && fileDetails.isFile && (
+                          <>
+                          <a
+                            href={documentUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="btn"
+                            style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem', textDecoration: 'none' }}
+                          >
+                            <span className="ic"><Icon name="eye" size={13} /></span>
+                            View / Preview
+                          </a>
+                          <a
+                            href={documentUrl}
+                            download={fileDetails.fileName || true}
+                            className="btn primary"
+                            style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem', textDecoration: 'none' }}
+                          >
+                            <span className="ic"><Icon name="download" size={13} /></span>
+                            Download
+                          </a>
+                          </>
+                        )}
+                        {documentUrl && !fileDetails.isFile && (
                           <a
                             href={documentUrl}
                             target="_blank"
@@ -688,15 +806,18 @@ export default function CourseContentPage({ user, onToast }) {
                             className="btn primary"
                             style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem', textDecoration: 'none' }}
                           >
-                            <span className="ic"><Icon name="download" size={13} /></span>
+                            <span className="ic"><Icon name="send" size={13} /></span>
                             Open Link
                           </a>
                         )}
                         {syl.document_url && !documentUrl && (
                           <span style={{ fontSize: '0.8rem', color: '#b91c1c' }}>Invalid document URL</span>
                         )}
-                        {!syl.document_url && (
-                          <span style={{ fontSize: '0.8rem', color: '#94a3b8', fontStyle: 'italic', marginRight: 'auto' }}>Text only</span>
+                        {syl.file_name && !documentUrl && (
+                          <span style={{ fontSize: '0.8rem', color: '#b91c1c', marginRight: 'auto' }}>File information exists, but its link is unavailable.</span>
+                        )}
+                        {!syl.document_url && !syl.file_name && (
+                          <span style={{ fontSize: '0.8rem', color: '#94a3b8', fontStyle: 'italic', marginRight: 'auto' }}>No document attached</span>
                         )}
                         <div style={{ display: 'flex', gap: '0.35rem' }}>
                           <button
@@ -745,7 +866,7 @@ export default function CourseContentPage({ user, onToast }) {
                   type="button"
                   style={{ fontSize: '0.85rem', padding: '0.4rem 0.8rem' }}
                   onClick={() => {
-                    setNoteFormData({ id: null, title: '', topic: '', content: '', attachment_url: '', file_type: 'pdf' });
+                    setNoteFormData({ id: null, title: '', topic: '', content: '', attachment_url: '', file_type: '' });
                     setShowNoteModal(true);
                   }}
                 >
@@ -759,6 +880,8 @@ export default function CourseContentPage({ user, onToast }) {
                   <div className="spinner" style={{ margin: '0 auto 0.5rem' }} />
                   <span>Loading notes...</span>
                 </div>
+              ) : resourceLoadErrors.notes ? (
+                <CourseDataError message={resourceLoadErrors.notes} onRetry={() => loadCourseData(selectedCourseId)} />
               ) : notesList.length === 0 ? (
                 <div style={{ padding: '2.5rem', textAlign: 'center', border: '1.5px dashed #cbd5e1', borderRadius: '8px', color: '#64748b' }}>
                   <p style={{ margin: '0 0 0.75rem' }}>No notes or study materials uploaded yet for {selectedCourse.name}.</p>
@@ -766,7 +889,7 @@ export default function CourseContentPage({ user, onToast }) {
                     className="btn primary"
                     type="button"
                     onClick={() => {
-                      setNoteFormData({ id: null, title: `${selectedCourse.name} Quick Notes`, topic: 'Overview', content: '', attachment_url: '', file_type: 'pdf' });
+                      setNoteFormData({ id: null, title: `${selectedCourse.name} Quick Notes`, topic: 'Overview', content: '', attachment_url: '', file_type: '' });
                       setShowNoteModal(true);
                     }}
                   >
@@ -777,6 +900,8 @@ export default function CourseContentPage({ user, onToast }) {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
                   {notesList.map((note) => {
                     const attachmentUrl = normalizeDocumentUrl(note.attachment_url);
+                    const fileDetails = getResourceFileDetails(note, attachmentUrl);
+                    const fileSize = formatResourceFileSize(note.file_size);
                     return (
                     <div
                       key={note.id}
@@ -801,22 +926,47 @@ export default function CourseContentPage({ user, onToast }) {
                             )}
                           </div>
                           <div style={{ fontSize: '0.78rem', color: '#94a3b8', marginTop: '0.2rem' }}>
-                            Added: {fmtDay(note.created_at || new Date())}
+                            Uploaded: {note.created_at ? fmtDay(note.created_at) : 'Date unavailable'}
                           </div>
                         </div>
 
-                        <div style={{ display: 'flex', gap: '0.35rem' }}>
-                          {attachmentUrl && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: '0.35rem' }}>
+                          {attachmentUrl && fileDetails.isFile && (
+                            <>
+                            <a
+                              href={attachmentUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="btn"
+                              style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem' }}
+                              title="Open attachment"
+                            >
+                              <span className="ic"><Icon name="eye" size={13} /></span>
+                              View
+                            </a>
+                            <a
+                              href={attachmentUrl}
+                              download={fileDetails.fileName || true}
+                              className="btn primary"
+                              style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem' }}
+                              title="Download attachment"
+                            >
+                              <span className="ic"><Icon name="download" size={13} /></span>
+                              Download
+                            </a>
+                            </>
+                          )}
+                          {attachmentUrl && !fileDetails.isFile && (
                             <a
                               href={attachmentUrl}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="btn primary"
-                              style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem', color: '#2563eb' }}
-                              title="Open attachment"
+                              style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem' }}
+                              title="Open external resource"
                             >
-                              <span className="ic"><Icon name="download" size={13} /></span>
-                              View File
+                              <span className="ic"><Icon name="send" size={13} /></span>
+                              Open Link
                             </a>
                           )}
                           <button
@@ -843,6 +993,20 @@ export default function CourseContentPage({ user, onToast }) {
                         </div>
                       </div>
 
+                      {(note.file_name || note.attachment_url) && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap', fontSize: '0.78rem', color: '#475569' }}>
+                          <span className="ic"><Icon name={fileDetails.fileType === 'PDF' ? 'book' : 'download'} size={14} /></span>
+                          <span>{fileDetails.fileName || 'Resource link'}</span>
+                          {fileDetails.fileType && <span>· {fileDetails.fileType}</span>}
+                          {fileSize && <span>· {fileSize}</span>}
+                        </div>
+                      )}
+                      {note.attachment_url && !attachmentUrl && (
+                        <div style={{ fontSize: '0.8rem', color: '#b91c1c' }}>The saved resource URL is invalid.</div>
+                      )}
+                      {note.file_name && !attachmentUrl && (
+                        <div style={{ fontSize: '0.8rem', color: '#b91c1c' }}>File information exists, but its link is unavailable.</div>
+                      )}
                       {note.content && (
                         <div style={{
                           padding: '0.75rem 0.9rem',
@@ -1117,11 +1281,12 @@ export default function CourseContentPage({ user, onToast }) {
                 <div>
                   <label className="label">File / Reference URL (Optional)</label>
                   <input
-                    type="url"
+                    type="text"
+                    inputMode="url"
                     className="input"
                     value={noteFormData.attachment_url || ''}
                     onChange={(e) => setNoteFormData({ ...noteFormData, attachment_url: e.target.value })}
-                    placeholder="https://... link to document, slide deck, or sheet"
+                    placeholder="example.com/document.pdf or /uploads/document.pdf"
                   />
                 </div>
               </div>

@@ -117,6 +117,48 @@ function courseContentPayload(data) {
   };
 }
 
+function normalizeCourseSyllabus(record) {
+  if (!record || typeof record !== "object") return record;
+  return {
+    ...record,
+    document_url: record.document_url || record.file_url || record.fileUrl || "",
+    description: record.description || record.summary || "",
+    file_name: record.file_name ?? record.fileName ?? "",
+    file_size: record.file_size ?? record.fileSize ?? 0,
+    file_type: record.file_type ?? record.fileType ?? ""
+  };
+}
+
+function courseSyllabusPayload(data) {
+  return {
+    ...data,
+    course_id: data.course_id ?? data.courseId,
+    summary: data.description ?? data.summary,
+    file_url: data.document_url ?? data.fileUrl ?? data.file_url
+  };
+}
+
+function normalizeCourseNote(record) {
+  if (!record || typeof record !== "object") return record;
+  return {
+    ...record,
+    content: record.content || record.notes_content || record.notesContent || "",
+    attachment_url: record.attachment_url || record.file_url || record.fileUrl || "",
+    file_name: record.file_name ?? record.fileName ?? "",
+    file_size: record.file_size ?? record.fileSize ?? 0,
+    file_type: record.file_type ?? record.fileType ?? ""
+  };
+}
+
+function courseNotePayload(data) {
+  return {
+    ...data,
+    course_id: data.course_id ?? data.courseId,
+    notes_content: data.content ?? data.notesContent ?? data.notes_content,
+    file_url: data.attachment_url ?? data.fileUrl ?? data.file_url
+  };
+}
+
 export const api = {
   // Authentication
   async login(username, password) {
@@ -523,13 +565,15 @@ export const api = {
   async getCourseSyllabus(courseId = null) {
     const q = courseId ? `?course_id=${courseId}` : "";
     const data = await request(`/course-syllabus${q}`, { method: "GET" });
-    return Array.isArray(data) ? data : [];
+    return Array.isArray(data) ? data.map(normalizeCourseSyllabus) : [];
   },
   async createCourseSyllabus(data) {
-    return request("/course-syllabus", { method: "POST", body: data });
+    const record = await request("/course-syllabus", { method: "POST", body: courseSyllabusPayload(data) });
+    return normalizeCourseSyllabus(record);
   },
   async updateCourseSyllabus(id, patch) {
-    return request(`/course-syllabus/${id}`, { method: "PATCH", body: patch });
+    const record = await request(`/course-syllabus/${id}`, { method: "PATCH", body: courseSyllabusPayload(patch) });
+    return normalizeCourseSyllabus(record);
   },
   async deleteCourseSyllabus(id) {
     return request(`/course-syllabus/${id}`, { method: "DELETE" });
@@ -539,13 +583,15 @@ export const api = {
   async getCourseNotes(courseId = null) {
     const q = courseId ? `?course_id=${courseId}` : "";
     const data = await request(`/course-notes${q}`, { method: "GET" });
-    return Array.isArray(data) ? data : [];
+    return Array.isArray(data) ? data.map(normalizeCourseNote) : [];
   },
   async createCourseNotes(data) {
-    return request("/course-notes", { method: "POST", body: data });
+    const record = await request("/course-notes", { method: "POST", body: courseNotePayload(data) });
+    return normalizeCourseNote(record);
   },
   async updateCourseNotes(id, patch) {
-    return request(`/course-notes/${id}`, { method: "PATCH", body: patch });
+    const record = await request(`/course-notes/${id}`, { method: "PATCH", body: courseNotePayload(patch) });
+    return normalizeCourseNote(record);
   },
   async deleteCourseNotes(id) {
     return request(`/course-notes/${id}`, { method: "DELETE" });
