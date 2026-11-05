@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import api from '../services/api';
+import api, { normalizeDocumentUrl } from '../services/api';
 import Icon from '../components/Icons';
 import { fmtDay, fmtShort } from '../utils/helpers';
 
@@ -196,9 +196,15 @@ export default function CourseContentPage({ user, onToast }) {
       if (onToast) onToast('Syllabus title is required', true);
       return;
     }
+    const documentUrl = normalizeDocumentUrl(syllabusFormData.document_url);
+    if (syllabusFormData.document_url.trim() && !documentUrl) {
+      if (onToast) onToast('Enter a valid HTTP or HTTPS document URL', true);
+      return;
+    }
     try {
       const payload = {
         ...syllabusFormData,
+        document_url: documentUrl,
         course_id: selectedCourseId
       };
       if (syllabusFormData.id) {
@@ -637,7 +643,9 @@ export default function CourseContentPage({ user, onToast }) {
                 </div>
               ) : (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
-                  {syllabusList.map((syl) => (
+                  {syllabusList.map((syl) => {
+                    const documentUrl = normalizeDocumentUrl(syl.document_url);
+                    return (
                     <div
                       key={syl.id}
                       style={{
@@ -672,9 +680,9 @@ export default function CourseContentPage({ user, onToast }) {
                       </div>
 
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '0.6rem', borderTop: '1px solid #f1f5f9' }}>
-                        {syl.document_url ? (
+                        {documentUrl ? (
                           <a
-                            href={syl.document_url}
+                            href={documentUrl}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="btn primary"
@@ -683,6 +691,8 @@ export default function CourseContentPage({ user, onToast }) {
                             <span className="ic"><Icon name="download" size={13} /></span>
                             Download File
                           </a>
+                        ) : syl.document_url ? (
+                          <span style={{ fontSize: '0.8rem', color: '#b91c1c' }}>Invalid document URL</span>
                         ) : (
                           <span style={{ fontSize: '0.8rem', color: '#94a3b8', fontStyle: 'italic' }}>Text only</span>
                         )}
@@ -712,7 +722,8 @@ export default function CourseContentPage({ user, onToast }) {
                         </div>
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -1027,11 +1038,12 @@ export default function CourseContentPage({ user, onToast }) {
                 <div>
                   <label className="label">Document Link / URL</label>
                   <input
-                    type="url"
+                    type="text"
+                    inputMode="url"
                     className="input"
                     value={syllabusFormData.document_url || ''}
                     onChange={(e) => setSyllabusFormData({ ...syllabusFormData, document_url: e.target.value })}
-                    placeholder="https://... or /uploads/syllabus.pdf"
+                    placeholder="example.com/syllabus.pdf or /uploads/syllabus.pdf"
                   />
                   <small style={{ color: '#64748b', fontSize: '0.78rem', display: 'block', marginTop: '0.25rem' }}>
                     Provide a direct link or upload path to the PDF / document file.

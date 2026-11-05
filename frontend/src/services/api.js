@@ -11,6 +11,21 @@ const getApiBase = () => {
   return "/api";
 };
 
+export const normalizeDocumentUrl = (value) => {
+  const input = String(value || "").trim();
+  if (!input) return "";
+
+  try {
+    const apiOrigin = new URL(getApiBase(), window.location.origin).origin;
+    const url = input.startsWith("/")
+      ? new URL(input, apiOrigin)
+      : new URL(/^[a-z][a-z\d+.-]*:/i.test(input) ? input : `https://${input}`);
+    return url.protocol === "http:" || url.protocol === "https:" ? url.href : null;
+  } catch {
+    return null;
+  }
+};
+
 export const getToken = () => {
   try {
     return localStorage.getItem(TOKEN_KEY) || "";
