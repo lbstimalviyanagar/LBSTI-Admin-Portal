@@ -152,10 +152,15 @@ export default function CourseContentPage({ user, onToast }) {
       if (onToast) onToast('Module title is required', true);
       return;
     }
+    const courseId = selectedCourse?.id ?? selectedCourseId;
+    if (!courseId) {
+      if (onToast) onToast('Select a course before adding a module', true);
+      return;
+    }
     try {
       const payload = {
         ...moduleFormData,
-        course_id: selectedCourseId,
+        course_id: courseId,
         order_index: Number(moduleFormData.order_index || 1),
         module_no: Number(moduleFormData.module_no || 1)
       };

@@ -79,6 +79,29 @@ async function request(path, options = {}) {
   return data;
 }
 
+function normalizeCourseContent(record) {
+  if (!record || typeof record !== "object") return record;
+  return {
+    ...record,
+    title: record.title ?? record.module_title ?? record.moduleTitle ?? "",
+    topic: record.topic ?? record.topic_title ?? record.topicTitle ?? "",
+    content: record.content ?? record.description ?? "",
+    module_no: record.module_no ?? record.moduleNo ?? record.content_order ?? record.contentOrder ?? 1,
+    order_index: record.order_index ?? record.content_order ?? record.contentOrder ?? 1
+  };
+}
+
+function courseContentPayload(data) {
+  return {
+    ...data,
+    course_id: data.course_id ?? data.courseId,
+    module_title: data.module_title ?? data.moduleTitle ?? data.title,
+    topic_title: data.topic_title ?? data.topicTitle ?? data.topic,
+    content_order: data.content_order ?? data.contentOrder ?? data.order_index ?? data.module_no,
+    description: data.description ?? data.content
+  };
+}
+
 export const api = {
   // Authentication
   async login(username, password) {
@@ -467,13 +490,15 @@ export const api = {
   async getCourseContent(courseId = null) {
     const q = courseId ? `?course_id=${courseId}` : "";
     const data = await request(`/course-content${q}`, { method: "GET" });
-    return Array.isArray(data) ? data : [];
+    return Array.isArray(data) ? data.map(normalizeCourseContent) : [];
   },
   async createCourseContent(data) {
-    return request("/course-content", { method: "POST", body: data });
+    const record = await request("/course-content", { method: "POST", body: courseContentPayload(data) });
+    return normalizeCourseContent(record);
   },
   async updateCourseContent(id, patch) {
-    return request(`/course-content/${id}`, { method: "PATCH", body: patch });
+    const record = await request(`/course-content/${id}`, { method: "PATCH", body: courseContentPayload(patch) });
+    return normalizeCourseContent(record);
   },
   async deleteCourseContent(id) {
     return request(`/course-content/${id}`, { method: "DELETE" });
