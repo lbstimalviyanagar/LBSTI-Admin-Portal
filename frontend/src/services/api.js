@@ -444,11 +444,7 @@ export const api = {
     return request(`/tasks${query}`, { method: "GET" });
   },
   async getTaskFilterOptions() {
-    try {
-      return await request("/tasks/options", { method: "GET" });
-    } catch (e) {
-      return { faculty: [] };
-    }
+    return request("/tasks/options", { method: "GET" });
   },
   async createTask(data) {
     return request("/tasks", {

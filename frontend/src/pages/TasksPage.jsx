@@ -9,6 +9,8 @@ export default function TasksPage({ user, users = [], students = [], onToast }) 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [filterOptions, setFilterOptions] = useState({ faculty: [], students: [] });
+  const [filterOptionsError, setFilterOptionsError] = useState('');
+  const [loadingFilterOptions, setLoadingFilterOptions] = useState(false);
   const [activeTab, setActiveTab] = useState('all'); // 'all' or 'my_tasks'
 
   // Notifications modal & active alert state
@@ -82,20 +84,26 @@ export default function TasksPage({ user, users = [], students = [], onToast }) 
     loadTasks();
   }, [loadTasks]);
 
-  // Load filter options (faculty + students) from backend API on mount
-  useEffect(() => {
-    let isMounted = true;
-    if (typeof api.getTaskFilterOptions === 'function') {
-      api.getTaskFilterOptions()
-        .then(res => {
-          if (isMounted && res) {
-            setFilterOptions(res);
-          }
-        })
-        .catch(() => {});
+  const loadFilterOptions = useCallback(async () => {
+    setLoadingFilterOptions(true);
+    setFilterOptionsError('');
+    try {
+      const options = await api.getTaskFilterOptions();
+      setFilterOptions({
+        faculty: Array.isArray(options?.faculty) ? options.faculty : [],
+        students: Array.isArray(options?.students) ? options.students : []
+      });
+    } catch (err) {
+      setFilterOptionsError(err.message || 'Unable to load staff and student options.');
+      if (onToast) onToast(err.message || 'Unable to load staff and student options.', true);
+    } finally {
+      setLoadingFilterOptions(false);
     }
-    return () => { isMounted = false; };
-  }, []);
+  }, [onToast]);
+
+  useEffect(() => {
+    loadFilterOptions();
+  }, [loadFilterOptions]);
 
   // Periodic automated deadline monitor trigger (runs in background every 60s)
   useEffect(() => {
@@ -119,21 +127,28 @@ export default function TasksPage({ user, users = [], students = [], onToast }) 
   // Combined staff/faculty options
   const facultyOptions = useMemo(() => {
     const map = new Map();
-    if (Array.isArray(filterOptions?.faculty)) {
-      filterOptions.faculty.forEach(f => {
-        const name = (f.name || f.fullName || f.username || '').trim();
-        if (name) map.set(name.toLowerCase(), { id: f.id, name });
+    const addFaculty = (faculty) => {
+      const id = faculty.id ?? faculty.user_id ?? faculty.userId;
+      const name = String(faculty.name || faculty.fullName || faculty.full_name || faculty.username || '').trim();
+      if (id == null || String(id).trim() === '' || !name) return;
+      const key = String(id);
+      map.set(key, {
+        id,
+        name,
+        role: faculty.role || 'Staff',
+        email: faculty.email || '',
+        phone: faculty.phone || ''
       });
+    };
+
+    if (Array.isArray(filterOptions?.faculty)) {
+      filterOptions.faculty.forEach(addFaculty);
     }
     if (Array.isArray(users)) {
-      users.forEach(u => {
-        const name = (u.fullName || u.full_name || u.username || '').trim();
-        if (name) map.set(name.toLowerCase(), { id: u.id, name });
-      });
+      users.forEach(addFaculty);
     }
     tasks.forEach(t => {
-      const name = (t.assigned_to_name || '').trim();
-      if (name) map.set(name.toLowerCase(), { id: t.assigned_to, name });
+      addFaculty({ id: t.assigned_to, name: t.assigned_to_name });
     });
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
   }, [tasks, users, filterOptions]);
@@ -318,11 +333,11 @@ export default function TasksPage({ user, users = [], students = [], onToast }) 
         assigneeStudentId: match ? match.studentId : ''
       }));
     } else {
-      const match = users.find(u => String(u.id) === String(val));
+      const match = facultyOptions.find(u => String(u.id) === String(val));
       setFormData(prev => ({
         ...prev,
         assignedTo: val,
-        assigneeName: match ? (match.fullName || match.username) : '',
+        assigneeName: match ? match.name : '',
         assigneeEmail: match ? (match.email || '') : '',
         assigneePhone: match ? (match.phone || '') : '',
         assigneeStudentId: ''
@@ -1050,14 +1065,27 @@ export default function TasksPage({ user, users = [], students = [], onToast }) 
                           className="select" 
                           value={formData.assignedTo} 
                           onChange={handleAssigneeChange}
+                          disabled={loadingFilterOptions}
                         >
-                          <option value="">-- Select Staff / Faculty Member --</option>
-                          {users?.map(u => (
+                          <option value="">
+                            {loadingFilterOptions ? 'Loading staff / faculty...' : '-- Select Staff / Faculty Member --'}
+                          </option>
+                          {facultyOptions.map(u => (
                             <option key={u.id} value={u.id}>
-                              {u.fullName || u.full_name || u.username} ({u.role || 'Staff'})
+                              {u.name} ({u.role})
                             </option>
                           ))}
                         </select>
+                      )}
+                      {formData.assigneeType !== 'student' && !loadingFilterOptions && facultyOptions.length === 0 && (
+                        <div style={{ marginTop: '0.4rem', fontSize: '0.8rem', color: filterOptionsError ? '#b91c1c' : '#64748b' }} role={filterOptionsError ? 'alert' : undefined}>
+                          {filterOptionsError || 'No staff or faculty members are available.'}
+                          {filterOptionsError && (
+                            <button className="btn" type="button" style={{ marginLeft: '0.5rem', padding: '0.2rem 0.5rem', fontSize: '0.78rem' }} onClick={loadFilterOptions}>
+                              Retry
+                            </button>
+                          )}
+                        </div>
                       )}
                     </div>
 
