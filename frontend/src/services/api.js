@@ -432,6 +432,20 @@ export const api = {
   async clockOut() {
     return request("/attendance/clock-out", { method: "PUT" });
   },
+  async adminAddAttendance(data) {
+    return request("/attendance/admin-record", { method: "POST", body: data });
+  },
+  async adminUpdateAttendance(id, data) {
+    return request(`/attendance/admin-update/${id}`, { method: "PUT", body: data });
+  },
+  async getAttendanceAuditLogs(filters = {}) {
+    const params = new URLSearchParams();
+    if (filters.attendance_id) params.append("attendance_id", filters.attendance_id);
+    if (filters.staff_id && filters.staff_id !== "All") params.append("staff_id", filters.staff_id);
+    const qs = params.toString();
+    const query = qs ? `?${qs}` : "";
+    return request(`/attendance/audit-logs${query}`, { method: "GET" });
+  },
 
   // Tasks
   async getTasks(filters = {}) {

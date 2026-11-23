@@ -274,10 +274,27 @@ if ($route === 'auth/login') {
     requireMenuPermission($user, 'attendance', $pdo);
     $parts = explode("/", $route);
     $action = isset($parts[1]) ? $parts[1] : null;
-    if ($method === "GET" && ($action === "options" || $action === "filters")) getAttendanceFilterOptions($pdo, $user);
-    elseif ($method === "GET") getAttendance($pdo, $user);
-    elseif ($method === "POST" && $action === "clock-in") clockIn($pdo, $user);
-    elseif ($method === "PUT" && $action === "clock-out") clockOut($pdo, $user, $body);
+    $subAction = isset($parts[2]) ? $parts[2] : null;
+
+    if ($method === "GET" && ($action === "options" || $action === "filters")) {
+        getAttendanceFilterOptions($pdo, $user);
+    } elseif ($method === "GET" && $action === "audit-logs") {
+        getAttendanceAuditLogs($pdo, $user, $subAction);
+    } elseif ($method === "GET") {
+        getAttendance($pdo, $user);
+    } elseif ($method === "POST" && $action === "clock-in") {
+        clockIn($pdo, $user);
+    } elseif ($method === "PUT" && $action === "clock-out") {
+        clockOut($pdo, $user, $body);
+    } elseif ($method === "POST" && ($action === "admin-record" || $action === "record")) {
+        adminAddAttendance($pdo, $user, $body);
+    } elseif (($method === "PUT" || $method === "PATCH") && ($action === "admin-update" || is_numeric($action))) {
+        $targetId = is_numeric($action) ? $action : $subAction;
+        adminUpdateAttendance($pdo, $targetId, $user, $body);
+    } else {
+        http_response_code(404);
+        echo json_encode(["message" => "Attendance endpoint not found."]);
+    }
 } elseif (strpos($route, "tasks") === 0) {
     require "controllers/TaskController.php";
     $user = requireAuth($authSecret);

@@ -127,18 +127,41 @@ SELECT
 FROM `enquiries`
 WHERE LOWER(`status`) IN ('confirmed', 'enrolled', 'admitted');
 
--- Module 1: Staff Attendance
+-- Module 1: Staff Attendance & Admin Attendance Management
 CREATE TABLE IF NOT EXISTS `staff_attendance` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   `staff_id` BIGINT UNSIGNED NOT NULL,
   `date` DATE NOT NULL,
-  `clock_in` DATETIME NOT NULL,
+  `clock_in` DATETIME DEFAULT NULL,
   `clock_out` DATETIME DEFAULT NULL,
   `total_hours` DECIMAL(5,2) DEFAULT 0.00,
-  `status` ENUM('Present', 'Absent', 'Half Day', 'Leave') DEFAULT 'Present',
+  `status` VARCHAR(50) DEFAULT 'Present',
+  `is_admin_modified` TINYINT(1) DEFAULT 0,
+  `last_modified_by` VARCHAR(150) NULL DEFAULT NULL,
+  `last_modified_at` DATETIME NULL DEFAULT NULL,
+  `modification_reason` TEXT NULL DEFAULT NULL,
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
+  KEY `idx_staff_date` (`staff_id`, `date`),
   FOREIGN KEY (`staff_id`) REFERENCES `portal_users`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Staff Attendance Modification Audit Logs
+CREATE TABLE IF NOT EXISTS `staff_attendance_audit_logs` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `attendance_id` BIGINT UNSIGNED NOT NULL,
+  `staff_id` BIGINT UNSIGNED NOT NULL,
+  `admin_id` BIGINT UNSIGNED NOT NULL,
+  `admin_name` VARCHAR(150) NOT NULL,
+  `action` VARCHAR(50) NOT NULL DEFAULT 'UPDATE',
+  `previous_data` JSON DEFAULT NULL,
+  `updated_data` JSON DEFAULT NULL,
+  `reason` TEXT NOT NULL,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_audit_attendance` (`attendance_id`),
+  KEY `idx_audit_staff` (`staff_id`),
+  KEY `idx_audit_created` (`created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Module 2: Staff & Student Task Management with Deadline Tracking & Notifications

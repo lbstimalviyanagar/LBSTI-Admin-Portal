@@ -4,7 +4,73 @@
 // regardless of the hosting server's default timezone.
 date_default_timezone_set('Asia/Kolkata');
 
+function ensureStaffAttendanceTables($pdo) {
+    static $initialized = false;
+    if ($initialized) return;
+    try {
+        // Ensure staff_attendance base table exists
+        $pdo->exec("CREATE TABLE IF NOT EXISTS `staff_attendance` (
+            `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `staff_id` BIGINT UNSIGNED NOT NULL,
+            `date` DATE NOT NULL,
+            `clock_in` DATETIME DEFAULT NULL,
+            `clock_out` DATETIME DEFAULT NULL,
+            `total_hours` DECIMAL(5,2) DEFAULT 0.00,
+            `status` VARCHAR(50) DEFAULT 'Present',
+            `is_admin_modified` TINYINT(1) DEFAULT 0,
+            `last_modified_by` VARCHAR(150) NULL DEFAULT NULL,
+            `last_modified_at` DATETIME NULL DEFAULT NULL,
+            `modification_reason` TEXT NULL DEFAULT NULL,
+            `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            KEY `idx_staff_date` (`staff_id`, `date`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
+
+        // Relax clock_in to allow NULL if it was originally NOT NULL
+        try {
+            $pdo->exec("ALTER TABLE `staff_attendance` MODIFY `clock_in` DATETIME NULL DEFAULT NULL;");
+        } catch (Exception $e) {}
+
+        // Add admin modification tracking columns if not already present
+        try {
+            $pdo->exec("ALTER TABLE `staff_attendance` ADD COLUMN `is_admin_modified` TINYINT(1) DEFAULT 0;");
+        } catch (Exception $e) {}
+        try {
+            $pdo->exec("ALTER TABLE `staff_attendance` ADD COLUMN `last_modified_by` VARCHAR(150) NULL DEFAULT NULL;");
+        } catch (Exception $e) {}
+        try {
+            $pdo->exec("ALTER TABLE `staff_attendance` ADD COLUMN `last_modified_at` DATETIME NULL DEFAULT NULL;");
+        } catch (Exception $e) {}
+        try {
+            $pdo->exec("ALTER TABLE `staff_attendance` ADD COLUMN `modification_reason` TEXT NULL DEFAULT NULL;");
+        } catch (Exception $e) {}
+
+        // Ensure audit log table exists
+        $pdo->exec("CREATE TABLE IF NOT EXISTS `staff_attendance_audit_logs` (
+            `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `attendance_id` BIGINT UNSIGNED NOT NULL,
+            `staff_id` BIGINT UNSIGNED NOT NULL,
+            `admin_id` BIGINT UNSIGNED NOT NULL,
+            `admin_name` VARCHAR(150) NOT NULL,
+            `action` VARCHAR(50) NOT NULL DEFAULT 'UPDATE',
+            `previous_data` JSON DEFAULT NULL,
+            `updated_data` JSON DEFAULT NULL,
+            `reason` TEXT NOT NULL,
+            `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            KEY `idx_audit_attendance` (`attendance_id`),
+            KEY `idx_audit_staff` (`staff_id`),
+            KEY `idx_audit_created` (`created_at`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
+
+        $initialized = true;
+    } catch (Exception $e) {
+        error_log("Staff attendance table setup warning: " . $e->getMessage());
+    }
+}
+
 function getAttendance($pdo, $user) {
+    ensureStaffAttendanceTables($pdo);
     try {
         $staffId = $_GET['staff_id'] ?? null;
         $date = $_GET['date'] ?? null;
@@ -14,8 +80,8 @@ function getAttendance($pdo, $user) {
         $conditions = [];
         $params = [];
 
-        // Role-based staff filtering
-        if ($user['role'] !== 'admin') {
+        // Role-based staff filtering: non-admins can only see their own attendance
+        if (strtolower($user['role'] ?? '') !== 'admin') {
             $conditions[] = "a.staff_id = ?";
             $params[] = $user['sub'];
         } else {
@@ -47,26 +113,26 @@ function getAttendance($pdo, $user) {
             }
         }
 
-        // Dynamic search across staff name, date, status, clock_in, clock_out, total_hours
+        // Dynamic search across staff name, date, status, clock_in, clock_out, total_hours, modification_reason
         if (!empty($q)) {
             $like = "%" . trim($q) . "%";
-            $conditions[] = "(u.full_name LIKE ? OR a.`date` LIKE ? OR a.status LIKE ? OR a.clock_in LIKE ? OR a.clock_out LIKE ? OR CAST(a.total_hours AS CHAR) LIKE ?)";
-            $params[] = $like;
-            $params[] = $like;
-            $params[] = $like;
-            $params[] = $like;
-            $params[] = $like;
-            $params[] = $like;
+            $conditions[] = "(u.full_name LIKE ? OR a.`date` LIKE ? OR a.status LIKE ? OR a.clock_in LIKE ? OR a.clock_out LIKE ? OR CAST(a.total_hours AS CHAR) LIKE ? OR a.modification_reason LIKE ? OR a.last_modified_by LIKE ?)";
+            for ($i = 0; $i < 8; $i++) {
+                $params[] = $like;
+            }
         }
 
         $whereClause = !empty($conditions) ? "WHERE " . implode(" AND ", $conditions) : "";
 
         $stmt = $pdo->prepare("
-            SELECT a.*, u.full_name as staff_name 
+            SELECT a.*, 
+                   u.full_name as staff_name,
+                   u.username as staff_username,
+                   u.role as staff_role
             FROM staff_attendance a 
             LEFT JOIN portal_users u ON u.id = a.staff_id 
             {$whereClause}
-            ORDER BY a.`date` DESC, a.clock_in DESC
+            ORDER BY a.`date` DESC, a.clock_in DESC, a.id DESC
         ");
         $stmt->execute($params);
         echo json_encode($stmt->fetchAll());
@@ -77,11 +143,12 @@ function getAttendance($pdo, $user) {
 }
 
 function getAttendanceFilterOptions($pdo, $user) {
+    ensureStaffAttendanceTables($pdo);
     try {
         $staff = [];
         $statuses = ['Present', 'Half Day', 'Leave', 'Absent'];
 
-        if ($user['role'] === 'admin') {
+        if (strtolower($user['role'] ?? '') === 'admin') {
             try {
                 $stmt = $pdo->query("SELECT id, full_name, username, role FROM portal_users WHERE (full_name IS NOT NULL AND TRIM(full_name) != '') OR (username IS NOT NULL AND TRIM(username) != '') ORDER BY full_name ASC");
                 while ($row = $stmt->fetch()) {
@@ -126,8 +193,8 @@ function getAttendanceFilterOptions($pdo, $user) {
 }
 
 function clockIn($pdo, $user) {
+    ensureStaffAttendanceTables($pdo);
     try {
-        // Force IST for this operation
         date_default_timezone_set('Asia/Kolkata');
 
         $staffId = $user['sub'];
@@ -142,11 +209,11 @@ function clockIn($pdo, $user) {
             return;
         }
 
-        $stmt = $pdo->prepare("INSERT INTO staff_attendance (staff_id, `date`, clock_in) VALUES (?, ?, ?)");
+        $stmt = $pdo->prepare("INSERT INTO staff_attendance (staff_id, `date`, clock_in, status) VALUES (?, ?, ?, 'Present')");
         $stmt->execute([$staffId, $date, $now]);
         
         $id = $pdo->lastInsertId();
-        $stmt = $pdo->prepare("SELECT * FROM staff_attendance WHERE id = ?");
+        $stmt = $pdo->prepare("SELECT a.*, u.full_name as staff_name FROM staff_attendance a LEFT JOIN portal_users u ON u.id = a.staff_id WHERE a.id = ?");
         $stmt->execute([$id]);
         
         echo json_encode($stmt->fetch());
@@ -157,8 +224,8 @@ function clockIn($pdo, $user) {
 }
 
 function clockOut($pdo, $user, $body) {
+    ensureStaffAttendanceTables($pdo);
     try {
-        // Force IST for this operation
         date_default_timezone_set('Asia/Kolkata');
 
         $staffId = $user['sub'];
@@ -175,17 +242,407 @@ function clockOut($pdo, $user, $body) {
             return;
         }
 
-        $clockInTime = strtotime($record['clock_in']);
+        $clockInTime = !empty($record['clock_in']) ? strtotime($record['clock_in']) : strtotime($now);
         $clockOutTime = strtotime($now);
-        $hours = ($clockOutTime - $clockInTime) / 3600;
+        $hours = max(0, ($clockOutTime - $clockInTime) / 3600);
 
         $stmt = $pdo->prepare("UPDATE staff_attendance SET clock_out = ?, total_hours = ? WHERE id = ?");
         $stmt->execute([$now, round($hours, 2), $record['id']]);
 
-        $stmt = $pdo->prepare("SELECT * FROM staff_attendance WHERE id = ?");
+        $stmt = $pdo->prepare("SELECT a.*, u.full_name as staff_name FROM staff_attendance a LEFT JOIN portal_users u ON u.id = a.staff_id WHERE a.id = ?");
         $stmt->execute([$record['id']]);
         
         echo json_encode($stmt->fetch());
+    } catch (PDOException $e) {
+        http_response_code(500);
+        echo json_encode(["message" => "Database error: " . $e->getMessage()]);
+    }
+}
+
+function adminAddAttendance($pdo, $user, $body) {
+    ensureStaffAttendanceTables($pdo);
+    if (strtolower($user['role'] ?? '') !== 'admin') {
+        http_response_code(403);
+        echo json_encode(["message" => "Access denied: Only administrators can add staff attendance."]);
+        return;
+    }
+
+    try {
+        date_default_timezone_set('Asia/Kolkata');
+
+        $staffId = !empty($body['staff_id']) ? (int)$body['staff_id'] : 0;
+        $date = trim($body['date'] ?? '');
+        $status = trim($body['status'] ?? 'Present');
+        $rawClockIn = trim($body['clock_in'] ?? '');
+        $rawClockOut = trim($body['clock_out'] ?? '');
+        $totalHours = isset($body['total_hours']) && $body['total_hours'] !== '' ? (float)$body['total_hours'] : null;
+        $reason = trim($body['reason'] ?? '');
+
+        if (!$staffId) {
+            http_response_code(400);
+            echo json_encode(["message" => "Please select a valid staff member."]);
+            return;
+        }
+
+        if (empty($date) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+            http_response_code(400);
+            echo json_encode(["message" => "A valid date in YYYY-MM-DD format is required."]);
+            return;
+        }
+
+        if (empty($reason)) {
+            http_response_code(400);
+            echo json_encode(["message" => "A reason for adding this attendance record is required."]);
+            return;
+        }
+
+        // Verify staff exists in database
+        $userStmt = $pdo->prepare("SELECT id, full_name, username FROM portal_users WHERE id = ?");
+        $userStmt->execute([$staffId]);
+        $staffUser = $userStmt->fetch();
+        if (!$staffUser) {
+            http_response_code(404);
+            echo json_encode(["message" => "Staff member not found in the database."]);
+            return;
+        }
+
+        // Format clock_in and clock_out
+        $clockIn = null;
+        $clockOut = null;
+
+        if (in_array(strtolower($status), ['absent', 'leave'])) {
+            if (!empty($rawClockIn)) {
+                $clockIn = (strlen($rawClockIn) <= 8) ? "{$date} {$rawClockIn}" : date('Y-m-d H:i:s', strtotime($rawClockIn));
+            }
+            if (!empty($rawClockOut)) {
+                $clockOut = (strlen($rawClockOut) <= 8) ? "{$date} {$rawClockOut}" : date('Y-m-d H:i:s', strtotime($rawClockOut));
+            }
+            if ($totalHours === null) {
+                $totalHours = 0.00;
+            }
+        } else {
+            if (!empty($rawClockIn)) {
+                $clockIn = (strlen($rawClockIn) <= 8) ? "{$date} {$rawClockIn}" : date('Y-m-d H:i:s', strtotime($rawClockIn));
+            }
+            if (!empty($rawClockOut)) {
+                $clockOut = (strlen($rawClockOut) <= 8) ? "{$date} {$rawClockOut}" : date('Y-m-d H:i:s', strtotime($rawClockOut));
+            }
+
+            if ($totalHours === null && $clockIn && $clockOut) {
+                $inTs = strtotime($clockIn);
+                $outTs = strtotime($clockOut);
+                if ($outTs > $inTs) {
+                    $totalHours = round(($outTs - $inTs) / 3600, 2);
+                } else {
+                    $totalHours = 0.00;
+                }
+            } elseif ($totalHours === null) {
+                $totalHours = strtolower($status) === 'half day' ? 4.00 : 8.00;
+            }
+        }
+
+        $adminId = (int)($user['sub'] ?? 0);
+        $adminName = trim($user['name'] ?? $user['username'] ?? 'Admin');
+
+        $stmt = $pdo->prepare("
+            INSERT INTO staff_attendance (staff_id, `date`, clock_in, clock_out, total_hours, status, is_admin_modified, last_modified_by, last_modified_at, modification_reason)
+            VALUES (?, ?, ?, ?, ?, ?, 1, ?, NOW(), ?)
+        ");
+        $stmt->execute([
+            $staffId,
+            $date,
+            $clockIn,
+            $clockOut,
+            $totalHours !== null ? $totalHours : 0.00,
+            $status,
+            $adminName,
+            $reason
+        ]);
+
+        $attendanceId = $pdo->lastInsertId();
+
+        // Write Audit Log
+        $updatedData = [
+            'staff_id' => $staffId,
+            'staff_name' => $staffUser['full_name'] ?: $staffUser['username'],
+            'date' => $date,
+            'status' => $status,
+            'clock_in' => $clockIn,
+            'clock_out' => $clockOut,
+            'total_hours' => $totalHours
+        ];
+
+        $auditStmt = $pdo->prepare("
+            INSERT INTO staff_attendance_audit_logs (attendance_id, staff_id, admin_id, admin_name, action, previous_data, updated_data, reason, created_at)
+            VALUES (?, ?, ?, ?, 'CREATE', NULL, ?, ?, NOW())
+        ");
+        $auditStmt->execute([
+            $attendanceId,
+            $staffId,
+            $adminId,
+            $adminName,
+            json_encode($updatedData, JSON_UNESCAPED_UNICODE),
+            $reason
+        ]);
+
+        // Return newly created record
+        $fetchStmt = $pdo->prepare("
+            SELECT a.*, u.full_name as staff_name, u.username as staff_username, u.role as staff_role
+            FROM staff_attendance a
+            LEFT JOIN portal_users u ON u.id = a.staff_id
+            WHERE a.id = ?
+        ");
+        $fetchStmt->execute([$attendanceId]);
+        $record = $fetchStmt->fetch();
+
+        http_response_code(201);
+        echo json_encode([
+            "ok" => true,
+            "message" => "Staff attendance added successfully.",
+            "record" => $record
+        ]);
+    } catch (PDOException $e) {
+        http_response_code(500);
+        echo json_encode(["message" => "Database error: " . $e->getMessage()]);
+    }
+}
+
+function adminUpdateAttendance($pdo, $id, $user, $body) {
+    ensureStaffAttendanceTables($pdo);
+    if (strtolower($user['role'] ?? '') !== 'admin') {
+        http_response_code(403);
+        echo json_encode(["message" => "Access denied: Only administrators can modify staff attendance."]);
+        return;
+    }
+
+    try {
+        date_default_timezone_set('Asia/Kolkata');
+
+        $id = (int)$id;
+        if (!$id) {
+            http_response_code(400);
+            echo json_encode(["message" => "Invalid attendance ID."]);
+            return;
+        }
+
+        // Fetch current record
+        $currStmt = $pdo->prepare("
+            SELECT a.*, u.full_name as staff_name, u.username as staff_username
+            FROM staff_attendance a
+            LEFT JOIN portal_users u ON u.id = a.staff_id
+            WHERE a.id = ?
+        ");
+        $currStmt->execute([$id]);
+        $existing = $currStmt->fetch();
+
+        if (!$existing) {
+            http_response_code(404);
+            echo json_encode(["message" => "Attendance record not found."]);
+            return;
+        }
+
+        $reason = trim($body['reason'] ?? '');
+        if (empty($reason)) {
+            http_response_code(400);
+            echo json_encode(["message" => "A reason for modification is required."]);
+            return;
+        }
+
+        $staffId = !empty($body['staff_id']) ? (int)$body['staff_id'] : (int)$existing['staff_id'];
+        $date = trim($body['date'] ?? $existing['date']);
+        $status = trim($body['status'] ?? $existing['status']);
+        $rawClockIn = isset($body['clock_in']) ? trim($body['clock_in']) : null;
+        $rawClockOut = isset($body['clock_out']) ? trim($body['clock_out']) : null;
+        $totalHours = isset($body['total_hours']) && $body['total_hours'] !== '' ? (float)$body['total_hours'] : null;
+
+        if (empty($date) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+            http_response_code(400);
+            echo json_encode(["message" => "A valid date in YYYY-MM-DD format is required."]);
+            return;
+        }
+
+        // Format clock_in and clock_out
+        $clockIn = $existing['clock_in'];
+        $clockOut = $existing['clock_out'];
+
+        if (in_array(strtolower($status), ['absent', 'leave'])) {
+            if ($rawClockIn === '' || $rawClockIn === null) {
+                $clockIn = null;
+            } else {
+                $clockIn = (strlen($rawClockIn) <= 8) ? "{$date} {$rawClockIn}" : date('Y-m-d H:i:s', strtotime($rawClockIn));
+            }
+            if ($rawClockOut === '' || $rawClockOut === null) {
+                $clockOut = null;
+            } else {
+                $clockOut = (strlen($rawClockOut) <= 8) ? "{$date} {$rawClockOut}" : date('Y-m-d H:i:s', strtotime($rawClockOut));
+            }
+            if ($totalHours === null) {
+                $totalHours = 0.00;
+            }
+        } else {
+            if ($rawClockIn !== null) {
+                $clockIn = !empty($rawClockIn) ? ((strlen($rawClockIn) <= 8) ? "{$date} {$rawClockIn}" : date('Y-m-d H:i:s', strtotime($rawClockIn))) : null;
+            }
+            if ($rawClockOut !== null) {
+                $clockOut = !empty($rawClockOut) ? ((strlen($rawClockOut) <= 8) ? "{$date} {$rawClockOut}" : date('Y-m-d H:i:s', strtotime($rawClockOut))) : null;
+            }
+
+            if ($totalHours === null && $clockIn && $clockOut) {
+                $inTs = strtotime($clockIn);
+                $outTs = strtotime($clockOut);
+                if ($outTs > $inTs) {
+                    $totalHours = round(($outTs - $inTs) / 3600, 2);
+                } else {
+                    $totalHours = 0.00;
+                }
+            } elseif ($totalHours === null) {
+                $totalHours = (float)($existing['total_hours'] ?? 0.00);
+            }
+        }
+
+        $adminId = (int)($user['sub'] ?? 0);
+        $adminName = trim($user['name'] ?? $user['username'] ?? 'Admin');
+
+        // Snapshot previous data for audit
+        $previousData = [
+            'staff_id' => $existing['staff_id'],
+            'staff_name' => $existing['staff_name'] ?: $existing['staff_username'],
+            'date' => $existing['date'],
+            'status' => $existing['status'],
+            'clock_in' => $existing['clock_in'],
+            'clock_out' => $existing['clock_out'],
+            'total_hours' => $existing['total_hours'],
+            'is_admin_modified' => $existing['is_admin_modified'] ?? 0,
+            'last_modified_by' => $existing['last_modified_by'] ?? null,
+            'modification_reason' => $existing['modification_reason'] ?? null
+        ];
+
+        $updatedData = [
+            'staff_id' => $staffId,
+            'date' => $date,
+            'status' => $status,
+            'clock_in' => $clockIn,
+            'clock_out' => $clockOut,
+            'total_hours' => $totalHours
+        ];
+
+        // Perform update
+        $stmt = $pdo->prepare("
+            UPDATE staff_attendance
+            SET staff_id = ?,
+                `date` = ?,
+                clock_in = ?,
+                clock_out = ?,
+                total_hours = ?,
+                status = ?,
+                is_admin_modified = 1,
+                last_modified_by = ?,
+                last_modified_at = NOW(),
+                modification_reason = ?
+            WHERE id = ?
+        ");
+        $stmt->execute([
+            $staffId,
+            $date,
+            $clockIn,
+            $clockOut,
+            $totalHours !== null ? $totalHours : 0.00,
+            $status,
+            $adminName,
+            $reason,
+            $id
+        ]);
+
+        // Insert audit log
+        $auditStmt = $pdo->prepare("
+            INSERT INTO staff_attendance_audit_logs (attendance_id, staff_id, admin_id, admin_name, action, previous_data, updated_data, reason, created_at)
+            VALUES (?, ?, ?, ?, 'UPDATE', ?, ?, ?, NOW())
+        ");
+        $auditStmt->execute([
+            $id,
+            $staffId,
+            $adminId,
+            $adminName,
+            json_encode($previousData, JSON_UNESCAPED_UNICODE),
+            json_encode($updatedData, JSON_UNESCAPED_UNICODE),
+            $reason
+        ]);
+
+        // Fetch and return the updated record
+        $fetchStmt = $pdo->prepare("
+            SELECT a.*, u.full_name as staff_name, u.username as staff_username, u.role as staff_role
+            FROM staff_attendance a
+            LEFT JOIN portal_users u ON u.id = a.staff_id
+            WHERE a.id = ?
+        ");
+        $fetchStmt->execute([$id]);
+        $updatedRecord = $fetchStmt->fetch();
+
+        echo json_encode([
+            "ok" => true,
+            "message" => "Attendance record updated successfully and audit log created.",
+            "record" => $updatedRecord
+        ]);
+    } catch (PDOException $e) {
+        http_response_code(500);
+        echo json_encode(["message" => "Database error: " . $e->getMessage()]);
+    }
+}
+
+function getAttendanceAuditLogs($pdo, $user, $attendanceId = null) {
+    ensureStaffAttendanceTables($pdo);
+    if (strtolower($user['role'] ?? '') !== 'admin') {
+        http_response_code(403);
+        echo json_encode(["message" => "Access denied: Only administrators can view attendance audit logs."]);
+        return;
+    }
+
+    try {
+        $attId = $attendanceId ?: ($_GET['attendance_id'] ?? null);
+        $staffId = $_GET['staff_id'] ?? null;
+
+        $conditions = [];
+        $params = [];
+
+        if (!empty($attId) && is_numeric($attId)) {
+            $conditions[] = "l.attendance_id = ?";
+            $params[] = (int)$attId;
+        }
+
+        if (!empty($staffId) && is_numeric($staffId)) {
+            $conditions[] = "l.staff_id = ?";
+            $params[] = (int)$staffId;
+        }
+
+        $whereClause = !empty($conditions) ? "WHERE " . implode(" AND ", $conditions) : "";
+
+        $stmt = $pdo->prepare("
+            SELECT l.*,
+                   s.full_name as staff_name,
+                   s.username as staff_username,
+                   adm.full_name as admin_full_name,
+                   adm.username as admin_username
+            FROM staff_attendance_audit_logs l
+            LEFT JOIN portal_users s ON s.id = l.staff_id
+            LEFT JOIN portal_users adm ON adm.id = l.admin_id
+            {$whereClause}
+            ORDER BY l.created_at DESC, l.id DESC
+            LIMIT 200
+        ");
+        $stmt->execute($params);
+        $logs = $stmt->fetchAll();
+
+        // Decode JSON fields if not auto-decoded
+        foreach ($logs as &$log) {
+            if (!empty($log['previous_data']) && is_string($log['previous_data'])) {
+                $log['previous_data'] = json_decode($log['previous_data'], true);
+            }
+            if (!empty($log['updated_data']) && is_string($log['updated_data'])) {
+                $log['updated_data'] = json_decode($log['updated_data'], true);
+            }
+        }
+
+        echo json_encode($logs);
     } catch (PDOException $e) {
         http_response_code(500);
         echo json_encode(["message" => "Database error: " . $e->getMessage()]);

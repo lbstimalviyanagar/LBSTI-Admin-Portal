@@ -48,6 +48,25 @@ const formatTimeDisplay = (timeStr) => {
   }
 };
 
+// Safe audit timestamp formatter
+const formatAuditDateTime = (dateStr) => {
+  if (!dateStr) return '-';
+  try {
+    const d = new Date(dateStr.replace(' ', 'T'));
+    if (isNaN(d.getTime())) return dateStr;
+    return d.toLocaleString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
+  } catch (e) {
+    return dateStr;
+  }
+};
+
 // Compute today in IST (YYYY-MM-DD)
 const getTodayIST = () => {
   try {
@@ -80,7 +99,44 @@ const getYesterdayIST = () => {
   }
 };
 
+// Helper to extract HH:MM from datetime or time string
+const extractTimeString = (dateTimeStr) => {
+  if (!dateTimeStr) return '';
+  const trimmed = String(dateTimeStr).trim();
+  if (/^\d{2}:\d{2}(:\d{2})?$/.test(trimmed)) {
+    return trimmed.slice(0, 5);
+  }
+  try {
+    const d = new Date(trimmed.replace(' ', 'T'));
+    if (!isNaN(d.getTime())) {
+      const h = String(d.getHours()).padStart(2, '0');
+      const m = String(d.getMinutes()).padStart(2, '0');
+      return `${h}:${m}`;
+    }
+  } catch (e) {}
+  const match = trimmed.match(/(\d{2}):(\d{2})/);
+  return match ? `${match[1]}:${match[2]}` : '';
+};
+
+// Calculate total hours from clock-in and clock-out HH:MM
+const calculateTotalHours = (inTime, outTime, status) => {
+  if (status === 'Absent' || status === 'Leave') return '0.00';
+  if (!inTime || !outTime) {
+    return status === 'Half Day' ? '4.00' : '';
+  }
+  const [inH, inM] = inTime.split(':').map(Number);
+  const [outH, outM] = outTime.split(':').map(Number);
+  const inMin = inH * 60 + inM;
+  const outMin = outH * 60 + outM;
+  if (outMin > inMin) {
+    return ((outMin - inMin) / 60).toFixed(2);
+  }
+  return '0.00';
+};
+
 export default function AttendancePage({ user, users = [], onToast }) {
+  const isAdmin = user?.role === 'admin';
+
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(true);
   const [clockingIn, setClockingIn] = useState(false);
@@ -97,6 +153,41 @@ export default function AttendancePage({ user, users = [], onToast }) {
   // Pagination state
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+
+  // Admin Attendance Management Modals
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [savingAdd, setSavingAdd] = useState(false);
+  const [addForm, setAddForm] = useState({
+    staff_id: '',
+    date: getTodayIST(),
+    status: 'Present',
+    clock_in: '09:30',
+    clock_out: '18:00',
+    total_hours: '8.50',
+    reason: ''
+  });
+
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editingRecord, setEditingRecord] = useState(null);
+  const [editForm, setEditForm] = useState({
+    id: null,
+    staff_id: '',
+    date: '',
+    status: 'Present',
+    clock_in: '',
+    clock_out: '',
+    total_hours: '',
+    reason: ''
+  });
+
+  // Audit Log Modal state
+  const [showAuditModal, setShowAuditModal] = useState(false);
+  const [auditLogs, setAuditLogs] = useState([]);
+  const [loadingAudit, setLoadingAudit] = useState(false);
+  const [auditFilterStaff, setAuditFilterStaff] = useState('All');
+  const [auditSearchQuery, setAuditSearchQuery] = useState('');
+  const [targetAttendanceId, setTargetAttendanceId] = useState(null);
 
   // Load attendance records
   const loadRecords = useCallback(async () => {
@@ -130,7 +221,7 @@ export default function AttendancePage({ user, users = [], onToast }) {
     return () => { isMounted = false; };
   }, []);
 
-  // Clock In handler
+  // Clock In handler (self)
   const handleClockIn = async () => {
     setClockingIn(true);
     try {
@@ -144,7 +235,7 @@ export default function AttendancePage({ user, users = [], onToast }) {
     }
   };
 
-  // Clock Out handler
+  // Clock Out handler (self)
   const handleClockOut = async () => {
     setClockingOut(true);
     try {
@@ -238,7 +329,7 @@ export default function AttendancePage({ user, users = [], onToast }) {
     try {
       const now = new Date();
       const day = now.getDay(); // 0 is Sunday
-      const diff = now.getDate() - day + (day === 0 ? -6 : 1); // Adjust when day is Sunday
+      const diff = now.getDate() - day + (day === 0 ? -6 : 1);
       const monday = new Date(now.setDate(diff));
       return new Intl.DateTimeFormat('en-CA', {
         timeZone: 'Asia/Kolkata',
@@ -284,17 +375,18 @@ export default function AttendancePage({ user, users = [], onToast }) {
         } else if (dateFilter === 'custom') {
           if (customDate && recDate !== customDate) return false;
         } else {
-          // Specific date selected
           if (recDate !== dateFilter) return false;
         }
       }
 
-      // 4. Search Query Filter (Dynamic across staff name, date, clock-in, clock-out, total hours, and status)
+      // 4. Search Query Filter
       if (q) {
         const staffNameStr = String(r.staff_name || '').toLowerCase();
         const staffIdStr = String(r.staff_id || '').toLowerCase();
         const statusStr = String(r.status || '').toLowerCase();
         const hoursStr = String(r.total_hours || '').toLowerCase();
+        const reasonStr = String(r.modification_reason || '').toLowerCase();
+        const modifiedByStr = String(r.last_modified_by || '').toLowerCase();
         const hoursLabel = `${hoursStr} hrs`;
 
         const dateMeta = formatDateDisplay(r.date);
@@ -307,6 +399,8 @@ export default function AttendancePage({ user, users = [], onToast }) {
           statusStr,
           hoursStr,
           hoursLabel,
+          reasonStr,
+          modifiedByStr,
           dateMeta.searchTerms,
           clockInMeta.searchTerms,
           clockOutMeta.searchTerms
@@ -319,7 +413,6 @@ export default function AttendancePage({ user, users = [], onToast }) {
     });
   }, [records, searchQuery, staffFilter, dateFilter, customDate, statusFilter, todayIST, yesterdayIST, mondayOfWeek, currentMonthPrefix]);
 
-  // Check if any filters are currently active
   const hasActiveFilters = Boolean(
     searchQuery.trim() ||
     staffFilter !== 'All' ||
@@ -328,7 +421,6 @@ export default function AttendancePage({ user, users = [], onToast }) {
     statusFilter !== 'All'
   );
 
-  // Clear all filters
   const clearFilters = () => {
     setSearchQuery('');
     setStaffFilter('All');
@@ -338,7 +430,6 @@ export default function AttendancePage({ user, users = [], onToast }) {
     setPage(1);
   };
 
-  // Reset to page 1 whenever filters or search query change
   useEffect(() => {
     setPage(1);
   }, [searchQuery, staffFilter, dateFilter, customDate, statusFilter, pageSize]);
@@ -351,7 +442,6 @@ export default function AttendancePage({ user, users = [], onToast }) {
     sortList: sortAttendance
   } = useTableSort({ key: 'date', direction: 'desc' });
 
-  // Custom getters for safe time/hours comparison
   const attendanceCustomGetters = useMemo(() => ({
     clock_in: (r) => (r.clock_in ? parseSortableDate(r.clock_in) : null),
     clock_out: (r) => (r.clock_out ? parseSortableDate(r.clock_out) : null),
@@ -362,12 +452,241 @@ export default function AttendancePage({ user, users = [], onToast }) {
     return sortAttendance(filteredRecords, attendanceCustomGetters);
   }, [filteredRecords, sortAttendance, attendanceCustomGetters]);
 
-  // Pagination calculations
   const totalRecords = sortedRecords.length;
   const totalPages = Math.max(1, Math.ceil(totalRecords / pageSize));
   const currentPage = Math.min(Math.max(1, page), totalPages);
   const startIndex = (currentPage - 1) * pageSize;
   const paginatedRecords = sortedRecords.slice(startIndex, startIndex + pageSize);
+
+  // -------------------------------------------------------------
+  // Admin Action Handlers: Add Attendance
+  // -------------------------------------------------------------
+  const handleOpenAdd = () => {
+    const defaultStaff = staffOptions.length > 0 ? staffOptions[0].id : '';
+    setAddForm({
+      staff_id: defaultStaff,
+      date: getTodayIST(),
+      status: 'Present',
+      clock_in: '09:30',
+      clock_out: '18:00',
+      total_hours: '8.50',
+      reason: ''
+    });
+    setShowAddModal(true);
+  };
+
+  const handleAddStatusChange = (newStatus) => {
+    let inTime = addForm.clock_in;
+    let outTime = addForm.clock_out;
+    if (newStatus === 'Absent' || newStatus === 'Leave') {
+      inTime = '';
+      outTime = '';
+    } else if (!inTime) {
+      inTime = '09:30';
+      outTime = newStatus === 'Half Day' ? '13:30' : '18:00';
+    }
+    const hrs = calculateTotalHours(inTime, outTime, newStatus);
+    setAddForm(prev => ({
+      ...prev,
+      status: newStatus,
+      clock_in: inTime,
+      clock_out: outTime,
+      total_hours: hrs
+    }));
+  };
+
+  const handleAddClockChange = (field, val) => {
+    const updated = { ...addForm, [field]: val };
+    const hrs = calculateTotalHours(
+      field === 'clock_in' ? val : addForm.clock_in,
+      field === 'clock_out' ? val : addForm.clock_out,
+      addForm.status
+    );
+    if (hrs !== '') {
+      updated.total_hours = hrs;
+    }
+    setAddForm(updated);
+  };
+
+  const handleSubmitAdd = async (e) => {
+    e.preventDefault();
+    if (!addForm.staff_id) {
+      onToast('Please select a staff member.', true);
+      return;
+    }
+    if (!addForm.date) {
+      onToast('Please choose a date.', true);
+      return;
+    }
+    if (!addForm.reason.trim()) {
+      onToast('A reason for adding this attendance record is required.', true);
+      return;
+    }
+
+    setSavingAdd(true);
+    try {
+      const payload = {
+        staff_id: addForm.staff_id,
+        date: addForm.date,
+        status: addForm.status,
+        clock_in: addForm.clock_in ? `${addForm.clock_in}:00` : null,
+        clock_out: addForm.clock_out ? `${addForm.clock_out}:00` : null,
+        total_hours: addForm.total_hours !== '' ? parseFloat(addForm.total_hours) : 0,
+        reason: addForm.reason.trim()
+      };
+      await api.adminAddAttendance(payload);
+      onToast('Staff attendance added successfully and logged in audit history.');
+      setShowAddModal(false);
+      loadRecords();
+    } catch (err) {
+      onToast(err.message || 'Failed to add attendance record.', true);
+    } finally {
+      setSavingAdd(false);
+    }
+  };
+
+  // -------------------------------------------------------------
+  // Admin Action Handlers: Edit Attendance
+  // -------------------------------------------------------------
+  const handleOpenEdit = (rec) => {
+    setEditingRecord(rec);
+    const inTime = extractTimeString(rec.clock_in);
+    const outTime = extractTimeString(rec.clock_out);
+    setEditForm({
+      id: rec.id,
+      staff_id: String(rec.staff_id),
+      date: rec.date ? rec.date.split('T')[0] : getTodayIST(),
+      status: rec.status || 'Present',
+      clock_in: inTime,
+      clock_out: outTime,
+      total_hours: rec.total_hours != null ? String(rec.total_hours) : '',
+      reason: ''
+    });
+    setShowEditModal(true);
+  };
+
+  const handleEditStatusChange = (newStatus) => {
+    let inTime = editForm.clock_in;
+    let outTime = editForm.clock_out;
+    if (newStatus === 'Absent' || newStatus === 'Leave') {
+      inTime = '';
+      outTime = '';
+    } else if (!inTime) {
+      inTime = '09:30';
+      outTime = newStatus === 'Half Day' ? '13:30' : '18:00';
+    }
+    const hrs = calculateTotalHours(inTime, outTime, newStatus);
+    setEditForm(prev => ({
+      ...prev,
+      status: newStatus,
+      clock_in: inTime,
+      clock_out: outTime,
+      total_hours: hrs
+    }));
+  };
+
+  const handleEditClockChange = (field, val) => {
+    const updated = { ...editForm, [field]: val };
+    const hrs = calculateTotalHours(
+      field === 'clock_in' ? val : editForm.clock_in,
+      field === 'clock_out' ? val : editForm.clock_out,
+      editForm.status
+    );
+    if (hrs !== '') {
+      updated.total_hours = hrs;
+    }
+    setEditForm(updated);
+  };
+
+  const handleSubmitEdit = async (e) => {
+    e.preventDefault();
+    if (!editForm.reason.trim()) {
+      onToast('Please enter a reason for this modification.', true);
+      return;
+    }
+
+    setSavingEdit(true);
+    try {
+      const payload = {
+        staff_id: editForm.staff_id,
+        date: editForm.date,
+        status: editForm.status,
+        clock_in: editForm.clock_in ? `${editForm.clock_in}:00` : '',
+        clock_out: editForm.clock_out ? `${editForm.clock_out}:00` : '',
+        total_hours: editForm.total_hours !== '' ? parseFloat(editForm.total_hours) : 0,
+        reason: editForm.reason.trim()
+      };
+      await api.adminUpdateAttendance(editForm.id, payload);
+      onToast('Attendance record updated and audit log created successfully.');
+      setShowEditModal(false);
+      loadRecords();
+    } catch (err) {
+      onToast(err.message || 'Failed to update attendance record.', true);
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  // -------------------------------------------------------------
+  // Admin Action Handlers: Audit Log Viewer
+  // -------------------------------------------------------------
+  const loadAuditLogs = useCallback(async (attId = null) => {
+    setLoadingAudit(true);
+    try {
+      const params = {};
+      if (attId) params.attendance_id = attId;
+      const logs = await api.getAttendanceAuditLogs(params);
+      setAuditLogs(Array.isArray(logs) ? logs : []);
+    } catch (err) {
+      onToast(err.message || 'Failed to load audit logs.', true);
+    } finally {
+      setLoadingAudit(false);
+    }
+  }, [onToast]);
+
+  const handleOpenGeneralAudit = () => {
+    setTargetAttendanceId(null);
+    setAuditFilterStaff('All');
+    setAuditSearchQuery('');
+    setShowAuditModal(true);
+    loadAuditLogs(null);
+  };
+
+  const handleOpenRecordAudit = (attId) => {
+    setTargetAttendanceId(attId);
+    setAuditFilterStaff('All');
+    setAuditSearchQuery('');
+    setShowAuditModal(true);
+    loadAuditLogs(attId);
+  };
+
+  const filteredAuditLogs = useMemo(() => {
+    let list = auditLogs;
+    if (targetAttendanceId) {
+      list = list.filter(l => String(l.attendance_id) === String(targetAttendanceId));
+    }
+    if (auditFilterStaff !== 'All') {
+      list = list.filter(l => String(l.staff_id) === String(auditFilterStaff));
+    }
+    if (auditSearchQuery.trim()) {
+      const q = auditSearchQuery.trim().toLowerCase();
+      list = list.filter(l => {
+        const adminStr = String(l.admin_name || l.admin_full_name || '').toLowerCase();
+        const staffStr = String(l.staff_name || '').toLowerCase();
+        const reasonStr = String(l.reason || '').toLowerCase();
+        const actionStr = String(l.action || '').toLowerCase();
+        const dateStr = String(l.created_at || '').toLowerCase();
+        return (
+          adminStr.includes(q) ||
+          staffStr.includes(q) ||
+          reasonStr.includes(q) ||
+          actionStr.includes(q) ||
+          dateStr.includes(q)
+        );
+      });
+    }
+    return list;
+  }, [auditLogs, targetAttendanceId, auditFilterStaff, auditSearchQuery]);
 
   return (
     <div className="page-section">
@@ -375,9 +694,41 @@ export default function AttendancePage({ user, users = [], onToast }) {
       <div className="page-head">
         <div>
           <h2>Staff Attendance</h2>
-          <p>Track and filter daily staff clock-in, clock-out, and attendance history.</p>
+          <p>
+            {isAdmin
+              ? 'Comprehensive administrative attendance tracking, adjustments, missing entry additions, and audit logging.'
+              : 'Track and review your daily clock-in, clock-out, and attendance history.'}
+          </p>
         </div>
         <div className="controls">
+          {/* Admin Management Buttons */}
+          {isAdmin && (
+            <>
+              <button
+                className="btn btn-primary"
+                type="button"
+                onClick={handleOpenAdd}
+                title="Add or mark missing attendance for staff"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+              >
+                <span className="ic"><Icon name="plus" size={16} /></span>
+                Add Staff Attendance
+              </button>
+
+              <button
+                className="btn"
+                type="button"
+                onClick={handleOpenGeneralAudit}
+                title="View complete audit log of modifications"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+              >
+                <span className="ic"><Icon name="history" size={16} /></span>
+                Audit Log
+              </button>
+            </>
+          )}
+
+          {/* Clock In / Clock Out for current user */}
           <button
             className="btn btn-primary"
             type="button"
@@ -410,7 +761,7 @@ export default function AttendancePage({ user, users = [], onToast }) {
             <input
               className="input"
               type="search"
-              placeholder="Search staff, date, clock-in, clock-out, status, hours..."
+              placeholder="Search staff, date, clock-in, clock-out, status, reason..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               autoComplete="off"
@@ -419,7 +770,7 @@ export default function AttendancePage({ user, users = [], onToast }) {
           </div>
 
           {/* Staff Member Dropdown (Visible for Admins) */}
-          {user?.role === 'admin' && (
+          {isAdmin && (
             <div className="fl">
               <select
                 className="select"
@@ -465,7 +816,7 @@ export default function AttendancePage({ user, users = [], onToast }) {
             </select>
           </div>
 
-          {/* Custom Date Picker (when 'Specific Date...' is chosen) */}
+          {/* Custom Date Picker */}
           {dateFilter === 'custom' && (
             <div className="fl">
               <input
@@ -542,7 +893,7 @@ export default function AttendancePage({ user, users = [], onToast }) {
             <table className="table mobile-card-stack">
               <thead>
                 <tr>
-                  {user?.role === 'admin' && (
+                  {isAdmin && (
                     <SortableTh colKey="staff_name" label="Staff Member" sortKey={attendanceSortKey} sortDirection={attendanceSortDir} onSort={handleAttendanceSort} />
                   )}
                   <SortableTh colKey="date" label="Date" sortKey={attendanceSortKey} sortDirection={attendanceSortDir} onSort={handleAttendanceSort} />
@@ -550,6 +901,9 @@ export default function AttendancePage({ user, users = [], onToast }) {
                   <SortableTh colKey="clock_out" label="Clock Out" sortKey={attendanceSortKey} sortDirection={attendanceSortDir} onSort={handleAttendanceSort} />
                   <SortableTh colKey="total_hours" label="Total Hours" sortKey={attendanceSortKey} sortDirection={attendanceSortDir} onSort={handleAttendanceSort} />
                   <SortableTh colKey="status" label="Status" sortKey={attendanceSortKey} sortDirection={attendanceSortDir} onSort={handleAttendanceSort} />
+                  {isAdmin && (
+                    <th style={{ width: '130px', textAlign: 'center' }}>Actions</th>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -562,13 +916,38 @@ export default function AttendancePage({ user, users = [], onToast }) {
 
                     return (
                       <tr key={r.id}>
-                        {user?.role === 'admin' && (
+                        {isAdmin && (
                           <td data-label="Staff Member">
                             <b>{r.staff_name || `Staff #${r.staff_id}`}</b>
+                            {r.staff_username && (
+                              <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--muted)' }}>
+                                @{r.staff_username}
+                              </span>
+                            )}
                           </td>
                         )}
                         <td data-label="Date">
                           <span>{dateMeta.display}</span>
+                          {Boolean(r.is_admin_modified) && (
+                            <div style={{ marginTop: '3px' }}>
+                              <span
+                                className="pill"
+                                style={{
+                                  background: '#fef3c7',
+                                  color: '#92400e',
+                                  border: '1px solid #fde68a',
+                                  fontSize: '0.70rem',
+                                  padding: '2px 6px',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '3px'
+                                }}
+                                title={`Adjusted by ${r.last_modified_by || 'Admin'}${r.last_modified_at ? ' on ' + formatAuditDateTime(r.last_modified_at) : ''}${r.modification_reason ? '\nReason: ' + r.modification_reason : ''}`}
+                              >
+                                ✏ Adjusted
+                              </span>
+                            </div>
+                          )}
                         </td>
                         <td data-label="Clock In">
                           {clockInMeta.display ? (
@@ -580,15 +959,17 @@ export default function AttendancePage({ user, users = [], onToast }) {
                         <td data-label="Clock Out">
                           {clockOutMeta.display ? (
                             <span>{clockOutMeta.display}</span>
-                          ) : (
+                          ) : r.clock_in && !['absent', 'leave'].includes(String(r.status || '').toLowerCase()) ? (
                             <span className="pill s-active" title="Clocked in, awaiting clock-out">
                               Active
                             </span>
+                          ) : (
+                            <span className="muted">-</span>
                           )}
                         </td>
                         <td data-label="Total Hours">
                           {r.total_hours != null && r.total_hours !== '' ? (
-                            <span>{r.total_hours} hrs</span>
+                            <span>{Number(r.total_hours).toFixed(2)} hrs</span>
                           ) : !r.clock_out && r.clock_in ? (
                             <span className="muted" style={{ fontSize: '0.82rem' }}>In progress</span>
                           ) : (
@@ -600,12 +981,37 @@ export default function AttendancePage({ user, users = [], onToast }) {
                             {r.status || 'Present'}
                           </span>
                         </td>
+                        {isAdmin && (
+                          <td data-label="Actions" style={{ textAlign: 'center' }}>
+                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                              <button
+                                className="btn sm"
+                                type="button"
+                                onClick={() => handleOpenEdit(r)}
+                                title="Edit check-in, check-out, date, or status"
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '4px 8px' }}
+                              >
+                                <span className="ic"><Icon name="edit" size={13} /></span>
+                                Edit
+                              </button>
+                              <button
+                                className="btn sm icon-btn"
+                                type="button"
+                                onClick={() => handleOpenRecordAudit(r.id)}
+                                title="View audit history for this record"
+                                aria-label="View audit log"
+                              >
+                                <span className="ic"><Icon name="history" size={14} /></span>
+                              </button>
+                            </div>
+                          </td>
+                        )}
                       </tr>
                     );
                   })
                 ) : (
                   <tr className="empty-row">
-                    <td colSpan={user?.role === 'admin' ? 6 : 5}>
+                    <td colSpan={isAdmin ? 7 : 5}>
                       {records.length === 0 ? (
                         <div className="empty">
                           <div className="ei"><Icon name="inbox" size={24} /></div>
@@ -678,6 +1084,678 @@ export default function AttendancePage({ user, users = [], onToast }) {
           </>
         )}
       </div>
+
+      {/* ============================================================ */}
+      {/* MODAL 1: Add Missing Staff Attendance (Admin Only)          */}
+      {/* ============================================================ */}
+      {showAddModal && (
+        <div
+          className="modal-backdrop"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.65)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1050,
+            padding: '16px'
+          }}
+          onClick={(e) => { if (e.target === e.currentTarget) setShowAddModal(false); }}
+        >
+          <div
+            className="modal"
+            style={{
+              background: '#fff',
+              borderRadius: '12px',
+              maxWidth: '540px',
+              width: '100%',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04)'
+            }}
+          >
+            <div className="modal-head" style={{ padding: '16px 20px', borderBottom: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.15rem' }}>Add Staff Attendance</h3>
+                <p style={{ margin: '3px 0 0', fontSize: '0.82rem', color: 'var(--muted)' }}>
+                  Record missing attendance for an employee for today or previous dates.
+                </p>
+              </div>
+              <button
+                className="btn close-btn"
+                type="button"
+                onClick={() => setShowAddModal(false)}
+                aria-label="Close modal"
+              >
+                ×
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmitAdd}>
+              <div className="modal-body" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                {/* Staff Member */}
+                <div>
+                  <label className="label" style={{ fontWeight: 600, fontSize: '0.85rem', display: 'block', marginBottom: '4px' }}>
+                    Staff Member *
+                  </label>
+                  <select
+                    className="select"
+                    value={addForm.staff_id}
+                    onChange={(e) => setAddForm({ ...addForm, staff_id: e.target.value })}
+                    required
+                    style={{ width: '100%' }}
+                  >
+                    <option value="" disabled>-- Select Staff Member --</option>
+                    {staffOptions.map(s => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Date & Status Grid */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div>
+                    <label className="label" style={{ fontWeight: 600, fontSize: '0.85rem', display: 'block', marginBottom: '4px' }}>
+                      Attendance Date *
+                    </label>
+                    <input
+                      type="date"
+                      className="input"
+                      value={addForm.date}
+                      onChange={(e) => setAddForm({ ...addForm, date: e.target.value })}
+                      required
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+                  <div>
+                    <label className="label" style={{ fontWeight: 600, fontSize: '0.85rem', display: 'block', marginBottom: '4px' }}>
+                      Attendance Status *
+                    </label>
+                    <select
+                      className="select"
+                      value={addForm.status}
+                      onChange={(e) => handleAddStatusChange(e.target.value)}
+                      required
+                      style={{ width: '100%' }}
+                    >
+                      <option value="Present">Present</option>
+                      <option value="Half Day">Half Day</option>
+                      <option value="Leave">Leave</option>
+                      <option value="Absent">Absent</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Clock In & Clock Out */}
+                {!['Absent', 'Leave'].includes(addForm.status) && (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+                    <div>
+                      <label className="label" style={{ fontWeight: 600, fontSize: '0.82rem', display: 'block', marginBottom: '4px' }}>
+                        Clock In
+                      </label>
+                      <input
+                        type="time"
+                        className="input"
+                        value={addForm.clock_in}
+                        onChange={(e) => handleAddClockChange('clock_in', e.target.value)}
+                        style={{ width: '100%' }}
+                      />
+                    </div>
+                    <div>
+                      <label className="label" style={{ fontWeight: 600, fontSize: '0.82rem', display: 'block', marginBottom: '4px' }}>
+                        Clock Out
+                      </label>
+                      <input
+                        type="time"
+                        className="input"
+                        value={addForm.clock_out}
+                        onChange={(e) => handleAddClockChange('clock_out', e.target.value)}
+                        style={{ width: '100%' }}
+                      />
+                    </div>
+                    <div>
+                      <label className="label" style={{ fontWeight: 600, fontSize: '0.82rem', display: 'block', marginBottom: '4px' }}>
+                        Total Hours
+                      </label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        max="24"
+                        className="input"
+                        value={addForm.total_hours}
+                        onChange={(e) => setAddForm({ ...addForm, total_hours: e.target.value })}
+                        placeholder="8.5"
+                        style={{ width: '100%' }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Mandatory Reason */}
+                <div>
+                  <label className="label" style={{ fontWeight: 600, fontSize: '0.85rem', display: 'block', marginBottom: '4px' }}>
+                    Reason for Adding Attendance *
+                  </label>
+                  <textarea
+                    className="input"
+                    rows={3}
+                    value={addForm.reason}
+                    onChange={(e) => setAddForm({ ...addForm, reason: e.target.value })}
+                    required
+                    placeholder="e.g. Employee forgot to clock in; worked regular shift verified with department head."
+                    style={{ width: '100%', resize: 'vertical' }}
+                  />
+                  <span style={{ fontSize: '0.75rem', color: 'var(--muted)', display: 'block', marginTop: '2px' }}>
+                    This reason will be permanently recorded in the administrator audit log.
+                  </span>
+                </div>
+              </div>
+
+              <div className="modal-footer" style={{ padding: '14px 20px', borderTop: '1px solid var(--line)', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => setShowAddModal(false)}
+                  disabled={savingAdd}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={savingAdd}
+                >
+                  {savingAdd ? 'Saving...' : 'Add Attendance Record'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================ */}
+      {/* MODAL 2: Edit Staff Attendance (Admin Only)                 */}
+      {/* ============================================================ */}
+      {showEditModal && editingRecord && (
+        <div
+          className="modal-backdrop"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.65)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1050,
+            padding: '16px'
+          }}
+          onClick={(e) => { if (e.target === e.currentTarget) setShowEditModal(false); }}
+        >
+          <div
+            className="modal"
+            style={{
+              background: '#fff',
+              borderRadius: '12px',
+              maxWidth: '560px',
+              width: '100%',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04)'
+            }}
+          >
+            <div className="modal-head" style={{ padding: '16px 20px', borderBottom: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.15rem' }}>Edit Attendance Record</h3>
+                <p style={{ margin: '3px 0 0', fontSize: '0.82rem', color: 'var(--muted)' }}>
+                  Modifying attendance for <b>{editingRecord.staff_name || `Staff #${editingRecord.staff_id}`}</b>
+                </p>
+              </div>
+              <button
+                className="btn close-btn"
+                type="button"
+                onClick={() => setShowEditModal(false)}
+                aria-label="Close modal"
+              >
+                ×
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmitEdit}>
+              <div className="modal-body" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                {/* Previous State Card for Reference */}
+                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 14px', fontSize: '0.82rem' }}>
+                  <div style={{ fontWeight: 600, color: '#475569', marginBottom: '4px' }}>Original Record Summary:</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', color: '#64748b' }}>
+                    <div><b>Date:</b> {editingRecord.date}</div>
+                    <div><b>Status:</b> {editingRecord.status || 'Present'}</div>
+                    <div><b>Clock In:</b> {formatTimeDisplay(editingRecord.clock_in).display || 'None'}</div>
+                    <div><b>Clock Out:</b> {formatTimeDisplay(editingRecord.clock_out).display || 'None'}</div>
+                    <div><b>Total Hours:</b> {editingRecord.total_hours != null ? `${editingRecord.total_hours} hrs` : '-'}</div>
+                  </div>
+                </div>
+
+                {/* Staff Selection (can reassign if wrong staff was marked) */}
+                <div>
+                  <label className="label" style={{ fontWeight: 600, fontSize: '0.85rem', display: 'block', marginBottom: '4px' }}>
+                    Staff Member *
+                  </label>
+                  <select
+                    className="select"
+                    value={editForm.staff_id}
+                    onChange={(e) => setEditForm({ ...editForm, staff_id: e.target.value })}
+                    required
+                    style={{ width: '100%' }}
+                  >
+                    {staffOptions.map(s => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Date & Status */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div>
+                    <label className="label" style={{ fontWeight: 600, fontSize: '0.85rem', display: 'block', marginBottom: '4px' }}>
+                      Date *
+                    </label>
+                    <input
+                      type="date"
+                      className="input"
+                      value={editForm.date}
+                      onChange={(e) => setEditForm({ ...editForm, date: e.target.value })}
+                      required
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+                  <div>
+                    <label className="label" style={{ fontWeight: 600, fontSize: '0.85rem', display: 'block', marginBottom: '4px' }}>
+                      Status *
+                    </label>
+                    <select
+                      className="select"
+                      value={editForm.status}
+                      onChange={(e) => handleEditStatusChange(e.target.value)}
+                      required
+                      style={{ width: '100%' }}
+                    >
+                      <option value="Present">Present</option>
+                      <option value="Half Day">Half Day</option>
+                      <option value="Leave">Leave</option>
+                      <option value="Absent">Absent</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Clock In, Clock Out, Total Hours */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+                  <div>
+                    <label className="label" style={{ fontWeight: 600, fontSize: '0.82rem', display: 'block', marginBottom: '4px' }}>
+                      Clock In Time
+                    </label>
+                    <input
+                      type="time"
+                      className="input"
+                      value={editForm.clock_in}
+                      onChange={(e) => handleEditClockChange('clock_in', e.target.value)}
+                      disabled={['Absent', 'Leave'].includes(editForm.status)}
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+                  <div>
+                    <label className="label" style={{ fontWeight: 600, fontSize: '0.82rem', display: 'block', marginBottom: '4px' }}>
+                      Clock Out Time
+                    </label>
+                    <input
+                      type="time"
+                      className="input"
+                      value={editForm.clock_out}
+                      onChange={(e) => handleEditClockChange('clock_out', e.target.value)}
+                      disabled={['Absent', 'Leave'].includes(editForm.status)}
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+                  <div>
+                    <label className="label" style={{ fontWeight: 600, fontSize: '0.82rem', display: 'block', marginBottom: '4px' }}>
+                      Total Hours
+                    </label>
+                    <input
+                      type="number"
+                      step="0.05"
+                      min="0"
+                      max="24"
+                      className="input"
+                      value={editForm.total_hours}
+                      onChange={(e) => setEditForm({ ...editForm, total_hours: e.target.value })}
+                      placeholder="0.00"
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+                </div>
+
+                {/* Mandatory Modification Reason */}
+                <div>
+                  <label className="label" style={{ fontWeight: 600, fontSize: '0.85rem', display: 'block', marginBottom: '4px' }}>
+                    Reason for Modification *
+                  </label>
+                  <textarea
+                    className="input"
+                    rows={3}
+                    value={editForm.reason}
+                    onChange={(e) => setEditForm({ ...editForm, reason: e.target.value })}
+                    required
+                    placeholder="Enter the specific reason for updating this record (e.g. Employee forgot to punch out at 6:00 PM; verified with shift supervisor)..."
+                    style={{ width: '100%', resize: 'vertical' }}
+                  />
+                  <span style={{ fontSize: '0.75rem', color: 'var(--muted)', display: 'block', marginTop: '2px' }}>
+                    Every change is recorded in the permanent audit trail with admin name and timestamp.
+                  </span>
+                </div>
+              </div>
+
+              <div className="modal-footer" style={{ padding: '14px 20px', borderTop: '1px solid var(--line)', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => setShowEditModal(false)}
+                  disabled={savingEdit}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={savingEdit}
+                >
+                  {savingEdit ? 'Saving Changes...' : 'Save & Log Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================ */}
+      {/* MODAL 3: Audit Log Viewer (Admin Only)                      */}
+      {/* ============================================================ */}
+      {showAuditModal && (
+        <div
+          className="modal-backdrop"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.65)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1050,
+            padding: '16px'
+          }}
+          onClick={(e) => { if (e.target === e.currentTarget) setShowAuditModal(false); }}
+        >
+          <div
+            className="modal"
+            style={{
+              background: '#fff',
+              borderRadius: '12px',
+              maxWidth: '840px',
+              width: '100%',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04)',
+              display: 'flex',
+              flexDirection: 'column'
+            }}
+          >
+            <div className="modal-head" style={{ padding: '16px 20px', borderBottom: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Icon name="history" size={20} />
+                  Staff Attendance Audit Log
+                </h3>
+                <p style={{ margin: '3px 0 0', fontSize: '0.82rem', color: 'var(--muted)' }}>
+                  {targetAttendanceId
+                    ? `Showing modification history for Attendance Entry #${targetAttendanceId}`
+                    : 'Complete immutable log of all administrator attendance additions and adjustments.'}
+                </p>
+              </div>
+              <button
+                className="btn close-btn"
+                type="button"
+                onClick={() => setShowAuditModal(false)}
+                aria-label="Close audit modal"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Audit Toolbar */}
+            <div style={{ padding: '12px 20px', borderBottom: '1px solid var(--line)', background: '#f8fafc', display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <div className="search" style={{ minWidth: '220px', flex: 1 }}>
+                <span className="si"><Icon name="search" size={16} /></span>
+                <input
+                  type="search"
+                  className="input"
+                  placeholder="Search admin, staff, reason, action..."
+                  value={auditSearchQuery}
+                  onChange={(e) => setAuditSearchQuery(e.target.value)}
+                  style={{ fontSize: '0.85rem' }}
+                />
+              </div>
+
+              {!targetAttendanceId && (
+                <div className="fl">
+                  <select
+                    className="select"
+                    value={auditFilterStaff}
+                    onChange={(e) => setAuditFilterStaff(e.target.value)}
+                    style={{ fontSize: '0.85rem', minWidth: '150px' }}
+                  >
+                    <option value="All">All Staff Members</option>
+                    {staffOptions.map(s => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {targetAttendanceId && (
+                <button
+                  type="button"
+                  className="btn sm"
+                  onClick={() => { setTargetAttendanceId(null); loadAuditLogs(null); }}
+                  title="Show all records"
+                >
+                  Show All Staff Logs
+                </button>
+              )}
+
+              <button
+                type="button"
+                className="btn sm icon-btn"
+                onClick={() => loadAuditLogs(targetAttendanceId)}
+                title="Refresh audit log"
+              >
+                <span className={`ic ${loadingAudit ? 'spin' : ''}`}><Icon name="refresh" size={15} /></span>
+              </button>
+            </div>
+
+            {/* Audit Log Content List */}
+            <div style={{ padding: '16px 20px', overflowY: 'auto', flex: 1 }}>
+              {loadingAudit ? (
+                <div style={{ padding: '2.5rem', textAlign: 'center', color: 'var(--muted)' }}>
+                  Loading audit trail...
+                </div>
+              ) : filteredAuditLogs.length === 0 ? (
+                <div style={{ padding: '2.5rem', textAlign: 'center', color: 'var(--muted)' }}>
+                  <div style={{ marginBottom: '8px' }}><Icon name="inbox" size={30} /></div>
+                  <b>No audit logs found</b>
+                  <p style={{ margin: '4px 0 0', fontSize: '0.82rem' }}>
+                    Modifications made by administrators will be permanently listed here.
+                  </p>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  {filteredAuditLogs.map((log) => {
+                    const prev = log.previous_data || {};
+                    const next = log.updated_data || {};
+                    const isCreate = log.action === 'CREATE';
+
+                    return (
+                      <div
+                        key={log.id}
+                        style={{
+                          border: '1px solid #e2e8f0',
+                          borderRadius: '10px',
+                          padding: '14px 16px',
+                          background: '#fff',
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+                        }}
+                      >
+                        {/* Audit Header */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '8px', marginBottom: '10px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span
+                              className="pill"
+                              style={{
+                                background: isCreate ? '#dcfce7' : '#e0e7ff',
+                                color: isCreate ? '#15803d' : '#4338ca',
+                                fontWeight: 700,
+                                fontSize: '0.75rem',
+                                padding: '3px 8px'
+                              }}
+                            >
+                              {isCreate ? '+ MANUAL ENTRY' : '✏ MODIFICATION'}
+                            </span>
+                            <span style={{ fontWeight: 600, fontSize: '0.92rem', color: '#1e293b' }}>
+                              {log.staff_name || `Staff #${log.staff_id}`}
+                            </span>
+                            <span style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>
+                              (Entry #{log.attendance_id})
+                            </span>
+                          </div>
+                          <div style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>
+                            {formatAuditDateTime(log.created_at)}
+                          </div>
+                        </div>
+
+                        {/* Admin Badge */}
+                        <div style={{ fontSize: '0.82rem', color: '#475569', marginBottom: '10px' }}>
+                          Modified by: <b>{log.admin_name || log.admin_full_name || 'Admin'}</b>
+                        </div>
+
+                        {/* Changes Comparison */}
+                        <div style={{ background: '#f8fafc', borderRadius: '8px', padding: '10px 12px', fontSize: '0.82rem', marginBottom: '10px' }}>
+                          {isCreate ? (
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px' }}>
+                              <div><b>Date:</b> {next.date || '-'}</div>
+                              <div><b>Status:</b> {next.status || 'Present'}</div>
+                              <div><b>Clock In:</b> {formatTimeDisplay(next.clock_in).display || 'None'}</div>
+                              <div><b>Clock Out:</b> {formatTimeDisplay(next.clock_out).display || 'None'}</div>
+                              <div><b>Total Hours:</b> {next.total_hours != null ? `${next.total_hours} hrs` : '-'}</div>
+                            </div>
+                          ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                              {/* Date change */}
+                              {prev.date !== next.date && (
+                                <div>
+                                  <span style={{ fontWeight: 600, color: '#475569' }}>Date: </span>
+                                  <span style={{ textDecoration: 'line-through', color: '#ef4444' }}>{prev.date}</span>
+                                  <span style={{ margin: '0 6px', color: '#64748b' }}>→</span>
+                                  <span style={{ fontWeight: 600, color: '#16a34a' }}>{next.date}</span>
+                                </div>
+                              )}
+
+                              {/* Status change */}
+                              {prev.status !== next.status && (
+                                <div>
+                                  <span style={{ fontWeight: 600, color: '#475569' }}>Status: </span>
+                                  <span style={{ textDecoration: 'line-through', color: '#ef4444' }}>{prev.status || 'None'}</span>
+                                  <span style={{ margin: '0 6px', color: '#64748b' }}>→</span>
+                                  <span style={{ fontWeight: 600, color: '#16a34a' }}>{next.status || 'None'}</span>
+                                </div>
+                              )}
+
+                              {/* Clock In change */}
+                              {prev.clock_in !== next.clock_in && (
+                                <div>
+                                  <span style={{ fontWeight: 600, color: '#475569' }}>Clock In: </span>
+                                  <span style={{ textDecoration: 'line-through', color: '#ef4444' }}>
+                                    {formatTimeDisplay(prev.clock_in).display || 'None'}
+                                  </span>
+                                  <span style={{ margin: '0 6px', color: '#64748b' }}>→</span>
+                                  <span style={{ fontWeight: 600, color: '#16a34a' }}>
+                                    {formatTimeDisplay(next.clock_in).display || 'None'}
+                                  </span>
+                                </div>
+                              )}
+
+                              {/* Clock Out change */}
+                              {prev.clock_out !== next.clock_out && (
+                                <div>
+                                  <span style={{ fontWeight: 600, color: '#475569' }}>Clock Out: </span>
+                                  <span style={{ textDecoration: 'line-through', color: '#ef4444' }}>
+                                    {formatTimeDisplay(prev.clock_out).display || 'None'}
+                                  </span>
+                                  <span style={{ margin: '0 6px', color: '#64748b' }}>→</span>
+                                  <span style={{ fontWeight: 600, color: '#16a34a' }}>
+                                    {formatTimeDisplay(next.clock_out).display || 'None'}
+                                  </span>
+                                </div>
+                              )}
+
+                              {/* Total Hours change */}
+                              {String(prev.total_hours) !== String(next.total_hours) && (
+                                <div>
+                                  <span style={{ fontWeight: 600, color: '#475569' }}>Total Hours: </span>
+                                  <span style={{ textDecoration: 'line-through', color: '#ef4444' }}>
+                                    {prev.total_hours != null ? `${prev.total_hours} hrs` : '-'}
+                                  </span>
+                                  <span style={{ margin: '0 6px', color: '#64748b' }}>→</span>
+                                  <span style={{ fontWeight: 600, color: '#16a34a' }}>
+                                    {next.total_hours != null ? `${next.total_hours} hrs` : '-'}
+                                  </span>
+                                </div>
+                              )}
+
+                              {/* In case fields were unchanged or re-saved */}
+                              {prev.date === next.date &&
+                               prev.status === next.status &&
+                               prev.clock_in === next.clock_in &&
+                               prev.clock_out === next.clock_out &&
+                               String(prev.total_hours) === String(next.total_hours) && (
+                                <div style={{ color: '#64748b' }}>
+                                  Record re-validated by administrator ({next.status || 'Present'}, {formatTimeDisplay(next.clock_in).display || '-'} to {formatTimeDisplay(next.clock_out).display || '-'})
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Stated Reason */}
+                        <div style={{ background: '#fef3c7', borderLeft: '3px solid #f59e0b', padding: '8px 12px', borderRadius: '4px', fontSize: '0.82rem', color: '#92400e' }}>
+                          <b>Modification Reason:</b> "{log.reason}"
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="modal-footer" style={{ padding: '12px 20px', borderTop: '1px solid var(--line)', display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => setShowAuditModal(false)}
+              >
+                Close Audit Log
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
