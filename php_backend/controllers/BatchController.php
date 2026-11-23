@@ -1,6 +1,43 @@
 <?php
 
+function ensureBatchesTable($pdo) {
+    static $initialized = false;
+    if ($initialized) return;
+    try {
+        $pdo->exec("CREATE TABLE IF NOT EXISTS `institute_batches` (
+            `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `batch_name` VARCHAR(255) DEFAULT NULL,
+            `batch_time` VARCHAR(100) NOT NULL,
+            `instructor_id` BIGINT UNSIGNED DEFAULT NULL,
+            `course_name` VARCHAR(255) NOT NULL,
+            `topic` VARCHAR(255) DEFAULT NULL,
+            `student_count` INT DEFAULT 0,
+            `students` TEXT DEFAULT NULL,
+            `status` VARCHAR(50) DEFAULT 'Upcoming',
+            `date` DATE NOT NULL,
+            `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            KEY `idx_batch_time` (`batch_time`),
+            KEY `idx_instructor` (`instructor_id`),
+            KEY `idx_course` (`course_name`(100))
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
+
+        try {
+            $pdo->exec("ALTER TABLE `institute_batches` ADD COLUMN `batch_name` VARCHAR(255) DEFAULT NULL AFTER `id`;");
+        } catch (Exception $e) {}
+        try {
+            $pdo->exec("ALTER TABLE `institute_batches` ADD COLUMN `students` TEXT DEFAULT NULL AFTER `student_count`;");
+        } catch (Exception $e) {}
+
+        $initialized = true;
+    } catch (Exception $e) {
+        error_log("Batch table setup warning: " . $e->getMessage());
+    }
+}
+
 function getBatches($pdo) {
+    ensureBatchesTable($pdo);
     try {
         $date = $_GET['date'] ?? null;
         $course = $_GET['course'] ?? null;
@@ -37,7 +74,9 @@ function getBatches($pdo) {
 
         if (!empty($q)) {
             $like = "%" . trim($q) . "%";
-            $conditions[] = "(b.course_name LIKE ? OR b.topic LIKE ? OR u.full_name LIKE ? OR b.batch_time LIKE ? OR b.status LIKE ?)";
+            $conditions[] = "(b.course_name LIKE ? OR b.topic LIKE ? OR b.batch_name LIKE ? OR u.full_name LIKE ? OR b.batch_time LIKE ? OR b.status LIKE ? OR b.students LIKE ?)";
+            $params[] = $like;
+            $params[] = $like;
             $params[] = $like;
             $params[] = $like;
             $params[] = $like;
@@ -48,7 +87,9 @@ function getBatches($pdo) {
         $whereClause = !empty($conditions) ? "WHERE " . implode(" AND ", $conditions) : "";
 
         $stmt = $pdo->prepare("
-            SELECT b.*, u.full_name as instructor_name 
+            SELECT b.*, 
+                   COALESCE(b.batch_name, b.topic, b.course_name) as display_name,
+                   u.full_name as instructor_name 
             FROM institute_batches b 
             LEFT JOIN portal_users u ON u.id = b.instructor_id 
             {$whereClause}
@@ -96,10 +137,18 @@ function getBatches($pdo) {
 }
 
 function getBatchFilterOptions($pdo) {
+    ensureBatchesTable($pdo);
     try {
         $courses = [];
         try {
             $stmt = $pdo->query("SELECT DISTINCT course_name FROM institute_batches WHERE course_name IS NOT NULL AND TRIM(course_name) != '' ORDER BY course_name ASC");
+            while ($row = $stmt->fetchColumn()) {
+                if ($row) $courses[] = trim($row);
+            }
+        } catch (Exception $e) {}
+
+        try {
+            $stmt = $pdo->query("SELECT DISTINCT name FROM courses WHERE is_active = 1 AND name IS NOT NULL AND TRIM(name) != '' ORDER BY name ASC");
             while ($row = $stmt->fetchColumn()) {
                 if ($row) $courses[] = trim($row);
             }
@@ -148,29 +197,89 @@ function getBatchFilterOptions($pdo) {
 }
 
 function createBatch($pdo, $user, $body) {
+    ensureBatchesTable($pdo);
     try {
-        $batchTime = $body['batchTime'] ?? null;
-        $instructorId = $user['role'] === 'admin' ? ($body['instructorId'] ?? null) : $user['sub'];
-        $courseName = $body['courseName'] ?? null;
-        $topic = $body['topic'] ?? null;
-        $studentCount = $body['studentCount'] ?? 0;
-        $status = $body['status'] ?? 'Upcoming';
-        $date = $body['date'] ?? date('Y-m-d');
-
-        if (!$batchTime || !$courseName || !$date) {
-            http_response_code(400);
-            echo json_encode(["message" => "Batch time, course name, and date are required."]);
+        $userRole = strtolower($user['role'] ?? '');
+        if ($userRole !== 'admin' && $userRole !== 'teacher') {
+            http_response_code(403);
+            echo json_encode(["message" => "Access denied. Only administrators and authorized teachers can create batches."]);
             return;
         }
 
-        $stmt = $pdo->prepare("INSERT INTO institute_batches (batch_time, instructor_id, course_name, topic, student_count, status, `date`) VALUES (?, ?, ?, ?, ?, ?, ?)");
-        $stmt->execute([$batchTime, $instructorId, $courseName, $topic, $studentCount, $status, $date]);
-        
+        $batchTime = trim($body['batchTime'] ?? $body['batch_time'] ?? '');
+        $courseName = trim($body['courseName'] ?? $body['course_name'] ?? '');
+        $batchName = trim($body['batchName'] ?? $body['batch_name'] ?? '');
+        $topic = trim($body['topic'] ?? '');
+        $status = trim($body['status'] ?? 'Upcoming');
+        $date = trim($body['date'] ?? date('Y-m-d'));
+        $students = trim($body['students'] ?? '');
+
+        // Instructor ID
+        $instructorId = null;
+        if (array_key_exists('instructorId', $body) || array_key_exists('instructor_id', $body)) {
+            $rawInst = $body['instructorId'] ?? $body['instructor_id'];
+            if ($rawInst !== '' && $rawInst !== '0' && $rawInst !== 0 && $rawInst !== null && strtolower(strval($rawInst)) !== 'unassigned') {
+                $instructorId = (int)$rawInst;
+            }
+        }
+        if ($instructorId === null && $userRole === 'teacher') {
+            $instructorId = (int)$user['sub'];
+        }
+
+        // Student count
+        $studentCount = 0;
+        if (isset($body['studentCount']) && is_numeric($body['studentCount'])) {
+            $studentCount = (int)$body['studentCount'];
+        } elseif (isset($body['student_count']) && is_numeric($body['student_count'])) {
+            $studentCount = (int)$body['student_count'];
+        } elseif (!empty($students)) {
+            $items = array_filter(array_map('trim', preg_split('/[\r\n,]+/', $students)));
+            $studentCount = count($items);
+        }
+
+        if (!$batchTime || !$courseName) {
+            http_response_code(400);
+            echo json_encode(["message" => "Batch time slot and course name are required."]);
+            return;
+        }
+
+        if (empty($batchName)) {
+            $batchName = $topic ?: "{$courseName} ({$batchTime})";
+        }
+        if (empty($topic)) {
+            $topic = $batchName;
+        }
+
+        $stmt = $pdo->prepare("
+            INSERT INTO institute_batches 
+                (batch_name, batch_time, instructor_id, course_name, topic, student_count, students, status, `date`) 
+            VALUES 
+                (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ");
+        $stmt->execute([
+            $batchName,
+            $batchTime,
+            $instructorId,
+            $courseName,
+            $topic,
+            $studentCount,
+            $students,
+            $status,
+            $date
+        ]);
+
         $id = $pdo->lastInsertId();
-        $stmt = $pdo->prepare("SELECT * FROM institute_batches WHERE id = ?");
+        $stmt = $pdo->prepare("
+            SELECT b.*, u.full_name as instructor_name 
+            FROM institute_batches b 
+            LEFT JOIN portal_users u ON u.id = b.instructor_id 
+            WHERE b.id = ?
+        ");
         $stmt->execute([$id]);
-        
-        echo json_encode($stmt->fetch());
+        $record = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        http_response_code(201);
+        echo json_encode($record);
     } catch (PDOException $e) {
         http_response_code(500);
         echo json_encode(["message" => "Database error: " . $e->getMessage()]);
@@ -178,10 +287,18 @@ function createBatch($pdo, $user, $body) {
 }
 
 function updateBatch($pdo, $user, $id, $body) {
+    ensureBatchesTable($pdo);
     try {
+        $userRole = strtolower($user['role'] ?? '');
+        if ($userRole !== 'admin' && $userRole !== 'teacher') {
+            http_response_code(403);
+            echo json_encode(["message" => "Access denied. Only administrators and authorized teachers can edit batches."]);
+            return;
+        }
+
         $stmt = $pdo->prepare("SELECT * FROM institute_batches WHERE id = ?");
         $stmt->execute([$id]);
-        $batch = $stmt->fetch();
+        $batch = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if (!$batch) {
             http_response_code(404);
@@ -190,26 +307,72 @@ function updateBatch($pdo, $user, $id, $body) {
         }
 
         $isAssignedToOther = !empty($batch['instructor_id']) && (int)$batch['instructor_id'] !== (int)$user['sub'];
-        if ($user['role'] !== 'admin' && $isAssignedToOther) {
+        if ($userRole !== 'admin' && $isAssignedToOther) {
             http_response_code(403);
             echo json_encode(["message" => "Access denied. You can only edit your own batches or unassigned batches."]);
             return;
         }
 
-        $batchTime = $body['batchTime'] ?? $batch['batch_time'];
-        $instructorId = array_key_exists('instructorId', $body) ? $body['instructorId'] : $batch['instructor_id'];
-        if ($instructorId === '' || $instructorId === '0' || $instructorId === 0) {
-            $instructorId = null;
+        $batchName = array_key_exists('batchName', $body) 
+            ? trim($body['batchName']) 
+            : (array_key_exists('batch_name', $body) ? trim($body['batch_name']) : ($batch['batch_name'] ?? $batch['topic']));
+
+        $batchTime = trim($body['batchTime'] ?? $body['batch_time'] ?? $batch['batch_time']);
+        $courseName = trim($body['courseName'] ?? $body['course_name'] ?? $batch['course_name']);
+        $topic = array_key_exists('topic', $body) ? trim($body['topic']) : $batch['topic'];
+        $status = trim($body['status'] ?? $batch['status']);
+        $date = trim($body['date'] ?? $batch['date'] ?? date('Y-m-d'));
+        $students = array_key_exists('students', $body) ? trim($body['students']) : ($batch['students'] ?? '');
+
+        // Instructor ID
+        $instructorId = $batch['instructor_id'];
+        if (array_key_exists('instructorId', $body) || array_key_exists('instructor_id', $body)) {
+            $rawInst = $body['instructorId'] ?? $body['instructor_id'];
+            if ($rawInst === '' || $rawInst === '0' || $rawInst === 0 || $rawInst === null || strtolower(strval($rawInst)) === 'unassigned') {
+                $instructorId = null;
+            } else {
+                $instructorId = (int)$rawInst;
+            }
         }
 
-        $courseName = $body['courseName'] ?? $batch['course_name'];
-        $topic = array_key_exists('topic', $body) ? $body['topic'] : $batch['topic'];
-        $studentCount = array_key_exists('studentCount', $body) ? $body['studentCount'] : $batch['student_count'];
-        $status = $body['status'] ?? $batch['status'];
-        $date = $body['date'] ?? $batch['date'] ?? date('Y-m-d');
+        // Student count
+        $studentCount = $batch['student_count'];
+        if (isset($body['studentCount']) && is_numeric($body['studentCount'])) {
+            $studentCount = (int)$body['studentCount'];
+        } elseif (isset($body['student_count']) && is_numeric($body['student_count'])) {
+            $studentCount = (int)$body['student_count'];
+        }
 
-        $stmt = $pdo->prepare("UPDATE institute_batches SET batch_time = ?, instructor_id = ?, course_name = ?, topic = ?, student_count = ?, status = ?, `date` = ?, updated_at = NOW() WHERE id = ?");
-        $stmt->execute([$batchTime, $instructorId, $courseName, $topic, $studentCount, $status, $date, $id]);
+        if (empty($batchName)) {
+            $batchName = $topic ?: "{$courseName} ({$batchTime})";
+        }
+
+        $stmt = $pdo->prepare("
+            UPDATE institute_batches 
+            SET batch_name = ?,
+                batch_time = ?, 
+                instructor_id = ?, 
+                course_name = ?, 
+                topic = ?, 
+                student_count = ?, 
+                students = ?, 
+                status = ?, 
+                `date` = ?, 
+                updated_at = NOW() 
+            WHERE id = ?
+        ");
+        $stmt->execute([
+            $batchName, 
+            $batchTime, 
+            $instructorId, 
+            $courseName, 
+            $topic, 
+            $studentCount, 
+            $students, 
+            $status, 
+            $date, 
+            $id
+        ]);
 
         $stmt = $pdo->prepare("
             SELECT b.*, u.full_name as instructor_name 
@@ -218,7 +381,7 @@ function updateBatch($pdo, $user, $id, $body) {
             WHERE b.id = ?
         ");
         $stmt->execute([$id]);
-        echo json_encode($stmt->fetch());
+        echo json_encode($stmt->fetch(PDO::FETCH_ASSOC));
     } catch (PDOException $e) {
         http_response_code(500);
         echo json_encode(["message" => "Database error: " . $e->getMessage()]);
@@ -226,16 +389,36 @@ function updateBatch($pdo, $user, $id, $body) {
 }
 
 function deleteBatch($pdo, $user, $id) {
+    ensureBatchesTable($pdo);
     try {
-        if ($user['role'] !== 'admin') {
+        $userRole = strtolower($user['role'] ?? '');
+        if ($userRole !== 'admin' && $userRole !== 'teacher') {
             http_response_code(403);
-            echo json_encode(["message" => "Only admins can manage batches."]);
+            echo json_encode(["message" => "Access denied. Only administrators and authorized teachers can delete batches."]);
+            return;
+        }
+
+        $stmt = $pdo->prepare("SELECT * FROM institute_batches WHERE id = ?");
+        $stmt->execute([$id]);
+        $batch = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$batch) {
+            http_response_code(404);
+            echo json_encode(["message" => "Batch not found."]);
+            return;
+        }
+
+        $isAssignedToOther = !empty($batch['instructor_id']) && (int)$batch['instructor_id'] !== (int)$user['sub'];
+        if ($userRole !== 'admin' && $isAssignedToOther) {
+            http_response_code(403);
+            echo json_encode(["message" => "Access denied. You can only delete your own batches or unassigned batches."]);
             return;
         }
 
         $stmt = $pdo->prepare("DELETE FROM institute_batches WHERE id = ?");
         $stmt->execute([$id]);
-        echo json_encode(["message" => "Batch deleted"]);
+
+        echo json_encode(["ok" => true, "message" => "Batch deleted successfully.", "deletedId" => $id]);
     } catch (PDOException $e) {
         http_response_code(500);
         echo json_encode(["message" => "Database error: " . $e->getMessage()]);

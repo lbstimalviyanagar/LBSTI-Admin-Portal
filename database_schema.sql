@@ -211,16 +211,21 @@ CREATE TABLE IF NOT EXISTS `task_notifications` (
 -- Module 3: Daily Batch Management
 CREATE TABLE IF NOT EXISTS `institute_batches` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `batch_name` VARCHAR(255) DEFAULT NULL,
   `batch_time` VARCHAR(100) NOT NULL,
   `instructor_id` BIGINT UNSIGNED DEFAULT NULL,
   `course_name` VARCHAR(255) NOT NULL,
   `topic` VARCHAR(255) DEFAULT NULL,
   `student_count` INT DEFAULT 0,
-  `status` ENUM('Upcoming', 'Ongoing', 'Completed') DEFAULT 'Upcoming',
+  `students` TEXT DEFAULT NULL,
+  `status` VARCHAR(50) DEFAULT 'Upcoming',
   `date` DATE NOT NULL,
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
+  KEY `idx_batch_time` (`batch_time`),
+  KEY `idx_instructor` (`instructor_id`),
+  KEY `idx_course` (`course_name`(100)),
   FOREIGN KEY (`instructor_id`) REFERENCES `portal_users`(`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

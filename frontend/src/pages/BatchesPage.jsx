@@ -56,6 +56,7 @@ export function sortBatchesChronologically(list) {
 const DEFAULT_BATCHES = [
   {
     id: 'b1',
+    batch_name: 'C++ Operators & Logic',
     batch_time: '09:00 AM - 10:00 AM',
     instructor_name: 'Harjot Kaur',
     instructor_id: 2,
@@ -67,6 +68,7 @@ const DEFAULT_BATCHES = [
   },
   {
     id: 'b2',
+    batch_name: 'Tally Prime Mastery',
     batch_time: '09:00 AM - 10:00 AM',
     instructor_name: 'Harjot Kaur',
     instructor_id: 2,
@@ -78,6 +80,7 @@ const DEFAULT_BATCHES = [
   },
   {
     id: 'b3',
+    batch_name: 'Ms Paint Foundation',
     batch_time: '09:00 AM - 10:00 AM',
     instructor_name: 'Harjot Kaur',
     instructor_id: 2,
@@ -89,6 +92,7 @@ const DEFAULT_BATCHES = [
   },
   {
     id: 'b4',
+    batch_name: 'Advance Excel Formulas',
     batch_time: '10:00 AM - 11:00 AM',
     instructor_name: 'Sahil',
     instructor_id: 1,
@@ -100,6 +104,7 @@ const DEFAULT_BATCHES = [
   },
   {
     id: 'b5',
+    batch_name: 'English Fluency & GD',
     batch_time: '11:00 AM - 12:00 PM',
     instructor_name: 'Palwasha',
     instructor_id: 3,
@@ -111,6 +116,7 @@ const DEFAULT_BATCHES = [
   },
   {
     id: 'b6',
+    batch_name: 'ADCA MS Office Core',
     batch_time: '02:00 PM - 03:00 PM',
     instructor_name: 'Harjot Kaur',
     instructor_id: 2,
@@ -122,6 +128,7 @@ const DEFAULT_BATCHES = [
   },
   {
     id: 'b7',
+    batch_name: 'Web Dev Frontend Lab',
     batch_time: '04:00 PM - 05:00 PM',
     instructor_name: 'Sahil',
     instructor_id: 1,
@@ -134,39 +141,64 @@ const DEFAULT_BATCHES = [
 ];
 
 export default function BatchesPage({ user, users = [], enrollments = [], enquiries = [], onToast }) {
+  const isAdmin = user?.role === 'admin';
+  const isTeacher = user?.role === 'teacher';
+  const canManageAny = isAdmin || isTeacher;
+
   const [batches, setBatches] = useState(DEFAULT_BATCHES);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingBatch, setEditingBatch] = useState(null);
+  const [savingBatch, setSavingBatch] = useState(false);
   const [filterOptions, setFilterOptions] = useState({ courses: [], faculty: [] });
+
+  // Delete Confirmation Modal State
+  const [batchToDelete, setBatchToDelete] = useState(null);
+  const [deletingBatch, setDeletingBatch] = useState(false);
+
+  // View Mode: 'routine' (Master Routine table) vs 'cards' (Responsive Cards view)
+  const [viewMode, setViewMode] = useState('routine');
 
   // Search & Filter State
   const [searchQuery, setSearchQuery] = useState('');
   const [courseFilter, setCourseFilter] = useState('All');
   const [facultyFilter, setFacultyFilter] = useState('All');
+  const [statusFilter, setStatusFilter] = useState('All');
 
-  // Pagination State (Default 15 to fit the full 15-slot daily routine on page 1)
+  // Pagination State
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(15);
 
-  // Unscheduled slots view toggle (only active when no filter is applied)
+  // Unscheduled slots view toggle
   const [showUnscheduled, setShowUnscheduled] = useState(true);
 
+  // Form State
   const [formData, setFormData] = useState({
+    batchName: '',
     batchTime: '',
     instructorId: '',
     courseName: '',
     topic: '',
     studentCount: 0,
+    students: '',
     status: 'Upcoming',
     date: new Date().toISOString().slice(0, 10)
   });
 
   // Master institute routine time slots (08:00 AM to 09:00 PM)
   const timeSlots = [
-    '08:00 AM - 09:00 AM', '09:00 AM - 10:00 AM', '10:00 AM - 11:00 AM', '11:00 AM - 12:00 PM',
-    '12:00 PM - 01:00 PM', '01:00 PM - 02:00 PM', '02:00 PM - 03:00 PM', '03:00 PM - 04:00 PM',
-    '04:00 PM - 05:00 PM', '05:00 PM - 06:00 PM', '06:00 PM - 07:00 PM', '07:00 PM - 08:00 PM',
+    '08:00 AM - 09:00 AM',
+    '09:00 AM - 10:00 AM',
+    '10:00 AM - 11:00 AM',
+    '11:00 AM - 12:00 PM',
+    '12:00 PM - 01:00 PM',
+    '01:00 PM - 02:00 PM',
+    '02:00 PM - 03:00 PM',
+    '03:00 PM - 04:00 PM',
+    '04:00 PM - 05:00 PM',
+    '05:00 PM - 06:00 PM',
+    '06:00 PM - 07:00 PM',
+    '07:00 PM - 08:00 PM',
     '08:00 PM - 09:00 PM'
   ];
 
@@ -230,7 +262,6 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
   useEffect(() => {
     loadBatches();
 
-    // Auto-refresh every 30 seconds to keep batch details up to date in real time
     const interval = setInterval(() => {
       loadBatches();
     }, 30000);
@@ -261,7 +292,7 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
     return () => { isMounted = false; };
   }, []);
 
-  // Dynamically extract unique course options from database records and loaded APIs
+  // Dynamically extract unique course options
   const courseOptions = useMemo(() => {
     const set = new Set();
     if (Array.isArray(filterOptions?.courses)) {
@@ -285,7 +316,7 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
     return Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
   }, [batches, enrollments, enquiries, filterOptions]);
 
-  // Dynamically extract unique faculty options from database records and loaded APIs
+  // Dynamically extract unique faculty options
   const facultyOptions = useMemo(() => {
     const set = new Set();
     if (Array.isArray(filterOptions?.faculty)) {
@@ -314,9 +345,14 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
   }, [batches, users, filterOptions]);
 
   // Detect whether any search/filter is active
-  const hasActiveFilters = Boolean(searchQuery.trim() || courseFilter !== 'All' || facultyFilter !== 'All');
+  const hasActiveFilters = Boolean(
+    searchQuery.trim() ||
+    courseFilter !== 'All' ||
+    facultyFilter !== 'All' ||
+    statusFilter !== 'All'
+  );
 
-  // Multi-field dynamic filtering (course name, topic, faculty name, time slot, status)
+  // Multi-field dynamic filtering
   const filteredBatches = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
     const tokens = q ? q.split(/\s+/).filter(Boolean) : [];
@@ -351,14 +387,23 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
         }
       }
 
-      // 3. Search Bar Filter: course name, topic, faculty name, time slot, and status
+      // 3. Status Filter
+      if (statusFilter !== 'All') {
+        if ((batch.status || '').toLowerCase() !== statusFilter.toLowerCase()) {
+          return false;
+        }
+      }
+
+      // 4. Search Bar Filter
       if (tokens.length > 0) {
+        const bName = String(batch.batch_name || '').toLowerCase();
         const course = String(batch.course_name || '').toLowerCase();
         const topic = String(batch.topic || '').toLowerCase();
         const instructor = String(batch.instructor_name || 'unassigned').toLowerCase();
         const time = String(batch.batch_time || '').toLowerCase();
         const status = String(batch.status || '').toLowerCase();
-        const combined = `${course} ${topic} ${instructor} ${time} ${status}`;
+        const students = String(batch.students || '').toLowerCase();
+        const combined = `${bName} ${course} ${topic} ${instructor} ${time} ${status} ${students}`;
 
         const allTokensMatch = tokens.every(token => combined.includes(token));
         if (!allTokensMatch) return false;
@@ -366,9 +411,9 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
 
       return true;
     });
-  }, [batches, courseFilter, facultyFilter, searchQuery, users]);
+  }, [batches, courseFilter, facultyFilter, statusFilter, searchQuery, users]);
 
-  // Determine all time slots (including custom batch times not in fixed grid), strictly sorted chronologically
+  // All time slots
   const allTimeSlots = useMemo(() => {
     const slotSet = new Set(timeSlots);
     batches.forEach(b => {
@@ -394,33 +439,32 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
   } = useTableSort({ key: null, direction: null });
 
   const isSortingActive = Boolean(batchSortKey && batchSortDir);
-  const isCustomView = hasActiveFilters || isSortingActive;
+  const isCustomView = hasActiveFilters || isSortingActive || viewMode === 'cards';
 
-  // Custom getters for special field matching and chronological sorting
+  // Custom getters for sorting
   const batchCustomGetters = useMemo(() => ({
     batch_time: (b) => parseTimeSlotMinutes(b.batch_time),
     student_count: (b) => (b.student_count != null ? Number(b.student_count) : 0),
-    instructor_name: (b) => b.instructor_name || 'Unassigned'
+    instructor_name: (b) => b.instructor_name || 'Unassigned',
+    batch_name: (b) => b.batch_name || b.topic || b.course_name
   }), []);
 
   const sortedBatches = useMemo(() => {
     if (!batchSortKey) {
-      // Default view: sort chronologically from 06:00 AM onwards
       return sortBatchesChronologically(filteredBatches);
     }
     return sortBatches(filteredBatches, batchCustomGetters);
   }, [filteredBatches, batchSortKey, sortBatches, batchCustomGetters]);
 
-  // Clear all filters & sorting
   const clearFilters = () => {
     setSearchQuery('');
     setCourseFilter('All');
     setFacultyFilter('All');
+    setStatusFilter('All');
     resetBatchSort();
     setPage(1);
   };
 
-  // Pagination calculations
   const totalCount = isCustomView
     ? sortedBatches.length
     : (showUnscheduled ? allTimeSlots.length : batches.length);
@@ -429,14 +473,22 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
   const currentPage = Math.min(page, totalPages);
   const startIndex = (currentPage - 1) * pageSize;
 
+  // Role-based permissions
+  const isOwner = (batch) => Number(batch?.instructor_id) === Number(user?.id);
+  const canEditBatch = (batch) => isAdmin || (isTeacher && (isOwner(batch) || !batch?.instructor_id));
+  const canDeleteBatch = (batch) => isAdmin || (isTeacher && (isOwner(batch) || !batch?.instructor_id));
+
+  // Modal open handlers
   const openNewBatch = (timeSlot = '') => {
     setEditingBatch(null);
     setFormData({
-      batchTime: timeSlot,
-      instructorId: user?.role === 'admin' ? '' : (user?.id || ''),
-      courseName: '',
+      batchName: '',
+      batchTime: timeSlot || (timeSlots[0] || '09:00 AM - 10:00 AM'),
+      instructorId: isAdmin ? '' : (user?.id || ''),
+      courseName: courseOptions[0] || '',
       topic: '',
       studentCount: 0,
+      students: '',
       status: 'Upcoming',
       date: new Date().toISOString().slice(0, 10)
     });
@@ -446,115 +498,179 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
   const openEditBatch = (batch) => {
     setEditingBatch(batch);
     setFormData({
-      batchTime: batch.batch_time,
-      instructorId: batch.instructor_id,
-      courseName: batch.course_name,
+      batchName: batch.batch_name || batch.topic || '',
+      batchTime: batch.batch_time || '',
+      instructorId: batch.instructor_id != null ? String(batch.instructor_id) : '',
+      courseName: batch.course_name || '',
       topic: batch.topic || '',
-      studentCount: batch.student_count,
-      status: batch.status,
-      date: batch.date || new Date().toISOString().slice(0, 10)
+      studentCount: batch.student_count != null ? batch.student_count : 0,
+      students: batch.students || '',
+      status: batch.status || 'Upcoming',
+      date: batch.date ? String(batch.date).split('T')[0] : new Date().toISOString().slice(0, 10)
     });
     setIsModalOpen(true);
   };
 
-  const isOwner = (batch) => Number(batch?.instructor_id) === Number(user?.id);
-  const canEditBatch = (batch) => user?.role === 'admin' || isOwner(batch) || !batch?.instructor_id;
-
+  // Submit Add or Edit
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!formData.batchTime) {
+      onToast('Please select a time slot.', true);
+      return;
+    }
+    if (!formData.courseName) {
+      onToast('Please provide a course name.', true);
+      return;
+    }
+
+    setSavingBatch(true);
     try {
+      const payload = {
+        batchName: formData.batchName.trim() || formData.topic.trim() || `${formData.courseName} (${formData.batchTime})`,
+        batchTime: formData.batchTime.trim(),
+        courseName: formData.courseName.trim(),
+        topic: formData.topic.trim() || formData.batchName.trim(),
+        instructorId: formData.instructorId ? Number(formData.instructorId) : null,
+        studentCount: Number(formData.studentCount) || 0,
+        students: formData.students.trim(),
+        status: formData.status,
+        date: formData.date
+      };
+
       if (editingBatch) {
-        try {
-          await api.updateBatch(editingBatch.id, formData);
-        } catch (apiErr) {
-          console.warn('API update failed, updating state locally:', apiErr);
-        }
-        setBatches(prev => sortBatchesChronologically(prev.map(b => b.id === editingBatch.id ? {
-          ...b,
-          batch_time: formData.batchTime,
-          course_name: formData.courseName,
-          topic: formData.topic,
-          instructor_id: formData.instructorId,
-          instructor_name: users?.find(u => Number(u.id) === Number(formData.instructorId))?.fullName || b.instructor_name,
-          student_count: Number(formData.studentCount),
-          status: formData.status,
-          updated_at: new Date().toISOString().replace('T', ' ').slice(0, 19)
-        } : b)));
-        onToast('Batch updated.');
+        await api.updateBatch(editingBatch.id, payload);
+        onToast('Batch updated successfully.');
       } else {
-        const newBatchItem = {
-          id: 'b_' + Date.now(),
-          batch_time: formData.batchTime,
-          course_name: formData.courseName,
-          topic: formData.topic,
-          instructor_id: formData.instructorId,
-          instructor_name: users?.find(u => Number(u.id) === Number(formData.instructorId))?.fullName || (user?.fullName || user?.name || 'Harjot Kaur'),
-          student_count: Number(formData.studentCount),
-          status: formData.status,
-          updated_at: new Date().toISOString().replace('T', ' ').slice(0, 19)
-        };
-        try {
-          const res = await api.createBatch(formData);
-          if (res && res.id) newBatchItem.id = res.id;
-        } catch (apiErr) {
-          console.warn('API create failed, creating state locally:', apiErr);
-        }
-        setBatches(prev => sortBatchesChronologically([...prev, newBatchItem]));
-        onToast('Batch created.');
+        await api.createBatch(payload);
+        onToast('New batch created successfully.');
       }
+
       setIsModalOpen(false);
-      // Immediately reload fresh batch data from server
       loadBatches();
     } catch (err) {
       onToast(err.message || 'Failed to save batch.', true);
+    } finally {
+      setSavingBatch(false);
     }
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this batch?")) return;
+  // Delete Confirmation flow
+  const promptDeleteBatch = (batch) => {
+    setBatchToDelete(batch);
+  };
+
+  const confirmDeleteBatch = async () => {
+    if (!batchToDelete) return;
+    setDeletingBatch(true);
     try {
-      try {
-        await api.deleteBatch(id);
-      } catch (apiErr) {
-        console.warn('API delete failed, deleting state locally:', apiErr);
-      }
-      setBatches(prev => prev.filter(b => b.id !== id));
-      onToast('Batch deleted.');
+      await api.deleteBatch(batchToDelete.id);
+      onToast('Batch deleted permanently.');
+      setBatchToDelete(null);
       loadBatches();
     } catch (err) {
       onToast(err.message || 'Failed to delete batch.', true);
+    } finally {
+      setDeletingBatch(false);
     }
   };
 
   return (
     <div className="page-section">
       {/* Page Header */}
-      <div className="page-head">
+      <div className="page-head" style={{ flexWrap: 'wrap', gap: '14px' }}>
         <div>
           <h2>Daily Batch Management</h2>
-          <p>Master daily schedule &bull; Consistent routine overview</p>
+          <p>Schedule, manage, edit, and monitor active training batches and assigned faculty.</p>
         </div>
-        <div className="controls">
-          <div style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '8px',
-            padding: '8px 14px',
-            background: 'var(--card)',
-            border: '1px solid var(--line)',
-            borderRadius: '10px',
-            fontSize: '0.86rem',
-            color: 'var(--muted)',
-            fontWeight: '600'
-          }}>
-            <span style={{
-              width: '8px',
-              height: '8px',
-              borderRadius: '50%',
-              background: '#10b981',
-              boxShadow: '0 0 0 3px rgba(16, 185, 129, 0.2)'
-            }} />
-            Fixed Institute Routine
+
+        <div className="controls" style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* View Mode Toggle: Grid vs Cards */}
+          <div
+            className="segmented-control"
+            style={{
+              display: 'inline-flex',
+              background: '#f1f5f9',
+              borderRadius: '8px',
+              padding: '3px',
+              border: '1px solid #e2e8f0'
+            }}
+          >
+            <button
+              type="button"
+              className={`btn sm ${viewMode === 'routine' ? 'active' : ''}`}
+              onClick={() => setViewMode('routine')}
+              style={{
+                background: viewMode === 'routine' ? '#fff' : 'transparent',
+                fontWeight: viewMode === 'routine' ? 700 : 500,
+                color: viewMode === 'routine' ? '#1e293b' : '#64748b',
+                boxShadow: viewMode === 'routine' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                border: 'none',
+                borderRadius: '6px',
+                padding: '5px 10px',
+                fontSize: '0.82rem'
+              }}
+              title="Table view with time slots"
+            >
+              Routine Table
+            </button>
+            <button
+              type="button"
+              className={`btn sm ${viewMode === 'cards' ? 'active' : ''}`}
+              onClick={() => setViewMode('cards')}
+              style={{
+                background: viewMode === 'cards' ? '#fff' : 'transparent',
+                fontWeight: viewMode === 'cards' ? 700 : 500,
+                color: viewMode === 'cards' ? '#1e293b' : '#64748b',
+                boxShadow: viewMode === 'cards' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                border: 'none',
+                borderRadius: '6px',
+                padding: '5px 10px',
+                fontSize: '0.82rem'
+              }}
+              title="Responsive Cards View"
+            >
+              Cards View
+            </button>
+          </div>
+
+          {/* Add Batch Button (Accessible to Admin and Teachers) */}
+          {canManageAny && (
+            <button
+              className="btn btn-primary"
+              type="button"
+              onClick={() => openNewBatch()}
+              title="Schedule a new training batch"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+            >
+              <span className="ic"><Icon name="plus" size={16} /></span>
+              Add Batch
+            </button>
+          )}
+
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '6px 12px',
+              background: 'var(--card)',
+              border: '1px solid var(--line)',
+              borderRadius: '8px',
+              fontSize: '0.82rem',
+              color: 'var(--muted)',
+              fontWeight: '600'
+            }}
+          >
+            <span
+              style={{
+                width: '8px',
+                height: '8px',
+                borderRadius: '50%',
+                background: '#10b981',
+                boxShadow: '0 0 0 3px rgba(16, 185, 129, 0.2)'
+              }}
+            />
+            {batches.length} Active Batches
           </div>
         </div>
       </div>
@@ -568,7 +684,7 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
             <input
               className="input"
               type="search"
-              placeholder="Search course, topic, faculty, slot, status..."
+              placeholder="Search batch name, course, topic, faculty, slot, status..."
               value={searchQuery}
               onChange={(e) => {
                 setSearchQuery(e.target.value);
@@ -581,7 +697,7 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
 
           {/* Filter Dropdowns */}
           <div className="filters-inline" style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-            {/* Course Dropdown Filter */}
+            {/* Course Filter */}
             <div className="fl">
               <select
                 className="select"
@@ -592,6 +708,7 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
                 }}
                 aria-label="Filter by course"
                 title="Filter by course"
+                style={{ minWidth: '150px' }}
               >
                 <option value="All">All Courses</option>
                 {courseOptions.map(c => (
@@ -600,7 +717,7 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
               </select>
             </div>
 
-            {/* Faculty Dropdown Filter */}
+            {/* Faculty Filter */}
             <div className="fl">
               <select
                 className="select"
@@ -611,12 +728,33 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
                 }}
                 aria-label="Filter by faculty"
                 title="Filter by faculty"
+                style={{ minWidth: '150px' }}
               >
                 <option value="All">All Faculty</option>
                 <option value="Unassigned">Unassigned</option>
                 {facultyOptions.map(f => (
                   <option key={f} value={f}>{f}</option>
                 ))}
+              </select>
+            </div>
+
+            {/* Status Filter */}
+            <div className="fl">
+              <select
+                className="select"
+                value={statusFilter}
+                onChange={(e) => {
+                  setStatusFilter(e.target.value);
+                  setPage(1);
+                }}
+                aria-label="Filter by status"
+                title="Filter by status"
+                style={{ minWidth: '130px' }}
+              >
+                <option value="All">All Statuses</option>
+                <option value="Ongoing">Ongoing</option>
+                <option value="Upcoming">Upcoming</option>
+                <option value="Completed">Completed</option>
               </select>
             </div>
 
@@ -634,8 +772,8 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
               </button>
             )}
 
-            {/* Routine Empty Slots Checkbox Toggle (when unfiltered) */}
-            {!isCustomView && (
+            {/* Routine Empty Slots Checkbox Toggle */}
+            {!isCustomView && viewMode === 'routine' && (
               <label
                 style={{
                   display: 'inline-flex',
@@ -662,8 +800,8 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
             )}
           </div>
 
-          {/* Result Count and Add Batch Action */}
-          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+          {/* Quick Refresh & Result Counter */}
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
             <span style={{ fontSize: '0.86rem', color: 'var(--muted)', fontWeight: '600' }}>
               {isCustomView
                 ? `${sortedBatches.length} ${sortedBatches.length === 1 ? 'batch' : 'batches'} found (of ${batches.length})`
@@ -671,376 +809,582 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
             </span>
 
             <button
-              className="btn sm"
+              className="btn sm icon-btn"
               type="button"
               onClick={loadBatches}
               title="Refresh latest batches from server"
               disabled={loading}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+              aria-label="Refresh"
             >
-              <span className={`ic ${loading ? 'spin' : ''}`}><Icon name="refresh" size={13} /></span>
-              Refresh
+              <span className={`ic ${loading ? 'spin' : ''}`}><Icon name="refresh" size={15} /></span>
             </button>
-
-            {user?.role === 'admin' && (
-              <button
-                className="btn primary sm"
-                type="button"
-                onClick={() => openNewBatch()}
-                title="Schedule a new batch"
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-              >
-                <span className="ic"><Icon name="plus" size={15} /></span>
-                Add Batch
-              </button>
-            )}
           </div>
         </div>
 
-        {loading ? (
-          <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--muted)' }}>Loading schedule...</div>
-        ) : (
-          <table className="table" style={{ minWidth: '850px', width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr>
-                <SortableTh colKey="batch_time" label="Time Slot" sortKey={batchSortKey} sortDirection={batchSortDir} onSort={handleBatchSort} style={{ width: '220px' }} />
-                <SortableTh colKey="course_name" label="Course & Topic" sortKey={batchSortKey} sortDirection={batchSortDir} onSort={handleBatchSort} />
-                <SortableTh colKey="instructor_name" label="Instructor" sortKey={batchSortKey} sortDirection={batchSortDir} onSort={handleBatchSort} />
-                <SortableTh colKey="student_count" label="Students" sortKey={batchSortKey} sortDirection={batchSortDir} onSort={handleBatchSort} />
-                <SortableTh colKey="status" label="Status" sortKey={batchSortKey} sortDirection={batchSortDir} onSort={handleBatchSort} />
-                <th style={{ width: '120px' }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {/* When search or filters yield 0 results */}
-              {isCustomView && sortedBatches.length === 0 ? (
-                <tr>
-                  <td colSpan={6} style={{ padding: 0 }}>
-                    <div className="empty" style={{ padding: '48px 16px', textAlign: 'center' }}>
-                      <div className="ei" style={{ margin: '0 auto 12px' }}>
-                        <Icon name="search" size={24} />
-                      </div>
-                      <b style={{ fontSize: '1.05rem', color: 'var(--text)' }}>No batches match</b>
-                      <span style={{ color: 'var(--muted)', display: 'block', marginTop: '4px' }}>
-                        No batches match your current search, filter, or sorting criteria.
-                      </span>
-                      <button
-                        className="btn"
-                        type="button"
-                        onClick={clearFilters}
-                        style={{ marginTop: '16px' }}
-                      >
-                        <span className="ic"><Icon name="x" size={15} /></span>
-                        Clear Filters
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ) : isCustomView ? (
-                /* Filtered or sorted view: Group matching batches by time slot and render paginated slice */
-                (() => {
-                  const paginatedBatches = sortedBatches.slice(startIndex, startIndex + pageSize);
-                  
-                  // Group consecutive batches with the same batch_time for rowSpan presentation
-                  const slotGroups = [];
-                  paginatedBatches.forEach(batch => {
-                    const lastGroup = slotGroups[slotGroups.length - 1];
-                    if (lastGroup && lastGroup.slot === batch.batch_time) {
-                      lastGroup.batches.push(batch);
-                    } else {
-                      slotGroups.push({ slot: batch.batch_time, batches: [batch] });
-                    }
-                  });
+        {/* ============================================================ */}
+        {/* VIEW 1: Responsive Cards View (Ideal for mobile & touch)    */}
+        {/* ============================================================ */}
+        {viewMode === 'cards' ? (
+          <div style={{ padding: '20px' }}>
+            {loading ? (
+              <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--muted)' }}>
+                Loading batches...
+              </div>
+            ) : sortedBatches.length === 0 ? (
+              <div className="empty" style={{ padding: '40px 16px', textAlign: 'center' }}>
+                <div className="ei" style={{ margin: '0 auto 12px' }}><Icon name="search" size={26} /></div>
+                <b>No batches match criteria</b>
+                <p style={{ color: 'var(--muted)', margin: '4px 0 12px' }}>
+                  No batches match your selected search or filter settings.
+                </p>
+                <button className="btn" type="button" onClick={clearFilters}>Clear Filters</button>
+              </div>
+            ) : (
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(290px, 1fr))',
+                  gap: '16px'
+                }}
+              >
+                {sortedBatches.slice(startIndex, startIndex + pageSize).map((b) => {
+                  const canEdit = canEditBatch(b);
+                  const canDelete = canDeleteBatch(b);
+                  const statusColor = b.status === 'Ongoing' ? '#16a34a' : b.status === 'Completed' ? '#64748b' : '#ca8a04';
+                  const statusBg = b.status === 'Ongoing' ? '#dcfce7' : b.status === 'Completed' ? '#f1f5f9' : '#fef9c3';
 
-                  return slotGroups.map(group => {
-                    return group.batches.map((batch, index) => {
-                      const canEdit = canEditBatch(batch);
-                      return (
-                        <tr
-                          key={batch.id}
-                          style={{
-                            background: batch.status === 'Ongoing' ? '#f0fdf4' : 'transparent',
-                            transition: 'background 0.15s ease'
-                          }}
-                        >
-                          {index === 0 && (
-                            <td
-                              rowSpan={group.batches.length}
+                  return (
+                    <div
+                      key={b.id}
+                      style={{
+                        background: '#fff',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '12px',
+                        padding: '16px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+                        position: 'relative'
+                      }}
+                    >
+                      <div>
+                        {/* Header: Timing & Status */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                          <span
+                            style={{
+                              background: '#eff6ff',
+                              color: '#1d4ed8',
+                              border: '1px solid #bfdbfe',
+                              borderRadius: '6px',
+                              padding: '3px 8px',
+                              fontSize: '0.78rem',
+                              fontWeight: 700,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}
+                          >
+                            <Icon name="clock" size={12} />
+                            {b.batch_time}
+                          </span>
+
+                          <span
+                            style={{
+                              background: statusBg,
+                              color: statusColor,
+                              borderRadius: '12px',
+                              padding: '2px 8px',
+                              fontSize: '0.74rem',
+                              fontWeight: 700,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}
+                          >
+                            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: statusColor }} />
+                            {b.status || 'Upcoming'}
+                          </span>
+                        </div>
+
+                        {/* Batch Name & Course */}
+                        <h4 style={{ margin: '0 0 4px', fontSize: '1.02rem', color: '#0f172a' }}>
+                          {b.batch_name || b.topic || b.course_name}
+                        </h4>
+                        <div style={{ color: '#2563eb', fontWeight: 600, fontSize: '0.86rem', marginBottom: '8px' }}>
+                          {b.course_name}
+                        </div>
+
+                        {b.topic && b.topic !== b.batch_name && (
+                          <div style={{ fontSize: '0.82rem', color: '#64748b', marginBottom: '10px' }}>
+                            <b>Topic:</b> {b.topic}
+                          </div>
+                        )}
+
+                        {/* Details Grid */}
+                        <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '10px', display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.82rem', color: '#475569' }}>
+                          <div>
+                            <b>Instructor:</b> {b.instructor_name || 'Unassigned'}
+                          </div>
+                          <div>
+                            <b>Enrolled Students:</b> {b.student_count || 0} students
+                          </div>
+                          {b.students && (
+                            <div style={{ color: 'var(--muted)', fontSize: '0.78rem' }}>
+                              <b>Students:</b> {b.students}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div style={{ marginTop: '14px', paddingTop: '12px', borderTop: '1px solid #e2e8f0', display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                        {canEdit && (
+                          <button
+                            className="btn sm"
+                            type="button"
+                            onClick={() => openEditBatch(b)}
+                            title="Edit batch details"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                          >
+                            <span className="ic"><Icon name="edit" size={13} /></span>
+                            Edit
+                          </button>
+                        )}
+                        {canDelete && (
+                          <button
+                            className="btn sm danger"
+                            type="button"
+                            onClick={() => promptDeleteBatch(b)}
+                            title="Delete this batch"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                          >
+                            <span className="ic"><Icon name="trash" size={13} /></span>
+                            Delete
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        ) : (
+          /* ============================================================ */
+          /* VIEW 2: Master Routine Table (Desktop & Tablets)             */
+          /* ============================================================ */
+          <div className="tbl-scroll" style={{ overflowX: 'auto' }}>
+            {loading ? (
+              <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--muted)' }}>Loading schedule...</div>
+            ) : (
+              <table className="table mobile-card-stack" style={{ minWidth: '850px', width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr>
+                    <SortableTh colKey="batch_time" label="Time Slot" sortKey={batchSortKey} sortDirection={batchSortDir} onSort={handleBatchSort} style={{ width: '220px' }} />
+                    <SortableTh colKey="course_name" label="Course & Batch Details" sortKey={batchSortKey} sortDirection={batchSortDir} onSort={handleBatchSort} />
+                    <SortableTh colKey="instructor_name" label="Instructor" sortKey={batchSortKey} sortDirection={batchSortDir} onSort={handleBatchSort} />
+                    <SortableTh colKey="student_count" label="Students" sortKey={batchSortKey} sortDirection={batchSortDir} onSort={handleBatchSort} />
+                    <SortableTh colKey="status" label="Status" sortKey={batchSortKey} sortDirection={batchSortDir} onSort={handleBatchSort} />
+                    <th style={{ width: '130px', textAlign: 'center' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {isCustomView && sortedBatches.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} style={{ padding: 0 }}>
+                        <div className="empty" style={{ padding: '48px 16px', textAlign: 'center' }}>
+                          <div className="ei" style={{ margin: '0 auto 12px' }}>
+                            <Icon name="search" size={24} />
+                          </div>
+                          <b style={{ fontSize: '1.05rem', color: 'var(--text)' }}>No batches match</b>
+                          <span style={{ color: 'var(--muted)', display: 'block', marginTop: '4px' }}>
+                            No batches match your current search, filter, or sorting criteria.
+                          </span>
+                          <button
+                            className="btn"
+                            type="button"
+                            onClick={clearFilters}
+                            style={{ marginTop: '16px' }}
+                          >
+                            <span className="ic"><Icon name="x" size={15} /></span>
+                            Clear Filters
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : isCustomView ? (
+                    (() => {
+                      const paginatedBatches = sortedBatches.slice(startIndex, startIndex + pageSize);
+                      const slotGroups = [];
+                      paginatedBatches.forEach(batch => {
+                        const lastGroup = slotGroups[slotGroups.length - 1];
+                        if (lastGroup && lastGroup.slot === batch.batch_time) {
+                          lastGroup.batches.push(batch);
+                        } else {
+                          slotGroups.push({ slot: batch.batch_time, batches: [batch] });
+                        }
+                      });
+
+                      return slotGroups.map(group => {
+                        return group.batches.map((batch, index) => {
+                          const canEdit = canEditBatch(batch);
+                          const canDelete = canDeleteBatch(batch);
+                          return (
+                            <tr
+                              key={batch.id}
                               style={{
-                                fontWeight: '500',
-                                color: '#1e293b',
-                                verticalAlign: 'top',
-                                background: '#fafbfc',
-                                borderRight: '1px solid #edf2f7',
-                                padding: '12px 14px'
+                                background: batch.status === 'Ongoing' ? '#f0fdf4' : 'transparent',
+                                transition: 'background 0.15s ease'
                               }}
                             >
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                <div style={{
+                              {index === 0 && (
+                                <td
+                                  rowSpan={group.batches.length}
+                                  data-label="Time Slot"
+                                  style={{
+                                    fontWeight: '500',
+                                    color: '#1e293b',
+                                    verticalAlign: 'top',
+                                    background: '#fafbfc',
+                                    borderRight: '1px solid #edf2f7',
+                                    padding: '12px 14px'
+                                  }}
+                                >
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                    <div style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '6px',
+                                      padding: '4px 9px',
+                                      borderRadius: '6px',
+                                      fontSize: '0.74rem',
+                                      fontWeight: '700',
+                                      letterSpacing: '0.01em',
+                                      background: '#eff6ff',
+                                      color: '#1d4ed8',
+                                      border: '1px solid #bfdbfe',
+                                      width: 'fit-content'
+                                    }}>
+                                      <Icon name="clock" size={12} />
+                                      <span>{formatSlotLastUpdated(group.batches)}</span>
+                                    </div>
+                                    <div style={{ fontWeight: '700', color: '#0f172a', fontSize: '0.94rem' }}>
+                                      {group.slot}
+                                    </div>
+                                    {canManageAny && (
+                                      <div style={{ marginTop: '2px' }}>
+                                        <button
+                                          className="btn icon-btn"
+                                          type="button"
+                                          onClick={() => openNewBatch(group.slot)}
+                                          title="Add parallel batch for this slot"
+                                          style={{ width: '28px', height: '28px', padding: 0 }}
+                                        >
+                                          <Icon name="plus" size={13} />
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                </td>
+                              )}
+                              <td data-label="Course & Batch Details" style={{ verticalAlign: 'middle', padding: '12px 14px' }}>
+                                <strong style={{ display: 'block', fontSize: '0.94rem', color: '#0f172a' }}>
+                                  {batch.course_name}
+                                </strong>
+                                {batch.batch_name && batch.batch_name !== batch.course_name && (
+                                  <div style={{ fontSize: '0.85rem', color: '#2563eb', fontWeight: 600, marginTop: '2px' }}>
+                                    {batch.batch_name}
+                                  </div>
+                                )}
+                                {batch.topic && (
+                                  <div style={{ fontSize: '0.82rem', color: '#64748b', marginTop: '2px' }}>
+                                    <b>Topic:</b> {batch.topic}
+                                  </div>
+                                )}
+                                {batch.students && (
+                                  <div style={{ fontSize: '0.78rem', color: 'var(--muted)', marginTop: '2px' }}>
+                                    <b>Students:</b> {batch.students}
+                                  </div>
+                                )}
+                              </td>
+                              <td data-label="Instructor" style={{ verticalAlign: 'middle', padding: '12px 14px', fontWeight: '500' }}>
+                                {batch.instructor_name || 'Unassigned'}
+                              </td>
+                              <td data-label="Students" style={{ verticalAlign: 'middle', padding: '12px 14px' }}>
+                                <span style={{ fontWeight: '600', color: '#1e293b' }}>{batch.student_count || 0}</span>
+                              </td>
+                              <td data-label="Status" style={{ verticalAlign: 'middle', padding: '12px 14px' }}>
+                                <span style={{
                                   display: 'inline-flex',
                                   alignItems: 'center',
                                   gap: '6px',
-                                  padding: '4px 9px',
-                                  borderRadius: '6px',
-                                  fontSize: '0.74rem',
+                                  padding: '3px 10px',
+                                  borderRadius: '12px',
+                                  fontSize: '0.8rem',
                                   fontWeight: '700',
-                                  letterSpacing: '0.01em',
-                                  background: '#eff6ff',
-                                  color: '#1d4ed8',
-                                  border: '1px solid #bfdbfe',
-                                  boxShadow: '0 1px 2px rgba(29, 78, 216, 0.05)',
-                                  width: 'fit-content'
+                                  background: batch.status === 'Completed' ? '#f1f5f9' : batch.status === 'Ongoing' ? '#dcfce7' : '#fef9c3',
+                                  color: batch.status === 'Completed' ? '#475569' : batch.status === 'Ongoing' ? '#15803d' : '#854d0e',
+                                  border: `1px solid ${batch.status === 'Completed' ? '#e2e8f0' : batch.status === 'Ongoing' ? '#bbf7d0' : '#fef08a'}`
                                 }}>
-                                  <Icon name="clock" size={12} />
-                                  <span>{formatSlotLastUpdated(group.batches)}</span>
+                                  <span style={{
+                                    width: '6px',
+                                    height: '6px',
+                                    borderRadius: '50%',
+                                    background: batch.status === 'Completed' ? '#64748b' : batch.status === 'Ongoing' ? '#16a34a' : '#ca8a04'
+                                  }} />
+                                  {batch.status}
+                                </span>
+                              </td>
+                              <td data-label="Actions" style={{ verticalAlign: 'middle', padding: '12px 14px', textAlign: 'center' }}>
+                                <div style={{ display: 'inline-flex', gap: '6px', alignItems: 'center' }}>
+                                  {canEdit && (
+                                    <button
+                                      className="btn icon-btn"
+                                      type="button"
+                                      onClick={() => openEditBatch(batch)}
+                                      title="Edit Batch"
+                                      aria-label="Edit batch"
+                                    >
+                                      <Icon name="edit" size={15} />
+                                    </button>
+                                  )}
+                                  {canDelete && (
+                                    <button
+                                      className="btn icon-btn"
+                                      type="button"
+                                      onClick={() => promptDeleteBatch(batch)}
+                                      title="Delete Batch"
+                                      aria-label="Delete batch"
+                                      style={{ color: '#dc2626' }}
+                                    >
+                                      <Icon name="trash" size={15} />
+                                    </button>
+                                  )}
+                                  {!canEdit && (
+                                    <button
+                                      className="btn icon-btn"
+                                      type="button"
+                                      onClick={() => openEditBatch(batch)}
+                                      title="View Details"
+                                      aria-label="View batch"
+                                    >
+                                      <Icon name="eye" size={15} />
+                                    </button>
+                                  )}
                                 </div>
-                                <div style={{ fontWeight: '700', color: '#0f172a', fontSize: '0.94rem', letterSpacing: '-0.01em' }}>
-                                  {group.slot}
-                                </div>
-                                <div style={{ marginTop: '2px' }}>
-                                  <button
-                                    className="btn icon-btn"
-                                    onClick={() => openNewBatch(group.slot)}
-                                    title="Add parallel batch for this slot"
-                                    style={{ width: '28px', height: '28px', padding: 0 }}
-                                  >
-                                    <Icon name="plus" size={13} />
-                                  </button>
-                                </div>
-                              </div>
-                            </td>
-                          )}
-                          <td style={{ verticalAlign: 'middle', padding: '12px 14px' }}>
-                            <strong style={{ display: 'block', fontSize: '0.94rem', color: '#0f172a' }}>{batch.course_name}</strong>
-                            {batch.topic && (
-                              <div style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '2px' }}>
-                                {batch.topic}
-                              </div>
-                            )}
-                          </td>
-                          <td style={{ verticalAlign: 'middle', padding: '12px 14px', fontWeight: '500' }}>
-                            {batch.instructor_name || 'Unassigned'}
-                          </td>
-                          <td style={{ verticalAlign: 'middle', padding: '12px 14px' }}>
-                            <span style={{ fontWeight: '600', color: '#1e293b' }}>{batch.student_count}</span>
-                          </td>
-                          <td style={{ verticalAlign: 'middle', padding: '12px 14px' }}>
-                            <span style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              padding: '3px 10px',
-                              borderRadius: '12px',
-                              fontSize: '0.8rem',
-                              fontWeight: '700',
-                              background: batch.status === 'Completed' ? '#f1f5f9' : batch.status === 'Ongoing' ? '#dcfce7' : '#fef9c3',
-                              color: batch.status === 'Completed' ? '#475569' : batch.status === 'Ongoing' ? '#15803d' : '#854d0e',
-                              border: `1px solid ${batch.status === 'Completed' ? '#e2e8f0' : batch.status === 'Ongoing' ? '#bbf7d0' : '#fef08a'}`
-                            }}>
-                              <span style={{
-                                width: '6px',
-                                height: '6px',
-                                borderRadius: '50%',
-                                background: batch.status === 'Completed' ? '#64748b' : batch.status === 'Ongoing' ? '#16a34a' : '#ca8a04'
-                              }} />
-                              {batch.status}
-                            </span>
-                          </td>
-                          <td style={{ verticalAlign: 'middle', padding: '12px 14px' }}>
-                            {canEdit ? (
-                              <div style={{ display: 'flex', gap: '6px' }}>
-                                <button className="btn icon-btn" onClick={() => openEditBatch(batch)} title="Edit"><Icon name="edit" size={16} /></button>
-                                {user?.role === 'admin' && (
-                                  <button className="btn icon-btn" onClick={() => handleDelete(batch.id)} title="Delete"><Icon name="trash" size={16} /></button>
-                                )}
-                              </div>
-                            ) : (
-                              <button className="btn icon-btn" onClick={() => openEditBatch(batch)} title="View Details"><Icon name="eye" size={16} /></button>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    });
-                  });
-                })()
-              ) : showUnscheduled ? (
-                /* Unfiltered Master Routine Schedule view: paginated over allSlots */
-                allTimeSlots.slice(startIndex, startIndex + pageSize).map(slot => {
-                  const slotBatches = batches.filter(b => b.batch_time === slot);
-                  
-                  if (slotBatches.length === 0) {
-                    return (
-                      <tr key={slot}>
-                        <td style={{
-                          fontWeight: '500',
-                          color: '#64748b',
-                          verticalAlign: 'top',
-                          background: '#fafbfc',
-                          borderRight: '1px solid #edf2f7',
-                          padding: '12px 14px'
-                        }}>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                            <div style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '5px',
-                              padding: '3px 8px',
-                              borderRadius: '6px',
-                              fontSize: '0.72rem',
-                              fontWeight: '600',
-                              background: '#f1f5f9',
-                              color: '#64748b',
-                              border: '1px solid #e2e8f0',
-                              width: 'fit-content'
-                            }}>
-                              <Icon name="clock" size={11} />
-                              <span>Last Updated: Routine Active</span>
-                            </div>
-                            <div style={{ fontWeight: '600', color: '#64748b', fontSize: '0.9rem' }}>
-                              {slot}
-                            </div>
-                          </div>
-                        </td>
-                        <td colSpan={5} className="muted" style={{ verticalAlign: 'middle', padding: '12px 14px' }}>
-                          No batch scheduled.
-                          <button
-                            className="btn btn-sm"
-                            style={{ marginLeft: '1rem' }}
-                            onClick={() => openNewBatch(slot)}
-                          >
-                            + Schedule
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  }
+                              </td>
+                            </tr>
+                          );
+                        });
+                      });
+                    })()
+                  ) : showUnscheduled ? (
+                    allTimeSlots.slice(startIndex, startIndex + pageSize).map(slot => {
+                      const slotBatches = batches.filter(b => b.batch_time === slot);
 
-                  return slotBatches.map((batch, index) => {
-                    const canEdit = canEditBatch(batch);
-                    return (
-                      <tr
-                        key={batch.id}
-                        style={{
-                          background: batch.status === 'Ongoing' ? '#f0fdf4' : 'transparent',
-                          transition: 'background 0.15s ease'
-                        }}
-                      >
-                        {index === 0 && (
-                          <td
-                            rowSpan={slotBatches.length}
-                            style={{
+                      if (slotBatches.length === 0) {
+                        return (
+                          <tr key={slot}>
+                            <td data-label="Time Slot" style={{
                               fontWeight: '500',
-                              color: '#1e293b',
+                              color: '#64748b',
                               verticalAlign: 'top',
                               background: '#fafbfc',
                               borderRight: '1px solid #edf2f7',
                               padding: '12px 14px'
+                            }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                <div style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '5px',
+                                  padding: '3px 8px',
+                                  borderRadius: '6px',
+                                  fontSize: '0.72rem',
+                                  fontWeight: '600',
+                                  background: '#f1f5f9',
+                                  color: '#64748b',
+                                  border: '1px solid #e2e8f0',
+                                  width: 'fit-content'
+                                }}>
+                                  <Icon name="clock" size={11} />
+                                  <span>Last Updated: Routine Active</span>
+                                </div>
+                                <div style={{ fontWeight: '600', color: '#64748b', fontSize: '0.9rem' }}>
+                                  {slot}
+                                </div>
+                              </div>
+                            </td>
+                            <td colSpan={5} className="muted" style={{ verticalAlign: 'middle', padding: '12px 14px' }}>
+                              <span>No batch scheduled.</span>
+                              {canManageAny && (
+                                <button
+                                  className="btn btn-sm"
+                                  type="button"
+                                  style={{ marginLeft: '1rem' }}
+                                  onClick={() => openNewBatch(slot)}
+                                >
+                                  + Schedule Batch
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      }
+
+                      return slotBatches.map((batch, index) => {
+                        const canEdit = canEditBatch(batch);
+                        const canDelete = canDeleteBatch(batch);
+                        return (
+                          <tr
+                            key={batch.id}
+                            style={{
+                              background: batch.status === 'Ongoing' ? '#f0fdf4' : 'transparent',
+                              transition: 'background 0.15s ease'
                             }}
                           >
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                              <div style={{
+                            {index === 0 && (
+                              <td
+                                rowSpan={slotBatches.length}
+                                data-label="Time Slot"
+                                style={{
+                                  fontWeight: '500',
+                                  color: '#1e293b',
+                                  verticalAlign: 'top',
+                                  background: '#fafbfc',
+                                  borderRight: '1px solid #edf2f7',
+                                  padding: '12px 14px'
+                                }}
+                              >
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                  <div style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                    padding: '4px 9px',
+                                    borderRadius: '6px',
+                                    fontSize: '0.74rem',
+                                    fontWeight: '700',
+                                    background: '#eff6ff',
+                                    color: '#1d4ed8',
+                                    border: '1px solid #bfdbfe',
+                                    width: 'fit-content'
+                                  }}>
+                                    <Icon name="clock" size={12} />
+                                    <span>{formatSlotLastUpdated(slotBatches)}</span>
+                                  </div>
+                                  <div style={{ fontWeight: '700', color: '#0f172a', fontSize: '0.94rem' }}>
+                                    {slot}
+                                  </div>
+                                  {canManageAny && (
+                                    <div style={{ marginTop: '2px' }}>
+                                      <button
+                                        className="btn icon-btn"
+                                        type="button"
+                                        onClick={() => openNewBatch(slot)}
+                                        title="Add parallel batch for this slot"
+                                        style={{ width: '28px', height: '28px', padding: 0 }}
+                                      >
+                                        <Icon name="plus" size={13} />
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
+                            )}
+                            <td data-label="Course & Batch Details" style={{ verticalAlign: 'middle', padding: '12px 14px' }}>
+                              <strong style={{ display: 'block', fontSize: '0.94rem', color: '#0f172a' }}>{batch.course_name}</strong>
+                              {batch.batch_name && batch.batch_name !== batch.course_name && (
+                                <div style={{ fontSize: '0.85rem', color: '#2563eb', fontWeight: 600, marginTop: '2px' }}>
+                                  {batch.batch_name}
+                                </div>
+                              )}
+                              {batch.topic && (
+                                <div style={{ fontSize: '0.82rem', color: '#64748b', marginTop: '2px' }}>
+                                  <b>Topic:</b> {batch.topic}
+                                </div>
+                              )}
+                              {batch.students && (
+                                <div style={{ fontSize: '0.78rem', color: 'var(--muted)', marginTop: '2px' }}>
+                                  <b>Students:</b> {batch.students}
+                                </div>
+                              )}
+                            </td>
+                            <td data-label="Instructor" style={{ verticalAlign: 'middle', padding: '12px 14px', fontWeight: '500' }}>
+                              {batch.instructor_name || 'Unassigned'}
+                            </td>
+                            <td data-label="Students" style={{ verticalAlign: 'middle', padding: '12px 14px' }}>
+                              <span style={{ fontWeight: '600', color: '#1e293b' }}>{batch.student_count || 0}</span>
+                            </td>
+                            <td data-label="Status" style={{ verticalAlign: 'middle', padding: '12px 14px' }}>
+                              <span style={{
                                 display: 'inline-flex',
                                 alignItems: 'center',
                                 gap: '6px',
-                                padding: '4px 9px',
-                                borderRadius: '6px',
-                                fontSize: '0.74rem',
+                                padding: '3px 10px',
+                                borderRadius: '12px',
+                                fontSize: '0.8rem',
                                 fontWeight: '700',
-                                letterSpacing: '0.01em',
-                                background: '#eff6ff',
-                                color: '#1d4ed8',
-                                border: '1px solid #bfdbfe',
-                                boxShadow: '0 1px 2px rgba(29, 78, 216, 0.05)',
-                                width: 'fit-content'
+                                background: batch.status === 'Completed' ? '#f1f5f9' : batch.status === 'Ongoing' ? '#dcfce7' : '#fef9c3',
+                                color: batch.status === 'Completed' ? '#475569' : batch.status === 'Ongoing' ? '#15803d' : '#854d0e',
+                                border: `1px solid ${batch.status === 'Completed' ? '#e2e8f0' : batch.status === 'Ongoing' ? '#bbf7d0' : '#fef08a'}`
                               }}>
-                                <Icon name="clock" size={12} />
-                                <span>{formatSlotLastUpdated(slotBatches)}</span>
+                                <span style={{
+                                  width: '6px',
+                                  height: '6px',
+                                  borderRadius: '50%',
+                                  background: batch.status === 'Completed' ? '#64748b' : batch.status === 'Ongoing' ? '#16a34a' : '#ca8a04'
+                                }} />
+                                {batch.status}
+                              </span>
+                            </td>
+                            <td data-label="Actions" style={{ verticalAlign: 'middle', padding: '12px 14px', textAlign: 'center' }}>
+                              <div style={{ display: 'inline-flex', gap: '6px', alignItems: 'center' }}>
+                                {canEdit && (
+                                  <button
+                                    className="btn icon-btn"
+                                    type="button"
+                                    onClick={() => openEditBatch(batch)}
+                                    title="Edit Batch"
+                                    aria-label="Edit batch"
+                                  >
+                                    <Icon name="edit" size={15} />
+                                  </button>
+                                )}
+                                {canDelete && (
+                                  <button
+                                    className="btn icon-btn"
+                                    type="button"
+                                    onClick={() => promptDeleteBatch(batch)}
+                                    title="Delete Batch"
+                                    aria-label="Delete batch"
+                                    style={{ color: '#dc2626' }}
+                                  >
+                                    <Icon name="trash" size={15} />
+                                  </button>
+                                )}
+                                {!canEdit && (
+                                  <button
+                                    className="btn icon-btn"
+                                    type="button"
+                                    onClick={() => openEditBatch(batch)}
+                                    title="View Details"
+                                    aria-label="View batch"
+                                  >
+                                    <Icon name="eye" size={15} />
+                                  </button>
+                                )}
                               </div>
-                              <div style={{ fontWeight: '700', color: '#0f172a', fontSize: '0.94rem', letterSpacing: '-0.01em' }}>
-                                {slot}
-                              </div>
-                              <div style={{ marginTop: '2px' }}>
-                                <button
-                                  className="btn icon-btn"
-                                  onClick={() => openNewBatch(slot)}
-                                  title="Add parallel batch for this slot"
-                                  style={{ width: '28px', height: '28px', padding: 0 }}
-                                >
-                                  <Icon name="plus" size={13} />
-                                </button>
-                              </div>
-                            </div>
-                          </td>
-                        )}
-                        <td style={{ verticalAlign: 'middle', padding: '12px 14px' }}>
-                          <strong style={{ display: 'block', fontSize: '0.94rem', color: '#0f172a' }}>{batch.course_name}</strong>
-                          {batch.topic && (
-                            <div style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '2px' }}>
-                              {batch.topic}
-                            </div>
-                          )}
-                        </td>
-                        <td style={{ verticalAlign: 'middle', padding: '12px 14px', fontWeight: '500' }}>
-                          {batch.instructor_name || 'Unassigned'}
-                        </td>
-                        <td style={{ verticalAlign: 'middle', padding: '12px 14px' }}>
-                          <span style={{ fontWeight: '600', color: '#1e293b' }}>{batch.student_count}</span>
-                        </td>
-                        <td style={{ verticalAlign: 'middle', padding: '12px 14px' }}>
-                          <span style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '6px',
-                            padding: '3px 10px',
-                            borderRadius: '12px',
-                            fontSize: '0.8rem',
-                            fontWeight: '700',
-                            background: batch.status === 'Completed' ? '#f1f5f9' : batch.status === 'Ongoing' ? '#dcfce7' : '#fef9c3',
-                            color: batch.status === 'Completed' ? '#475569' : batch.status === 'Ongoing' ? '#15803d' : '#854d0e',
-                            border: `1px solid ${batch.status === 'Completed' ? '#e2e8f0' : batch.status === 'Ongoing' ? '#bbf7d0' : '#fef08a'}`
-                          }}>
-                            <span style={{
-                              width: '6px',
-                              height: '6px',
-                              borderRadius: '50%',
-                              background: batch.status === 'Completed' ? '#64748b' : batch.status === 'Ongoing' ? '#16a34a' : '#ca8a04'
-                            }} />
-                            {batch.status}
-                          </span>
-                        </td>
-                        <td style={{ verticalAlign: 'middle', padding: '12px 14px' }}>
-                          {canEdit ? (
-                            <div style={{ display: 'flex', gap: '6px' }}>
-                              <button className="btn icon-btn" onClick={() => openEditBatch(batch)} title="Edit"><Icon name="edit" size={16} /></button>
-                              {user?.role === 'admin' && (
-                                <button className="btn icon-btn" onClick={() => handleDelete(batch.id)} title="Delete"><Icon name="trash" size={16} /></button>
-                              )}
-                            </div>
-                          ) : (
-                            <button className="btn icon-btn" onClick={() => openEditBatch(batch)} title="View Details"><Icon name="eye" size={16} /></button>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  });
-                })
-              ) : (
-                /* Compact unfiltered view: only batches displayed, sorted chronologically */
-                (() => {
-                  const paginatedBatches = sortedBatches.slice(startIndex, startIndex + pageSize);
-                  const slotGroups = [];
-                  paginatedBatches.forEach(batch => {
-                    const lastGroup = slotGroups[slotGroups.length - 1];
-                    if (lastGroup && lastGroup.slot === batch.batch_time) {
-                      lastGroup.batches.push(batch);
-                    } else {
-                      slotGroups.push({ slot: batch.batch_time, batches: [batch] });
-                    }
-                  });
-
-                  return slotGroups.map(group => {
-                    return group.batches.map((batch, index) => {
+                            </td>
+                          </tr>
+                        );
+                      });
+                    })
+                  ) : (
+                    sortedBatches.slice(startIndex, startIndex + pageSize).map((batch) => {
                       const canEdit = canEditBatch(batch);
+                      const canDelete = canDeleteBatch(batch);
                       return (
                         <tr
                           key={batch.id}
@@ -1049,68 +1393,32 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
                             transition: 'background 0.15s ease'
                           }}
                         >
-                          {index === 0 && (
-                            <td
-                              rowSpan={group.batches.length}
-                              style={{
-                                fontWeight: '500',
-                                color: '#1e293b',
-                                verticalAlign: 'top',
-                                background: '#fafbfc',
-                                borderRight: '1px solid #edf2f7',
-                                padding: '12px 14px'
-                              }}
-                            >
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                <div style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '6px',
-                                  padding: '4px 9px',
-                                  borderRadius: '6px',
-                                  fontSize: '0.74rem',
-                                  fontWeight: '700',
-                                  letterSpacing: '0.01em',
-                                  background: '#eff6ff',
-                                  color: '#1d4ed8',
-                                  border: '1px solid #bfdbfe',
-                                  boxShadow: '0 1px 2px rgba(29, 78, 216, 0.05)',
-                                  width: 'fit-content'
-                                }}>
-                                  <Icon name="clock" size={12} />
-                                  <span>{formatSlotLastUpdated(group.batches)}</span>
-                                </div>
-                                <div style={{ fontWeight: '700', color: '#0f172a', fontSize: '0.94rem', letterSpacing: '-0.01em' }}>
-                                  {group.slot}
-                                </div>
-                                <div style={{ marginTop: '2px' }}>
-                                  <button
-                                    className="btn icon-btn"
-                                    onClick={() => openNewBatch(group.slot)}
-                                    title="Add parallel batch for this slot"
-                                    style={{ width: '28px', height: '28px', padding: 0 }}
-                                  >
-                                    <Icon name="plus" size={13} />
-                                  </button>
-                                </div>
-                              </div>
-                            </td>
-                          )}
-                          <td style={{ verticalAlign: 'middle', padding: '12px 14px' }}>
+                          <td data-label="Time Slot" style={{ verticalAlign: 'middle', padding: '12px 14px', fontWeight: '600' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <Icon name="clock" size={13} />
+                              {batch.batch_time}
+                            </div>
+                          </td>
+                          <td data-label="Course & Batch Details" style={{ verticalAlign: 'middle', padding: '12px 14px' }}>
                             <strong style={{ display: 'block', fontSize: '0.94rem', color: '#0f172a' }}>{batch.course_name}</strong>
+                            {batch.batch_name && batch.batch_name !== batch.course_name && (
+                              <div style={{ fontSize: '0.85rem', color: '#2563eb', fontWeight: 600, marginTop: '2px' }}>
+                                {batch.batch_name}
+                              </div>
+                            )}
                             {batch.topic && (
-                              <div style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '2px' }}>
-                                {batch.topic}
+                              <div style={{ fontSize: '0.82rem', color: '#64748b', marginTop: '2px' }}>
+                                <b>Topic:</b> {batch.topic}
                               </div>
                             )}
                           </td>
-                          <td style={{ verticalAlign: 'middle', padding: '12px 14px', fontWeight: '500' }}>
+                          <td data-label="Instructor" style={{ verticalAlign: 'middle', padding: '12px 14px', fontWeight: '500' }}>
                             {batch.instructor_name || 'Unassigned'}
                           </td>
-                          <td style={{ verticalAlign: 'middle', padding: '12px 14px' }}>
-                            <span style={{ fontWeight: '600', color: '#1e293b' }}>{batch.student_count}</span>
+                          <td data-label="Students" style={{ verticalAlign: 'middle', padding: '12px 14px' }}>
+                            <span style={{ fontWeight: '600', color: '#1e293b' }}>{batch.student_count || 0}</span>
                           </td>
-                          <td style={{ verticalAlign: 'middle', padding: '12px 14px' }}>
+                          <td data-label="Status" style={{ verticalAlign: 'middle', padding: '12px 14px' }}>
                             <span style={{
                               display: 'inline-flex',
                               alignItems: 'center',
@@ -1132,30 +1440,56 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
                               {batch.status}
                             </span>
                           </td>
-                          <td style={{ verticalAlign: 'middle', padding: '12px 14px' }}>
-                            {canEdit ? (
-                              <div style={{ display: 'flex', gap: '6px' }}>
-                                <button className="btn icon-btn" onClick={() => openEditBatch(batch)} title="Edit"><Icon name="edit" size={16} /></button>
-                                {user?.role === 'admin' && (
-                                  <button className="btn icon-btn" onClick={() => handleDelete(batch.id)} title="Delete"><Icon name="trash" size={16} /></button>
-                                )}
-                              </div>
-                            ) : (
-                              <button className="btn icon-btn" onClick={() => openEditBatch(batch)} title="View Details"><Icon name="eye" size={16} /></button>
-                            )}
+                          <td data-label="Actions" style={{ verticalAlign: 'middle', padding: '12px 14px', textAlign: 'center' }}>
+                            <div style={{ display: 'inline-flex', gap: '6px', alignItems: 'center' }}>
+                              {canEdit && (
+                                <button
+                                  className="btn icon-btn"
+                                  type="button"
+                                  onClick={() => openEditBatch(batch)}
+                                  title="Edit Batch"
+                                  aria-label="Edit batch"
+                                >
+                                  <Icon name="edit" size={15} />
+                                </button>
+                              )}
+                              {canDelete && (
+                                <button
+                                  className="btn icon-btn"
+                                  type="button"
+                                  onClick={() => promptDeleteBatch(batch)}
+                                  title="Delete Batch"
+                                  aria-label="Delete batch"
+                                  style={{ color: '#dc2626' }}
+                                >
+                                  <Icon name="trash" size={15} />
+                                </button>
+                              )}
+                              {!canEdit && (
+                                <button
+                                  className="btn icon-btn"
+                                  type="button"
+                                  onClick={() => openEditBatch(batch)}
+                                  title="View Details"
+                                  aria-label="View batch"
+                                >
+                                  <Icon name="eye" size={15} />
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       );
-                    });
-                  });
-                })()
-              )}
-            </tbody>
-          </table>
+                    })
+                  )}
+                </tbody>
+              </table>
+            )}
+          </div>
         )}
 
         {/* Pager Section */}
-        <div className="pager">
+        <div className="pager" style={{ flexWrap: 'wrap', gap: '10px' }}>
           <span>
             {totalCount > 0
               ? `Showing ${startIndex + 1}–${Math.min(startIndex + pageSize, totalCount)} of ${totalCount}${hasActiveFilters ? ` (filtered from ${batches.length} total)` : ''}`
@@ -1201,85 +1535,183 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
         </div>
       </div>
 
-      {/* Schedule / Edit Batch Modal */}
+      {/* ============================================================ */}
+      {/* MODAL 1: Schedule / Edit Batch Modal                        */}
+      {/* ============================================================ */}
       {isModalOpen && (() => {
         const isReadOnly = Boolean(editingBatch && !canEditBatch(editingBatch));
         return (
-          <div className="overlay" id="batchOverlay" onMouseDown={(e) => { if (e.target.id === 'batchOverlay') setIsModalOpen(false); }}>
-            <div className="modal" role="dialog" aria-modal="true" style={{ maxWidth: '550px', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
-              <header>
+          <div
+            className="overlay"
+            id="batchOverlay"
+            onMouseDown={(e) => { if (e.target.id === 'batchOverlay') setIsModalOpen(false); }}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(15, 23, 42, 0.65)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 1050,
+              padding: '16px'
+            }}
+          >
+            <div
+              className="modal"
+              role="dialog"
+              aria-modal="true"
+              style={{
+                maxWidth: '600px',
+                width: '100%',
+                maxHeight: '90vh',
+                display: 'flex',
+                flexDirection: 'column',
+                background: '#fff',
+                borderRadius: '12px',
+                boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04)'
+              }}
+            >
+              <header style={{ padding: '16px 20px', borderBottom: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div className="t">
-                  <h3>
+                  <h3 style={{ margin: 0, fontSize: '1.15rem' }}>
                     {isReadOnly 
                       ? 'Batch Details (View Only)' 
                       : editingBatch 
-                        ? 'Edit Batch' 
-                        : 'Schedule Batch'}
+                        ? 'Edit Batch Details' 
+                        : 'Create New Batch'}
                   </h3>
+                  <p style={{ margin: '3px 0 0', fontSize: '0.82rem', color: 'var(--muted)' }}>
+                    {editingBatch
+                      ? `Updating schedule & assignments for #${editingBatch.id}`
+                      : 'Set batch name, course, instructor, schedule, and student capacity.'}
+                  </p>
                 </div>
-                <button className="icon-btn" type="button" aria-label="Close" onClick={() => setIsModalOpen(false)}>
+                <button
+                  className="icon-btn"
+                  type="button"
+                  aria-label="Close"
+                  onClick={() => setIsModalOpen(false)}
+                >
                   <span className="ic"><Icon name="x" size={18} /></span>
                 </button>
               </header>
-              <div className="modal-body" style={{ maxHeight: 'calc(90vh - 70px)', overflowY: 'auto' }}>
-                <form onSubmit={handleSubmit} style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+
+              <div className="modal-body" style={{ maxHeight: 'calc(90vh - 75px)', overflowY: 'auto' }}>
+                <form onSubmit={handleSubmit} style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  {/* Batch Name */}
                   <div className="fld">
-                    <label>Time Slot <em>*</em></label>
-                    <select required disabled={isReadOnly} className="select" value={formData.batchTime} onChange={e => setFormData({...formData, batchTime: e.target.value})}>
-                      <option value="">Select Time Slot</option>
-                      {timeSlots.map(slot => (
-                        <option key={slot} value={slot}>{slot}</option>
-                      ))}
-                      <option value="Other">Other Custom Time</option>
-                    </select>
-                  </div>
-                  {formData.batchTime === 'Other' && (
-                    <div className="fld">
-                      <input required disabled={isReadOnly} className="input" placeholder="e.g. 07:00 AM - 08:00 AM" onChange={e => setFormData({...formData, batchTime: e.target.value})} />
-                    </div>
-                  )}
-                  
-                  <div className="fld">
-                    <label>Course Name <em>*</em></label>
+                    <label style={{ fontWeight: 600, fontSize: '0.85rem', display: 'block', marginBottom: '4px' }}>
+                      Batch Name *
+                    </label>
                     <input
                       required
                       disabled={isReadOnly}
                       className="input"
-                      list="batchCourseOptions"
-                      value={formData.courseName}
-                      onChange={e => setFormData({...formData, courseName: e.target.value})}
-                      placeholder="e.g. Advance Excel"
+                      value={formData.batchName}
+                      onChange={e => setFormData({ ...formData, batchName: e.target.value })}
+                      placeholder="e.g. Morning Advance Excel Batch A"
+                      style={{ width: '100%' }}
                     />
-                    <datalist id="batchCourseOptions">
-                      {courseOptions.map(c => (
-                        <option key={c} value={c} />
-                      ))}
-                    </datalist>
-                  </div>
-                  
-                  <div className="fld">
-                    <label>Topic / Description</label>
-                    <input disabled={isReadOnly} className="input" value={formData.topic} onChange={e => setFormData({...formData, topic: e.target.value})} placeholder="e.g. VLOOKUP & Pivot Tables" />
                   </div>
 
-                  <div className="fld">
-                    <label>Instructor</label>
-                    <select disabled={isReadOnly || user?.role !== 'admin'} className="select" value={formData.instructorId} onChange={e => setFormData({...formData, instructorId: e.target.value})}>
-                      <option value="">Select Instructor</option>
-                      {users?.map(u => (
-                        <option key={u.id} value={u.id}>{u.fullName || u.full_name || u.username}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  {/* Course & Timing Grid */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                     <div className="fld">
-                      <label>Student Count</label>
-                      <input type="number" min="0" disabled={isReadOnly} className="input" value={formData.studentCount} onChange={e => setFormData({...formData, studentCount: e.target.value})} />
+                      <label style={{ fontWeight: 600, fontSize: '0.85rem', display: 'block', marginBottom: '4px' }}>
+                        Course Name *
+                      </label>
+                      <input
+                        required
+                        disabled={isReadOnly}
+                        className="input"
+                        list="batchCourseOptions"
+                        value={formData.courseName}
+                        onChange={e => setFormData({ ...formData, courseName: e.target.value })}
+                        placeholder="Select or enter course"
+                        style={{ width: '100%' }}
+                      />
+                      <datalist id="batchCourseOptions">
+                        {courseOptions.map(c => (
+                          <option key={c} value={c} />
+                        ))}
+                      </datalist>
                     </div>
+
                     <div className="fld">
-                      <label>Status</label>
-                      <select disabled={isReadOnly} className="select" value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})}>
+                      <label style={{ fontWeight: 600, fontSize: '0.85rem', display: 'block', marginBottom: '4px' }}>
+                        Timing / Time Slot *
+                      </label>
+                      <select
+                        required
+                        disabled={isReadOnly}
+                        className="select"
+                        value={timeSlots.includes(formData.batchTime) ? formData.batchTime : (formData.batchTime ? 'Other' : '')}
+                        onChange={e => {
+                          const val = e.target.value;
+                          setFormData({ ...formData, batchTime: val === 'Other' ? (formData.batchTime || '07:00 AM - 08:00 AM') : val });
+                        }}
+                        style={{ width: '100%' }}
+                      >
+                        <option value="">-- Select Time Slot --</option>
+                        {timeSlots.map(slot => (
+                          <option key={slot} value={slot}>{slot}</option>
+                        ))}
+                        <option value="Other">Custom Time Slot...</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Custom Time Slot if 'Other' */}
+                  {(!timeSlots.includes(formData.batchTime) || formData.batchTime === 'Other') && (
+                    <div className="fld">
+                      <label style={{ fontWeight: 600, fontSize: '0.82rem', display: 'block', marginBottom: '4px' }}>
+                        Specify Custom Time Slot *
+                      </label>
+                      <input
+                        required
+                        disabled={isReadOnly}
+                        className="input"
+                        value={formData.batchTime === 'Other' ? '' : formData.batchTime}
+                        placeholder="e.g. 07:30 AM - 08:30 AM"
+                        onChange={e => setFormData({ ...formData, batchTime: e.target.value })}
+                        style={{ width: '100%' }}
+                      />
+                    </div>
+                  )}
+
+                  {/* Assigned Teacher & Status */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    <div className="fld">
+                      <label style={{ fontWeight: 600, fontSize: '0.85rem', display: 'block', marginBottom: '4px' }}>
+                        Assigned Teacher / Faculty
+                      </label>
+                      <select
+                        disabled={isReadOnly}
+                        className="select"
+                        value={formData.instructorId}
+                        onChange={e => setFormData({ ...formData, instructorId: e.target.value })}
+                        style={{ width: '100%' }}
+                      >
+                        <option value="">Unassigned</option>
+                        {users?.map(u => (
+                          <option key={u.id} value={u.id}>
+                            {u.fullName || u.full_name || u.username} {u.role ? `(${u.role})` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="fld">
+                      <label style={{ fontWeight: 600, fontSize: '0.85rem', display: 'block', marginBottom: '4px' }}>
+                        Batch Status *
+                      </label>
+                      <select
+                        disabled={isReadOnly}
+                        className="select"
+                        value={formData.status}
+                        onChange={e => setFormData({ ...formData, status: e.target.value })}
+                        style={{ width: '100%' }}
+                      >
                         <option value="Upcoming">Upcoming</option>
                         <option value="Ongoing">Ongoing</option>
                         <option value="Completed">Completed</option>
@@ -1287,13 +1719,90 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
                     </div>
                   </div>
 
-                  <div className="form-foot" style={{ marginTop: '1rem', display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                  {/* Student Count & Date */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    <div className="fld">
+                      <label style={{ fontWeight: 600, fontSize: '0.85rem', display: 'block', marginBottom: '4px' }}>
+                        Student Count
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="200"
+                        disabled={isReadOnly}
+                        className="input"
+                        value={formData.studentCount}
+                        onChange={e => setFormData({ ...formData, studentCount: e.target.value })}
+                        placeholder="0"
+                        style={{ width: '100%' }}
+                      />
+                    </div>
+
+                    <div className="fld">
+                      <label style={{ fontWeight: 600, fontSize: '0.85rem', display: 'block', marginBottom: '4px' }}>
+                        Batch Schedule Date
+                      </label>
+                      <input
+                        type="date"
+                        disabled={isReadOnly}
+                        className="input"
+                        value={formData.date}
+                        onChange={e => setFormData({ ...formData, date: e.target.value })}
+                        style={{ width: '100%' }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Topic / Description */}
+                  <div className="fld">
+                    <label style={{ fontWeight: 600, fontSize: '0.85rem', display: 'block', marginBottom: '4px' }}>
+                      Topic / Curriculum Module
+                    </label>
+                    <input
+                      disabled={isReadOnly}
+                      className="input"
+                      value={formData.topic}
+                      onChange={e => setFormData({ ...formData, topic: e.target.value })}
+                      placeholder="e.g. Chapter 30: Cost Centers & GST Reconciliation"
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+
+                  {/* Enrolled Students list / Notes */}
+                  <div className="fld">
+                    <label style={{ fontWeight: 600, fontSize: '0.85rem', display: 'block', marginBottom: '4px' }}>
+                      Enrolled Students (Names or IDs)
+                    </label>
+                    <textarea
+                      disabled={isReadOnly}
+                      className="input"
+                      rows={3}
+                      value={formData.students}
+                      onChange={e => {
+                        const val = e.target.value;
+                        const items = val.split(/[\r\n,]+/).map(s => s.trim()).filter(Boolean);
+                        setFormData({
+                          ...formData,
+                          students: val,
+                          studentCount: items.length > 0 && (!formData.studentCount || formData.studentCount === 0) ? items.length : formData.studentCount
+                        });
+                      }}
+                      placeholder="e.g. Saksham Arya, Taufeeq Ahmad Bhat, Kirandeep Kaur (one per line or comma-separated)"
+                      style={{ width: '100%', resize: 'vertical' }}
+                    />
+                  </div>
+
+                  <div className="form-foot" style={{ marginTop: '8px', display: 'flex', gap: '10px', justifyContent: 'flex-end', borderTop: '1px solid var(--line)', paddingTop: '14px' }}>
                     {isReadOnly ? (
                       <button type="button" className="btn primary" onClick={() => setIsModalOpen(false)}>Close</button>
                     ) : (
                       <>
-                        <button type="button" className="btn" onClick={() => setIsModalOpen(false)}>Cancel</button>
-                        <button type="submit" className="btn primary">Save Batch</button>
+                        <button type="button" className="btn" onClick={() => setIsModalOpen(false)} disabled={savingBatch}>
+                          Cancel
+                        </button>
+                        <button type="submit" className="btn primary" disabled={savingBatch}>
+                          {savingBatch ? 'Saving...' : editingBatch ? 'Update Batch' : 'Create Batch'}
+                        </button>
                       </>
                     )}
                   </div>
@@ -1303,6 +1812,96 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
           </div>
         );
       })()}
+
+      {/* ============================================================ */}
+      {/* MODAL 2: Delete Confirmation Modal Popup                    */}
+      {/* ============================================================ */}
+      {batchToDelete && (
+        <div
+          className="overlay"
+          id="deleteOverlay"
+          onMouseDown={(e) => { if (e.target.id === 'deleteOverlay') setBatchToDelete(null); }}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.65)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1100,
+            padding: '16px'
+          }}
+        >
+          <div
+            className="dialog"
+            role="alertdialog"
+            aria-modal="true"
+            style={{
+              maxWidth: '460px',
+              width: '100%',
+              background: '#fff',
+              borderRadius: '12px',
+              boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04)',
+              overflow: 'hidden'
+            }}
+          >
+            <div style={{ padding: '20px', display: 'flex', gap: '14px', alignItems: 'flex-start' }}>
+              <div
+                style={{
+                  width: '42px',
+                  height: '42px',
+                  borderRadius: '50%',
+                  background: '#fef2f2',
+                  color: '#dc2626',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0
+                }}
+              >
+                <Icon name="alert" size={22} />
+              </div>
+
+              <div style={{ flex: 1 }}>
+                <h4 style={{ margin: '0 0 6px', fontSize: '1.1rem', color: '#0f172a' }}>
+                  Delete Batch Confirmation
+                </h4>
+                <p style={{ margin: '0 0 12px', fontSize: '0.86rem', color: '#64748b', lineHeight: 1.5 }}>
+                  Are you sure you want to permanently delete this batch? This action will remove the batch from the routine schedule.
+                </p>
+
+                {/* Batch Summary Card */}
+                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 12px', fontSize: '0.82rem' }}>
+                  <div><b>Batch Name:</b> {batchToDelete.batch_name || batchToDelete.topic || batchToDelete.course_name}</div>
+                  <div style={{ marginTop: '3px' }}><b>Course:</b> {batchToDelete.course_name}</div>
+                  <div style={{ marginTop: '3px' }}><b>Time Slot:</b> {batchToDelete.batch_time}</div>
+                  <div style={{ marginTop: '3px' }}><b>Instructor:</b> {batchToDelete.instructor_name || 'Unassigned'}</div>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ padding: '12px 20px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => setBatchToDelete(null)}
+                disabled={deletingBatch}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn danger-solid"
+                onClick={confirmDeleteBatch}
+                disabled={deletingBatch}
+                style={{ background: '#dc2626', color: '#fff' }}
+              >
+                {deletingBatch ? 'Deleting...' : 'Yes, Delete Batch'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
