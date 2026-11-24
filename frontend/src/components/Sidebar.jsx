@@ -21,7 +21,7 @@ export default function Sidebar({
     ? (roleRaw.charAt(0).toUpperCase() + roleRaw.slice(1).toLowerCase()) 
     : (user?.username?.toLowerCase() === 'palwasha' ? 'Teacher' : (isAdmin ? 'Admin' : 'Staff'));
 
-  const handleDashboardClick = () => {
+  const handleLogoClick = () => {
     setTab('dashboard');
     if (onNavClick) onNavClick();
   };
@@ -39,8 +39,8 @@ export default function Sidebar({
             tabIndex={0}
             title="LBSTIMN Home / Dashboard"
             aria-label="LBSTIMN Home / Dashboard"
-            onClick={handleDashboardClick}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleDashboardClick(); } }}
+            onClick={handleLogoClick}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleLogoClick(); } }}
           >
             <div className="logo-mark">
               {ORG.logoUrl ? (
@@ -68,8 +68,8 @@ export default function Sidebar({
               tabIndex={0}
               title="LBSTIMN Home / Dashboard"
               aria-label="LBSTIMN Home / Dashboard"
-              onClick={handleDashboardClick}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleDashboardClick(); } }}
+              onClick={handleLogoClick}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleLogoClick(); } }}
             >
               <b>{ORG.name}</b>
               <span>{ORG.tagline}</span>
@@ -107,18 +107,6 @@ export default function Sidebar({
 
         <div className="nav-label">Menu</div>
         <nav aria-label="Main">
-          {/* Main Dashboard item */}
-          <button
-            className="nav-item"
-            type="button"
-            aria-current={tab === 'dashboard' ? 'page' : undefined}
-            onClick={handleDashboardClick}
-            data-tooltip-right={collapsed ? "Dashboard" : undefined}
-          >
-            <span className="ic"><Icon name="dashboard" size={20} /></span>
-            <span className="label">Dashboard</span>
-          </button>
-
           {/* Enquiries */}
           {hasMenuAccess(user, 'enquiries') && (
             <button

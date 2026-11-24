@@ -18,6 +18,15 @@ let dashboardCache = null;
 let dashboardCacheTime = 0;
 const CACHE_TTL_MS = 60000; // 60s cache
 
+function normalizeDashboardRecords(value, resource) {
+  if (Array.isArray(value)) return value;
+  if (Array.isArray(value?.data)) return value.data;
+  if (value != null) {
+    console.warn(`Dashboard ${resource} response was not a record list; displaying an empty list.`);
+  }
+  return [];
+}
+
 export function clearDashboardCache() {
   dashboardCache = null;
   dashboardCacheTime = 0;
@@ -81,12 +90,12 @@ export default function DashboardPage({
         ]);
 
         const freshData = {
-          expenses: Array.isArray(expensesRes) ? expensesRes : (expensesRes?.data || []),
-          attendance: Array.isArray(attRes) ? attRes : (attRes?.data || []),
-          studentAttendance: Array.isArray(studentAttRes) ? studentAttRes : (studentAttRes?.data || []),
-          batches: Array.isArray(batchesRes) ? batchesRes : (batchesRes?.data || []),
-          tasks: Array.isArray(tasksRes) ? tasksRes : (tasksRes?.data || []),
-          courses: Array.isArray(coursesRes) ? coursesRes : (coursesRes?.data || [])
+          expenses: normalizeDashboardRecords(expensesRes, 'expenses'),
+          attendance: normalizeDashboardRecords(attRes, 'attendance'),
+          studentAttendance: normalizeDashboardRecords(studentAttRes, 'student attendance'),
+          batches: normalizeDashboardRecords(batchesRes, 'batches'),
+          tasks: normalizeDashboardRecords(tasksRes, 'tasks'),
+          courses: normalizeDashboardRecords(coursesRes, 'courses')
         };
 
         dashboardCache = freshData;
