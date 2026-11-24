@@ -473,14 +473,16 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
   const currentPage = Math.min(page, totalPages);
   const startIndex = (currentPage - 1) * pageSize;
 
-  // Role-based permissions
-  const isOwner = (batch) => Number(batch?.instructor_id) === Number(user?.id);
-  const canEditBatch = (batch) => isAdmin || (isTeacher && (isOwner(batch) || !batch?.instructor_id));
-  const canDeleteBatch = (batch) => isAdmin || (isTeacher && (isOwner(batch) || !batch?.instructor_id));
+  const [isViewOnly, setIsViewOnly] = useState(false);
+
+  // Role-based permissions: Admins and Teachers can manage batches
+  const canEditBatch = () => isAdmin || isTeacher;
+  const canDeleteBatch = () => isAdmin || isTeacher;
 
   // Modal open handlers
   const openNewBatch = (timeSlot = '') => {
     setEditingBatch(null);
+    setIsViewOnly(false);
     setFormData({
       batchName: '',
       batchTime: timeSlot || (timeSlots[0] || '09:00 AM - 10:00 AM'),
@@ -495,8 +497,26 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
     setIsModalOpen(true);
   };
 
+  const openViewBatch = (batch) => {
+    setEditingBatch(batch);
+    setIsViewOnly(true);
+    setFormData({
+      batchName: batch.batch_name || batch.topic || '',
+      batchTime: batch.batch_time || '',
+      instructorId: batch.instructor_id != null ? String(batch.instructor_id) : '',
+      courseName: batch.course_name || '',
+      topic: batch.topic || '',
+      studentCount: batch.student_count != null ? batch.student_count : 0,
+      students: batch.students || '',
+      status: batch.status || 'Upcoming',
+      date: batch.date ? String(batch.date).split('T')[0] : new Date().toISOString().slice(0, 10)
+    });
+    setIsModalOpen(true);
+  };
+
   const openEditBatch = (batch) => {
     setEditingBatch(batch);
+    setIsViewOnly(false);
     setFormData({
       batchName: batch.batch_name || batch.topic || '',
       batchTime: batch.batch_time || '',
@@ -938,31 +958,37 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
                       </div>
 
                       {/* Action Buttons */}
-                      <div style={{ marginTop: '14px', paddingTop: '12px', borderTop: '1px solid #e2e8f0', display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                        {canEdit && (
-                          <button
-                            className="btn sm"
-                            type="button"
-                            onClick={() => openEditBatch(b)}
-                            title="Edit batch details"
-                            style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                          >
-                            <span className="ic"><Icon name="edit" size={13} /></span>
-                            Edit
-                          </button>
-                        )}
-                        {canDelete && (
-                          <button
-                            className="btn sm danger"
-                            type="button"
-                            onClick={() => promptDeleteBatch(b)}
-                            title="Delete this batch"
-                            style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                          >
-                            <span className="ic"><Icon name="trash" size={13} /></span>
-                            Delete
-                          </button>
-                        )}
+                      <div style={{ marginTop: '14px', paddingTop: '12px', borderTop: '1px solid #e2e8f0', display: 'flex', gap: '8px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                        <button
+                          className="btn sm"
+                          type="button"
+                          onClick={() => openViewBatch(b)}
+                          title="View batch details"
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                        >
+                          <span className="ic"><Icon name="eye" size={13} /></span>
+                          View
+                        </button>
+                        <button
+                          className="btn sm"
+                          type="button"
+                          onClick={() => openEditBatch(b)}
+                          title="Edit batch details"
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                        >
+                          <span className="ic"><Icon name="edit" size={13} /></span>
+                          Edit
+                        </button>
+                        <button
+                          className="btn sm danger"
+                          type="button"
+                          onClick={() => promptDeleteBatch(b)}
+                          title="Delete this batch"
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                        >
+                          <span className="ic"><Icon name="trash" size={13} /></span>
+                          Delete
+                        </button>
                       </div>
                     </div>
                   );
@@ -1137,41 +1163,35 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
                                 </span>
                               </td>
                               <td data-label="Actions" style={{ verticalAlign: 'middle', padding: '12px 14px', textAlign: 'center' }}>
-                                <div style={{ display: 'inline-flex', gap: '6px', alignItems: 'center' }}>
-                                  {canEdit && (
-                                    <button
-                                      className="btn icon-btn"
-                                      type="button"
-                                      onClick={() => openEditBatch(batch)}
-                                      title="Edit Batch"
-                                      aria-label="Edit batch"
-                                    >
-                                      <Icon name="edit" size={15} />
-                                    </button>
-                                  )}
-                                  {canDelete && (
-                                    <button
-                                      className="btn icon-btn"
-                                      type="button"
-                                      onClick={() => promptDeleteBatch(batch)}
-                                      title="Delete Batch"
-                                      aria-label="Delete batch"
-                                      style={{ color: '#dc2626' }}
-                                    >
-                                      <Icon name="trash" size={15} />
-                                    </button>
-                                  )}
-                                  {!canEdit && (
-                                    <button
-                                      className="btn icon-btn"
-                                      type="button"
-                                      onClick={() => openEditBatch(batch)}
-                                      title="View Details"
-                                      aria-label="View batch"
-                                    >
-                                      <Icon name="eye" size={15} />
-                                    </button>
-                                  )}
+                                <div style={{ display: 'inline-flex', gap: '6px', alignItems: 'center', justifyContent: 'center' }}>
+                                  <button
+                                    className="btn icon-btn"
+                                    type="button"
+                                    onClick={() => openViewBatch(batch)}
+                                    title="View Details"
+                                    aria-label="View batch"
+                                  >
+                                    <Icon name="eye" size={15} />
+                                  </button>
+                                  <button
+                                    className="btn icon-btn"
+                                    type="button"
+                                    onClick={() => openEditBatch(batch)}
+                                    title="Edit Batch"
+                                    aria-label="Edit batch"
+                                  >
+                                    <Icon name="edit" size={15} />
+                                  </button>
+                                  <button
+                                    className="btn icon-btn"
+                                    type="button"
+                                    onClick={() => promptDeleteBatch(batch)}
+                                    title="Delete Batch"
+                                    aria-label="Delete batch"
+                                    style={{ color: '#dc2626' }}
+                                  >
+                                    <Icon name="trash" size={15} />
+                                  </button>
                                 </div>
                               </td>
                             </tr>
@@ -1340,8 +1360,16 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
                               </span>
                             </td>
                             <td data-label="Actions" style={{ verticalAlign: 'middle', padding: '12px 14px', textAlign: 'center' }}>
-                              <div style={{ display: 'inline-flex', gap: '6px', alignItems: 'center' }}>
-                                {canEdit && (
+                                <div style={{ display: 'inline-flex', gap: '6px', alignItems: 'center', justifyContent: 'center' }}>
+                                  <button
+                                    className="btn icon-btn"
+                                    type="button"
+                                    onClick={() => openViewBatch(batch)}
+                                    title="View Details"
+                                    aria-label="View batch"
+                                  >
+                                    <Icon name="eye" size={15} />
+                                  </button>
                                   <button
                                     className="btn icon-btn"
                                     type="button"
@@ -1351,8 +1379,6 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
                                   >
                                     <Icon name="edit" size={15} />
                                   </button>
-                                )}
-                                {canDelete && (
                                   <button
                                     className="btn icon-btn"
                                     type="button"
@@ -1363,20 +1389,8 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
                                   >
                                     <Icon name="trash" size={15} />
                                   </button>
-                                )}
-                                {!canEdit && (
-                                  <button
-                                    className="btn icon-btn"
-                                    type="button"
-                                    onClick={() => openEditBatch(batch)}
-                                    title="View Details"
-                                    aria-label="View batch"
-                                  >
-                                    <Icon name="eye" size={15} />
-                                  </button>
-                                )}
-                              </div>
-                            </td>
+                                </div>
+                              </td>
                           </tr>
                         );
                       });
@@ -1441,43 +1455,37 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
                             </span>
                           </td>
                           <td data-label="Actions" style={{ verticalAlign: 'middle', padding: '12px 14px', textAlign: 'center' }}>
-                            <div style={{ display: 'inline-flex', gap: '6px', alignItems: 'center' }}>
-                              {canEdit && (
-                                <button
-                                  className="btn icon-btn"
-                                  type="button"
-                                  onClick={() => openEditBatch(batch)}
-                                  title="Edit Batch"
-                                  aria-label="Edit batch"
-                                >
-                                  <Icon name="edit" size={15} />
-                                </button>
-                              )}
-                              {canDelete && (
-                                <button
-                                  className="btn icon-btn"
-                                  type="button"
-                                  onClick={() => promptDeleteBatch(batch)}
-                                  title="Delete Batch"
-                                  aria-label="Delete batch"
-                                  style={{ color: '#dc2626' }}
-                                >
-                                  <Icon name="trash" size={15} />
-                                </button>
-                              )}
-                              {!canEdit && (
-                                <button
-                                  className="btn icon-btn"
-                                  type="button"
-                                  onClick={() => openEditBatch(batch)}
-                                  title="View Details"
-                                  aria-label="View batch"
-                                >
-                                  <Icon name="eye" size={15} />
-                                </button>
-                              )}
-                            </div>
-                          </td>
+                                <div style={{ display: 'inline-flex', gap: '6px', alignItems: 'center', justifyContent: 'center' }}>
+                                  <button
+                                    className="btn icon-btn"
+                                    type="button"
+                                    onClick={() => openViewBatch(batch)}
+                                    title="View Details"
+                                    aria-label="View batch"
+                                  >
+                                    <Icon name="eye" size={15} />
+                                  </button>
+                                  <button
+                                    className="btn icon-btn"
+                                    type="button"
+                                    onClick={() => openEditBatch(batch)}
+                                    title="Edit Batch"
+                                    aria-label="Edit batch"
+                                  >
+                                    <Icon name="edit" size={15} />
+                                  </button>
+                                  <button
+                                    className="btn icon-btn"
+                                    type="button"
+                                    onClick={() => promptDeleteBatch(batch)}
+                                    title="Delete Batch"
+                                    aria-label="Delete batch"
+                                    style={{ color: '#dc2626' }}
+                                  >
+                                    <Icon name="trash" size={15} />
+                                  </button>
+                                </div>
+                              </td>
                         </tr>
                       );
                     })
@@ -1539,7 +1547,7 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
       {/* MODAL 1: Schedule / Edit Batch Modal                        */}
       {/* ============================================================ */}
       {isModalOpen && (() => {
-        const isReadOnly = Boolean(editingBatch && !canEditBatch(editingBatch));
+        const isReadOnly = isViewOnly || (!isAdmin && !isTeacher);
         return (
           <div
             className="overlay"
@@ -1794,7 +1802,20 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
 
                   <div className="form-foot" style={{ marginTop: '8px', display: 'flex', gap: '10px', justifyContent: 'flex-end', borderTop: '1px solid var(--line)', paddingTop: '14px' }}>
                     {isReadOnly ? (
-                      <button type="button" className="btn primary" onClick={() => setIsModalOpen(false)}>Close</button>
+                      <div style={{ display: 'flex', gap: '10px' }}>
+                        {(isAdmin || isTeacher) && (
+                          <button
+                            type="button"
+                            className="btn"
+                            onClick={() => setIsViewOnly(false)}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                          >
+                            <span className="ic"><Icon name="edit" size={14} /></span>
+                            Edit This Batch
+                          </button>
+                        )}
+                        <button type="button" className="btn primary" onClick={() => setIsModalOpen(false)}>Close</button>
+                      </div>
                     ) : (
                       <>
                         <button type="button" className="btn" onClick={() => setIsModalOpen(false)} disabled={savingBatch}>

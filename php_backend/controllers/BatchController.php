@@ -306,12 +306,7 @@ function updateBatch($pdo, $user, $id, $body) {
             return;
         }
 
-        $isAssignedToOther = !empty($batch['instructor_id']) && (int)$batch['instructor_id'] !== (int)$user['sub'];
-        if ($userRole !== 'admin' && $isAssignedToOther) {
-            http_response_code(403);
-            echo json_encode(["message" => "Access denied. You can only edit your own batches or unassigned batches."]);
-            return;
-        }
+// Authorized teachers and admin can edit all batches
 
         $batchName = array_key_exists('batchName', $body) 
             ? trim($body['batchName']) 
@@ -408,12 +403,7 @@ function deleteBatch($pdo, $user, $id) {
             return;
         }
 
-        $isAssignedToOther = !empty($batch['instructor_id']) && (int)$batch['instructor_id'] !== (int)$user['sub'];
-        if ($userRole !== 'admin' && $isAssignedToOther) {
-            http_response_code(403);
-            echo json_encode(["message" => "Access denied. You can only delete your own batches or unassigned batches."]);
-            return;
-        }
+// Authorized teachers and admin can delete all batches
 
         $stmt = $pdo->prepare("DELETE FROM institute_batches WHERE id = ?");
         $stmt->execute([$id]);

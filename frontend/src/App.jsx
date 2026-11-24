@@ -81,7 +81,7 @@ export default function App() {
     if (!user) return;
 
     const TAB_PERMISSION_MAP = {
-      dashboard: 'enquiries',
+      dashboard: null, // Always allowed for logged in portal users
       new: 'enquiries',
       table: 'enquiries',
       payments: 'payments',
@@ -97,9 +97,11 @@ export default function App() {
     };
 
     const requiredPermission = TAB_PERMISSION_MAP[tab];
-    const isAllowed = requiredPermission === 'admin'
-      ? String(user.role || '').toLowerCase() === 'admin'
-      : hasMenuAccess(user, requiredPermission);
+    const isAllowed = requiredPermission === null
+      ? true
+      : requiredPermission === 'admin'
+        ? String(user.role || '').toLowerCase() === 'admin'
+        : hasMenuAccess(user, requiredPermission);
 
     if (!isAllowed) {
       const fallbackTabs = ['attendance', 'batches', 'tasks', 'dashboard', 'payments', 'students'];
@@ -463,58 +465,92 @@ export default function App() {
 
         <div className="content">
           {/* Header & Controls for Enquiries section */}
-          {(tab === 'dashboard' || tab === 'new' || tab === 'table') && (
+          {/* Header & Controls for Dashboard */}
+          {tab === 'dashboard' && (
+            <div className="page-head" style={{ flexWrap: 'wrap', gap: '14px', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: '1.45rem', fontWeight: 800, color: 'var(--navy-900)' }}>
+                  Admin Master Dashboard
+                </h2>
+                <p style={{ margin: '4px 0 0', fontSize: '0.88rem', color: 'var(--muted)' }}>
+                  Institute-wide metrics, operational overview, and recent activity across all modules.
+                </p>
+              </div>
+
+              <div className="controls" style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <DateRangeFilter
+                  id="dash-range"
+                  value={dashRangeKind}
+                  onChange={setDashRangeKind}
+                  from={dashFrom}
+                  to={dashTo}
+                  onFromChange={setDashFrom}
+                  onToChange={setDashTo}
+                />
+
+                <button
+                  className="btn"
+                  type="button"
+                  onClick={() => loadData(false)}
+                  title="Refresh Dashboard Data"
+                >
+                  <span className={'ic ' + (loading ? 'spin' : '')}><Icon name="refresh" size={16} /></span>
+                  Refresh
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Header & Controls for Enquiries section */}
+          {(tab === 'new' || tab === 'table') && (
             <div className="page-head">
               <div>
                 <h2>Enquiries Management</h2>
                 <p>Track and manage student leads and view analytics.</p>
               </div>
 
-              {tab === 'dashboard' && (
-                <div className="controls">
-                  <DateRangeFilter
-                    id="range"
-                    value={dashRangeKind}
-                    onChange={setDashRangeKind}
-                    from={dashFrom}
-                    to={dashTo}
-                    onFromChange={setDashFrom}
-                    onToChange={setDashTo}
-                  />
+              <div className="controls">
+                <button
+                  className="btn primary"
+                  type="button"
+                  onClick={() => setTab('new')}
+                >
+                  <span className="ic"><Icon name="plus" size={18} /></span>
+                  New Enquiry
+                </button>
 
-                  <button
-                    className="btn primary"
-                    type="button"
-                    onClick={() => setTab('new')}
-                  >
-                    <span className="ic"><Icon name="plus" size={18} /></span>
-                    New Enquiry
-                  </button>
-
-                  <button
-                    className="btn"
-                    type="button"
-                    onClick={() => loadData(false)}
-                  >
-                    <span className={`ic ${loading ? 'spin' : ''}`}><Icon name="refresh" size={18} /></span>
-                    Refresh
-                  </button>
-                </div>
-              )}
+                <button
+                  className="btn"
+                  type="button"
+                  onClick={() => loadData(false)}
+                >
+                  <span className={'ic ' + (loading ? 'spin' : '')}><Icon name="refresh" size={18} /></span>
+                  Refresh
+                </button>
+              </div>
             </div>
           )}
 
           {/* Enquiries Sub Tabs */}
-          {(tab === 'dashboard' || tab === 'new' || tab === 'table') && (
+          {(tab === 'new' || tab === 'table') && (
             <div className="tabs" role="tablist" aria-label="Enquiries sections">
               <button
                 className="tab"
                 role="tab"
-                aria-selected={tab === 'dashboard'}
-                onClick={() => setTab('dashboard')}
+                aria-selected={tab === 'table'}
+                onClick={() => setTab('table')}
               >
-                <span className="ic"><Icon name="dashboard" size={18} /></span>
-                Dashboard
+                <span className="ic"><Icon name="inbox" size={18} /></span>
+                Enquiries Table
+              </button>
+              <button
+                className="tab"
+                role="tab"
+                aria-selected={tab === 'new'}
+                onClick={() => setTab('new')}
+              >
+                <span className="ic"><Icon name="plus" size={18} /></span>
+                New Enquiry
               </button>
             </div>
           )}
@@ -535,15 +571,22 @@ export default function App() {
           {/* Page Routing */}
           {tab === 'dashboard' && (
             <DashboardPage
+              user={user}
               enquiries={enquiries}
+              fees={fees}
+              students={students}
+              enrollments={enrollments}
+              users={usersList}
               loading={loading}
               dashRangeKind={dashRangeKind}
               dashFrom={dashFrom}
               dashTo={dashTo}
+              onNavigate={(destTab) => setTab(destTab)}
               onOpenEdit={(id) => setEditLeadId(id)}
               onConfirmAdmission={handleConfirmAdmission}
               onDrillIntoTable={handleDrillIntoTable}
               onGoToNewLead={() => setTab('new')}
+              onRefresh={() => loadData(false)}
               onToast={addToast}
             />
           )}

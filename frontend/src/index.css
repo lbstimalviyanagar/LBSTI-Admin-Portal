@@ -338,11 +338,69 @@ svg {
   position: sticky;
   top: 0;
   height: 100vh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
-  padding: 20px 16px;
+  padding: 16px 14px 12px;
   transition: width .2s ease;
   z-index: 40;
+  overflow: hidden;
+}
+
+.sidebar-header {
+  flex-shrink: 0;
+}
+
+.clickable-brand-logo,
+.clickable-brand-text {
+  cursor: pointer;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  user-select: none;
+}
+
+.clickable-brand-logo:hover,
+.clickable-brand-text:hover {
+  opacity: 0.9;
+}
+
+.clickable-brand-logo:active,
+.clickable-brand-text:active {
+  transform: scale(0.98);
+}
+
+.sidebar-scrollable {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  margin: 10px -6px;
+  padding: 2px 6px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
+}
+
+.sidebar-scrollable::-webkit-scrollbar {
+  width: 5px;
+}
+
+.sidebar-scrollable::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar-scrollable::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.22);
+  border-radius: 4px;
+}
+
+.sidebar-scrollable::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.sidebar-footer {
+  flex-shrink: 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--side-line);
 }
 
 .brand {
@@ -518,7 +576,17 @@ img.avatar {
 
 #app.collapsed .sidebar {
   width: 78px;
-  padding-inline: 12px;
+  padding-inline: 10px;
+}
+
+#app.collapsed .sidebar-scrollable {
+  margin: 10px 0;
+  padding: 2px 0;
+}
+
+#app.collapsed .sidebar-footer .logout {
+  justify-content: center;
+  padding-inline: 0;
 }
 
 #app.collapsed .sidebar .label,
@@ -1947,8 +2015,9 @@ tbody tr:last-child td {
     transform: translateX(-100%);
     transition: transform .2s ease;
     width: 272px !important;
-    padding: 20px 16px !important;
+    padding: 16px 14px 12px !important;
     z-index: 100 !important;
+    overflow: hidden !important;
   }
   #app.nav-open .sidebar {
     transform: none;
@@ -4316,4 +4385,25 @@ td:has(.empty), td:has(.skel) {
     padding-inline: 10px;
     font-size: .84rem;
   }
+}
+
+/* Master Dashboard Styles */
+.kpi-card {
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.kpi-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.06) !important;
+}
+
+.module-tile {
+  transition: all 0.15s ease;
+}
+
+.module-tile:hover {
+  border-color: #cbd5e1 !important;
+  background: #f8fafc !important;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.04);
 }
