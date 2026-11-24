@@ -6,6 +6,7 @@ export default function Topbar({
   user,
   enquiries = [],
   onOpenEdit,
+  onNavigateHome,
   onToggleSidebar,
   collapsed
 }) {
@@ -15,14 +16,17 @@ export default function Topbar({
   const bellRef = useRef(null);
 
   const isAdmin = String(user?.role || '').toLowerCase() === 'admin';
-  const uName = (user?.name || user?.fullName || user?.username || '').toLowerCase();
+  const uName = String(user?.name || user?.fullName || user?.username || '').toLowerCase();
+  const enquiryRecords = Array.isArray(enquiries)
+    ? enquiries.filter(enquiry => enquiry && typeof enquiry === 'object')
+    : [];
 
   // Respect user permissions: counselors see only their assigned leads unless admin
   const relevantEnquiries = isAdmin
-    ? enquiries
-    : enquiries.filter(e => {
-        if (!e.assignedTo) return true; // allow unassigned leads for awareness
-        const a = e.assignedTo.toLowerCase();
+    ? enquiryRecords
+    : enquiryRecords.filter(e => {
+        const a = String(e.assignedTo || '').toLowerCase();
+        if (!a) return true; // allow unassigned leads for awareness
         return a === uName || a.includes(uName);
       });
 
@@ -93,7 +97,7 @@ export default function Topbar({
     }
   };
 
-  const userName = user?.name || user?.fullName || 'User';
+  const userName = String(user?.name || user?.fullName || 'User');
 
   return (
     <header className="topbar">
@@ -107,10 +111,17 @@ export default function Topbar({
         >
           <span className="ic"><Icon name="sidebar" size={20} /></span>
         </button>
-        <div className="logo-mark sm" style={{ pointerEvents: 'none', cursor: 'default', userSelect: 'none' }} aria-hidden="true">
-          {ORG.logoUrl ? <img src={ORG.logoUrl} alt="" style={{ pointerEvents: 'none' }} /> : <span>{ORG.initials}</span>}
-        </div>
-        <h1 style={{ cursor: 'default', userSelect: 'none' }}>Admin Portal</h1>
+        <button
+          className="logo-mark sm"
+          type="button"
+          aria-label="Go to Admin Dashboard"
+          title="Go to Admin Dashboard"
+          onClick={onNavigateHome}
+          style={{ border: 0, padding: 0, cursor: 'pointer', userSelect: 'none' }}
+        >
+          {ORG.logoUrl ? <img src={ORG.logoUrl} alt="" /> : <span>{ORG.initials}</span>}
+        </button>
+        <h1>Admin Portal</h1>
       </div>
 
       <div className="r">

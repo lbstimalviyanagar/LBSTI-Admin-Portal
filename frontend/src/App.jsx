@@ -27,6 +27,22 @@ import api from './services/api';
 import { COUNSELORS, ORG, WHATSAPP_NUMBER, canonicalCounselorName, normalizeLeadSource, STANDARDIZED_SOURCES } from './utils/helpers';
 import { hasMenuAccess } from './utils/permissions';
 
+const VALID_TABS = [
+  'dashboard',
+  'new',
+  'table',
+  'payments',
+  'expenses',
+  'students',
+  'student-attendance',
+  'attendance',
+  'course-content',
+  'social-planner',
+  'tasks',
+  'batches',
+  'users'
+];
+
 export default function App() {
   const { user, setUser, loading: authLoading, logout } = useAuth();
   const { toasts, addToast } = useToast();
@@ -44,10 +60,9 @@ export default function App() {
   const getInitialTab = () => {
     try {
       const hash = window.location.hash.replace(/^#\/?/, '').trim();
-      const validTabs = ['dashboard', 'new', 'table', 'payments', 'expenses', 'students', 'student-attendance', 'attendance', 'course-content', 'social-planner', 'tasks', 'batches', 'users'];
-      if (hash && validTabs.includes(hash)) return hash;
+      if (VALID_TABS.includes(hash)) return hash;
       const saved = localStorage.getItem('lbstimn_active_tab');
-      if (saved && validTabs.includes(saved)) return saved;
+      if (VALID_TABS.includes(saved)) return saved;
     } catch (e) {}
     return 'dashboard';
   };
@@ -55,11 +70,15 @@ export default function App() {
   const [tab, setTabState] = useState(getInitialTab);
 
   const setTab = useCallback((newTab) => {
-    setTabState(prev => (prev !== newTab ? newTab : prev));
+    const nextTab = VALID_TABS.includes(newTab) ? newTab : 'dashboard';
+    if (nextTab !== newTab) {
+      console.warn(`Unknown dashboard section "${newTab}". Returning to Dashboard.`);
+    }
+    setTabState(prev => (prev !== nextTab ? nextTab : prev));
     try {
-      localStorage.setItem('lbstimn_active_tab', newTab);
-      if (window.location.hash !== `#${newTab}`) {
-        window.location.hash = newTab;
+      localStorage.setItem('lbstimn_active_tab', nextTab);
+      if (window.location.hash !== `#${nextTab}`) {
+        window.location.hash = nextTab;
       }
     } catch (e) {}
   }, []);
@@ -67,15 +86,16 @@ export default function App() {
   useEffect(() => {
     const onHashChange = () => {
       const hash = window.location.hash.replace(/^#\/?/, '').trim();
-      const validTabs = ['dashboard', 'new', 'table', 'payments', 'expenses', 'students', 'student-attendance', 'attendance', 'course-content', 'social-planner', 'tasks', 'batches', 'users'];
-      if (hash && validTabs.includes(hash)) {
+      if (VALID_TABS.includes(hash)) {
         setTabState(prev => (prev !== hash ? hash : prev));
         try { localStorage.setItem('lbstimn_active_tab', hash); } catch (e) {}
+      } else {
+        setTab('dashboard');
       }
     };
     window.addEventListener('hashchange', onHashChange);
     return () => window.removeEventListener('hashchange', onHashChange);
-  }, []);
+  }, [setTab]);
 
   const userRole = user?.role ? String(user.role).toLowerCase() : '';
   const userId = user?.id || user?.sub;
@@ -472,6 +492,10 @@ export default function App() {
           user={user}
           enquiries={enquiries}
           onOpenEdit={(id) => setEditLeadId(id)}
+          onNavigateHome={() => {
+            setTab('dashboard');
+            setMobileNavOpen(false);
+          }}
           collapsed={sidebarCollapsed}
           onToggleSidebar={() => {
             setSidebarCollapsed(!sidebarCollapsed);
