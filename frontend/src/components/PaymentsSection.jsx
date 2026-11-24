@@ -1217,19 +1217,7 @@ export default function PaymentsSection({
       }
     });
 
-    const realList = Array.from(map.values()).sort((a, b) => b.balance - a.balance);
-    if (realList.length > 0) {
-      return realList;
-    }
-
-    // Default sample 5 pending students totaling ₹14,500
-    return [
-      { id: 'due-1', studentId: 'STU-1042', name: 'Aarav Sharma', phone: '9876543210', course: 'Web Development (MERN)', balance: 4500 },
-      { id: 'due-2', studentId: 'STU-1089', name: 'Priya Verma', phone: '9812345678', course: 'Graphic Design', balance: 3000 },
-      { id: 'due-3', studentId: 'STU-1104', name: 'Rahul Gupta', phone: '9898765432', course: 'Python Programming', balance: 2500 },
-      { id: 'due-4', studentId: 'STU-1120', name: 'Simran Kaur', phone: '9711223344', course: 'Tally Prime & GST', balance: 2500 },
-      { id: 'due-5', studentId: 'STU-1135', name: 'Aman Singh', phone: '9823456789', course: 'Digital Marketing', balance: 2000 }
-    ];
+    return Array.from(map.values()).sort((a, b) => b.balance - a.balance);
   }, [students, enrollments, enquiries]);
 
   const totalOutstandingDues = useMemo(() => {

@@ -21,10 +21,7 @@ const CACHE_TTL_MS = 60000; // 60s cache
 function normalizeDashboardRecords(value, resource) {
   if (Array.isArray(value)) return value;
   if (Array.isArray(value?.data)) return value.data;
-  if (value != null) {
-    console.warn(`Dashboard ${resource} response was not a record list; displaying an empty list.`);
-  }
-  return [];
+  throw new Error(`The server returned an invalid ${resource} response.`);
 }
 
 export function clearDashboardCache() {
@@ -43,6 +40,7 @@ export default function DashboardPage({
   dashRangeKind = 'month',
   dashFrom = '',
   dashTo = '',
+  refreshKey = 0,
   onNavigate,
   onOpenEdit,
   onConfirmAdmission,
@@ -61,6 +59,7 @@ export default function DashboardPage({
     courses: []
   });
   const [extraLoading, setExtraLoading] = useState(true);
+  const [extraLoadError, setExtraLoadError] = useState("");
   const [showEnquiryPipeline, setShowEnquiryPipeline] = useState(false);
   const [activeActivityTab, setActiveActivityTab] = useState('leads'); // 'leads' | 'payments' | 'batches' | 'attendance'
 
@@ -81,12 +80,12 @@ export default function DashboardPage({
     async function loadExtraData() {
       try {
         const [expensesRes, attRes, studentAttRes, batchesRes, tasksRes, coursesRes] = await Promise.all([
-          isAdmin ? api.getExpenses().catch(() => []) : Promise.resolve([]),
-          api.getAttendance().catch(() => []),
-          api.getStudentAttendance().catch(() => []),
-          api.getBatches().catch(() => []),
-          api.getTasks().catch(() => []),
-          api.getCourses().catch(() => [])
+          isAdmin ? api.getExpenses() : Promise.resolve([]),
+          api.getAttendance(),
+          api.getStudentAttendance(),
+          api.getBatches(),
+          api.getTasks(),
+          api.getCourses()
         ]);
 
         const freshData = {
@@ -102,10 +101,15 @@ export default function DashboardPage({
         dashboardCacheTime = Date.now();
 
         if (isMounted) {
+          setExtraLoadError("");
           setExtraData(freshData);
         }
       } catch (err) {
         console.error('Error fetching dashboard extra data:', err);
+        dashboardCache = null;
+        if (isMounted) {
+          setExtraLoadError(err.message || "Some dashboard data could not be loaded.");
+        }
       } finally {
         if (isMounted) setExtraLoading(false);
       }
@@ -113,7 +117,7 @@ export default function DashboardPage({
 
     loadExtraData();
     return () => { isMounted = false; };
-  }, [isAdmin]);
+  }, [isAdmin, refreshKey]);
 
   // Compute Active Date Range
   const range = useMemo(() => {
@@ -267,6 +271,17 @@ export default function DashboardPage({
 
   return (
     <div className="dashboard-master-container" style={{ display: 'flex', flexDirection: 'column', gap: '22px' }}>
+      {extraLoadError && (
+        <div className="banner" role="alert">
+          <div>
+            <b>Some dashboard data is unavailable</b>
+            <span>{extraLoadError}</span>
+          </div>
+          <button className="btn" type="button" onClick={onRefresh}>
+            Try again
+          </button>
+        </div>
+      )}
       {/* ============================================================ */}
       {/* 1. WELCOME HERO BANNER & QUICK LAUNCH ACTIONS                */}
       {/* ============================================================ */}

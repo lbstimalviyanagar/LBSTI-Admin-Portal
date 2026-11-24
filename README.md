@@ -1,6 +1,6 @@
 # LBSTIMN Admissions CRM
 
-A React/Vite admissions CRM with a separate Express API and a PostgreSQL or MySQL database. The React screens retain the existing dashboard, enquiry workflow, analytics, reminders, speech/translation helpers, fees, receipts, and responsive navigation.
+A React/Vite admissions CRM. The production portal at `admin.lbstimn.com` is deployed by GitHub Actions with the PHP/MySQL API in `php_backend/`; the separate Express API in `backend/` is for local development and does not implement every production portal module.
 
 ## Project layout
 
@@ -25,6 +25,27 @@ backend/
 ```
 
 The root `package.json` provides convenience commands. Dependency folders and build output are ignored by Git.
+
+## Production data sources
+
+The production workflow builds `frontend/` and deploys `php_backend/` under `/api`. PHP controllers use MySQL through PDO. The production `php_backend/config.php` is intentionally gitignored and is not present in this checkout, so its live database host, schema, credentials, and connectivity cannot be verified here. The Express backend and its optional SQLite database are not the API used by the production workflow.
+
+| Portal section | Production tables / collections |
+| --- | --- |
+| Sign-in and User Management | `portal_users` |
+| Admin Dashboard | `enquiries`, `fees`, `students`, `enrollments`, `expenses`, `staff_attendance`, `student_attendance`, `institute_batches`, `staff_tasks`, `courses` |
+| Enquiries | `enquiries`, `remarks` |
+| Payments | `fees`, `students`, `enrollments`, `enquiries` |
+| Expenses | `expenses`, `expense_categories` |
+| Students | `students`, `enrollments` |
+| Student Attendance | `student_attendance`, `students`, `enrollments` |
+| Staff Attendance | `staff_attendance`, `portal_users`, `staff_attendance_audit_logs` |
+| Course Content | `courses`, `course_content`, `course_syllabus`, `course_notes` |
+| Content Planner | `social_media_planner` |
+| Tasks | `staff_tasks`, `task_notifications` |
+| Batches | `institute_batches`, `portal_users` |
+
+Course names, batch time-slot labels, and select-menu options are UI constants; they are not presented as saved records. Business records and dashboard metrics are loaded from the API.
 
 ## Local development
 

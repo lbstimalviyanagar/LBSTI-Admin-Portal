@@ -52,101 +52,14 @@ export function sortBatchesChronologically(list) {
   });
 }
 
-// Fixed master daily schedule for the institute
-const DEFAULT_BATCHES = [
-  {
-    id: 'b1',
-    batch_name: 'C++ Operators & Logic',
-    batch_time: '09:00 AM - 10:00 AM',
-    instructor_name: 'Harjot Kaur',
-    instructor_id: 2,
-    course_name: 'C++',
-    topic: 'Operators',
-    student_count: 8,
-    status: 'Ongoing',
-    updated_at: '2026-10-14 11:30:00'
-  },
-  {
-    id: 'b2',
-    batch_name: 'Tally Prime Mastery',
-    batch_time: '09:00 AM - 10:00 AM',
-    instructor_name: 'Harjot Kaur',
-    instructor_id: 2,
-    course_name: 'Tally prime',
-    topic: 'Chapter-30',
-    student_count: 14,
-    status: 'Ongoing',
-    updated_at: '2026-10-14 11:30:00'
-  },
-  {
-    id: 'b3',
-    batch_name: 'Ms Paint Foundation',
-    batch_time: '09:00 AM - 10:00 AM',
-    instructor_name: 'Harjot Kaur',
-    instructor_id: 2,
-    course_name: 'Ms paint',
-    topic: 'Drawings',
-    student_count: 10,
-    status: 'Ongoing',
-    updated_at: '2026-10-14 11:30:00'
-  },
-  {
-    id: 'b4',
-    batch_name: 'Advance Excel Formulas',
-    batch_time: '10:00 AM - 11:00 AM',
-    instructor_name: 'Sahil',
-    instructor_id: 1,
-    course_name: 'Advance Excel',
-    topic: 'VLOOKUP & Pivot Tables',
-    student_count: 16,
-    status: 'Upcoming',
-    updated_at: '2026-10-14 09:30:00'
-  },
-  {
-    id: 'b5',
-    batch_name: 'English Fluency & GD',
-    batch_time: '11:00 AM - 12:00 PM',
-    instructor_name: 'Palwasha',
-    instructor_id: 3,
-    course_name: 'English Speaking Course',
-    topic: 'Group Discussion & Pronunciation',
-    student_count: 12,
-    status: 'Upcoming',
-    updated_at: '2026-10-14 08:45:00'
-  },
-  {
-    id: 'b6',
-    batch_name: 'ADCA MS Office Core',
-    batch_time: '02:00 PM - 03:00 PM',
-    instructor_name: 'Harjot Kaur',
-    instructor_id: 2,
-    course_name: 'ADCA (MS Office)',
-    topic: 'MS Word Table Formatting & Mail Merge',
-    student_count: 15,
-    status: 'Upcoming',
-    updated_at: '2026-10-14 08:00:00'
-  },
-  {
-    id: 'b7',
-    batch_name: 'Web Dev Frontend Lab',
-    batch_time: '04:00 PM - 05:00 PM',
-    instructor_name: 'Sahil',
-    instructor_id: 1,
-    course_name: 'Web Development',
-    topic: 'HTML & CSS Flexbox/Grid',
-    student_count: 9,
-    status: 'Upcoming',
-    updated_at: '2026-10-14 07:30:00'
-  }
-];
-
 export default function BatchesPage({ user, users = [], enrollments = [], enquiries = [], onToast }) {
   const isAdmin = user?.role === 'admin';
   const isTeacher = user?.role === 'teacher';
   const canManageAny = isAdmin || isTeacher;
 
-  const [batches, setBatches] = useState(DEFAULT_BATCHES);
+  const [batches, setBatches] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingBatch, setEditingBatch] = useState(null);
   const [savingBatch, setSavingBatch] = useState(false);
@@ -244,16 +157,15 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
 
   const loadBatches = useCallback(async () => {
     setLoading(true);
+    setLoadError("");
     try {
       const data = await api.getBatches();
-      if (Array.isArray(data) && data.length > 0) {
-        setBatches(sortBatchesChronologically(data));
-      } else {
-        setBatches(sortBatchesChronologically(DEFAULT_BATCHES));
-      }
+      if (!Array.isArray(data)) throw new Error("The server returned an invalid batch list.");
+      setBatches(sortBatchesChronologically(data));
     } catch (err) {
-      console.warn('Using master batches schedule:', err);
-      setBatches(sortBatchesChronologically(DEFAULT_BATCHES));
+      console.error("Unable to load batches:", err);
+      setBatches([]);
+      setLoadError(err.message || "Couldn't load batches from the server.");
     } finally {
       setLoading(false);
     }
@@ -694,6 +606,16 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
           </div>
         </div>
       </div>
+
+      {loadError && (
+        <div className="banner" role="alert">
+          <div>
+            <b>Couldn't load batches</b>
+            <span>{loadError}</span>
+          </div>
+          <button className="btn" type="button" onClick={loadBatches}>Try again</button>
+        </div>
+      )}
 
       <div className="card table-container">
         {/* Dynamic Search & Filters Toolbar */}

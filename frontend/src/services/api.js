@@ -1,4 +1,5 @@
 const TOKEN_KEY = "lbstimn_token";
+const REQUEST_TIMEOUT_MS = 20000;
 
 // Read API Base from Vite environment or default to relative /api for proxy/single-origin deployments
 const getApiBase = () => {
@@ -61,19 +62,29 @@ async function request(path, options = {}) {
     options.body = JSON.stringify(options.body);
   }
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   let res;
+  let text;
   try {
     res = await fetch(url, {
       ...options,
-      headers
+      headers,
+      signal: controller.signal
     });
+    text = await res.text();
   } catch (err) {
-    const customErr = new Error(`Unable to connect to the server at ${url}. Please verify that the backend is running and allows this origin.`);
+    const message = controller.signal.aborted
+      ? `The server did not respond within ${REQUEST_TIMEOUT_MS / 1000} seconds. Please try again.`
+      : `Unable to connect to the server at ${url}. Please verify that the backend is running and allows this origin.`;
+    const customErr = new Error(message);
     customErr.code = 0;
+    customErr.cause = err;
     throw customErr;
+  } finally {
+    clearTimeout(timeoutId);
   }
 
-  const text = await res.text();
   let data = null;
   if (text) {
     try {
@@ -92,6 +103,14 @@ async function request(path, options = {}) {
   }
 
   return data;
+}
+
+function recordList(data, resource) {
+  const list = Array.isArray(data) ? data : data?.data;
+  if (!Array.isArray(list)) {
+    throw new Error(`The server returned an invalid ${resource} list.`);
+  }
+  return list.filter(record => record != null);
 }
 
 function normalizeCourseContent(record) {
@@ -191,7 +210,7 @@ export const api = {
   // Enquiries
   async getEnquiries() {
     const data = await request("/enquiries", { method: "GET" });
-    return Array.isArray(data) ? data : data?.data || [];
+    return recordList(data, "enquiries");
   },
 
   async createEnquiry(enquiryData) {
@@ -230,7 +249,7 @@ export const api = {
   // Remarks
   async getRemarks(enquiryId) {
     const data = await request(`/enquiries/${enquiryId}/remarks`, { method: "GET" });
-    return Array.isArray(data) ? data : data?.data || [];
+    return recordList(data, "remarks");
   },
 
   async addRemark(enquiryId, text, author) {
@@ -243,7 +262,7 @@ export const api = {
   // Fees
   async getFees() {
     const data = await request("/fees", { method: "GET" });
-    return Array.isArray(data) ? data : data?.data || [];
+    return recordList(data, "payments");
   },
 
   async createFee(feeData) {
@@ -269,11 +288,11 @@ export const api = {
   // Expenses
   async getExpenses() {
     const data = await request("/expenses", { method: "GET" });
-    return Array.isArray(data) ? data : [];
+    return recordList(data, "expenses");
   },
   async getExpenseCategories() {
     const data = await request("/expenses/categories", { method: "GET" });
-    return Array.isArray(data) ? data : [];
+    return recordList(data, "expense categories");
   },
   async createExpense(data) {
     return request("/expenses", { method: "POST", body: data });
@@ -327,12 +346,13 @@ export const api = {
   
   // Students
   async getStudents() {
-    return request("/students", { method: "GET" });
+    const data = await request("/students", { method: "GET" });
+    return recordList(data, "students");
   },
   async searchStudents(q) {
     if (!q || q.trim().length < 1) return [];
     const data = await request(`/search-students?q=${encodeURIComponent(q.trim())}`, { method: "GET" });
-    return Array.isArray(data) ? data : [];
+    return recordList(data, "student search");
   },
   async createStudent(data) {
     return request("/students", {
@@ -358,7 +378,8 @@ export const api = {
 
   // Enrollments
   async getEnrollments() {
-    return request("/enrollments", { method: "GET" });
+    const data = await request("/enrollments", { method: "GET" });
+    return recordList(data, "enrollments");
   },
   async createEnrollment(data) {
     return request("/enrollments", {
@@ -385,7 +406,7 @@ export const api = {
   // Users
   async getUsers() {
     const data = await request("/users", { method: "GET" });
-    return Array.isArray(data) ? data : data?.data || [];
+    return recordList(data, "users");
   },
 
   async createUser(userData) {
@@ -417,7 +438,8 @@ export const api = {
     if (filters.q) params.append("q", filters.q);
     const qs = params.toString();
     const query = qs ? `?${qs}` : "";
-    return request(`/attendance${query}`, { method: "GET" });
+    const data = await request(`/attendance${query}`, { method: "GET" });
+    return recordList(data, "staff attendance");
   },
   async getAttendanceFilterOptions() {
     try {
@@ -444,7 +466,8 @@ export const api = {
     if (filters.staff_id && filters.staff_id !== "All") params.append("staff_id", filters.staff_id);
     const qs = params.toString();
     const query = qs ? `?${qs}` : "";
-    return request(`/attendance/audit-logs${query}`, { method: "GET" });
+    const data = await request(`/attendance/audit-logs${query}`, { method: "GET" });
+    return recordList(data, "attendance audit logs");
   },
 
   // Tasks
@@ -455,7 +478,8 @@ export const api = {
     if (filters.q) params.append("q", filters.q);
     const qs = params.toString();
     const query = qs ? `?${qs}` : "";
-    return request(`/tasks${query}`, { method: "GET" });
+    const data = await request(`/tasks${query}`, { method: "GET" });
+    return recordList(data, "tasks");
   },
   async getTaskFilterOptions() {
     return request("/tasks/options", { method: "GET" });
@@ -477,7 +501,8 @@ export const api = {
   },
   async getTaskNotifications(taskId = null) {
     const q = taskId ? `?task_id=${taskId}` : "";
-    return request(`/tasks/notifications${q}`, { method: "GET" });
+    const data = await request(`/tasks/notifications${q}`, { method: "GET" });
+    return recordList(data, "task notifications");
   },
   async updateTask(id, patch) {
     return request(`/tasks/${id}`, {
@@ -499,7 +524,8 @@ export const api = {
     if (filters.q) params.append("q", filters.q);
     const qs = params.toString();
     const query = qs ? `?${qs}` : "";
-    return request(`/batches${query}`, { method: "GET" });
+    const data = await request(`/batches${query}`, { method: "GET" });
+    return recordList(data, "batches");
   },
   async getBatchFilterOptions() {
     try {
@@ -536,12 +562,8 @@ export const api = {
 
   // Course Management (Phase 2.3 & Phase 4)
   async getCourses() {
-    try {
-      const data = await request("/courses", { method: "GET" });
-      return Array.isArray(data) ? data : data?.data || [];
-    } catch (e) {
-      return [];
-    }
+    const data = await request("/courses", { method: "GET" });
+    return recordList(data, "courses");
   },
   async createCourse(data) {
     return request("/courses", { method: "POST", body: data });
@@ -557,7 +579,7 @@ export const api = {
   async getCourseContent(courseId = null) {
     const q = courseId ? `?course_id=${courseId}` : "";
     const data = await request(`/course-content${q}`, { method: "GET" });
-    return Array.isArray(data) ? data.map(normalizeCourseContent) : [];
+    return recordList(data, "course content").map(normalizeCourseContent);
   },
   async createCourseContent(data) {
     const record = await request("/course-content", { method: "POST", body: courseContentPayload(data) });
@@ -575,7 +597,7 @@ export const api = {
   async getCourseSyllabus(courseId = null) {
     const q = courseId ? `?course_id=${courseId}` : "";
     const data = await request(`/course-syllabus${q}`, { method: "GET" });
-    return Array.isArray(data) ? data.map(normalizeCourseSyllabus) : [];
+    return recordList(data, "course syllabus").map(normalizeCourseSyllabus);
   },
   async createCourseSyllabus(data) {
     const record = await request("/course-syllabus", { method: "POST", body: courseSyllabusPayload(data) });
@@ -593,7 +615,7 @@ export const api = {
   async getCourseNotes(courseId = null) {
     const q = courseId ? `?course_id=${courseId}` : "";
     const data = await request(`/course-notes${q}`, { method: "GET" });
-    return Array.isArray(data) ? data.map(normalizeCourseNote) : [];
+    return recordList(data, "course notes").map(normalizeCourseNote);
   },
   async createCourseNotes(data) {
     const record = await request("/course-notes", { method: "POST", body: courseNotePayload(data) });
@@ -617,7 +639,8 @@ export const api = {
     if (filters.status && filters.status !== "All") params.append("status", filters.status);
     if (filters.q) params.append("q", filters.q);
     const qs = params.toString();
-    return request(`/student-attendance${qs ? '?' + qs : ''}`, { method: "GET" });
+    const data = await request(`/student-attendance${qs ? '?' + qs : ''}`, { method: "GET" });
+    return recordList(data, "student attendance");
   },
   async recordStudentAttendance(data) {
     return request("/student-attendance", { method: "POST", body: data });
@@ -644,7 +667,8 @@ export const api = {
     if (filters.month) params.append("month", filters.month);
     if (filters.q) params.append("q", filters.q);
     const qs = params.toString();
-    return request(`/social-planner${qs ? '?' + qs : ''}`, { method: "GET" });
+    const data = await request(`/social-planner${qs ? '?' + qs : ''}`, { method: "GET" });
+    return recordList(data, "social planner");
   },
   async createSocialPost(data) {
     return request("/social-planner", { method: "POST", body: data });

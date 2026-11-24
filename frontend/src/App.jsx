@@ -17,6 +17,7 @@ import TasksPage from './pages/TasksPage';
 import BatchesPage from './pages/BatchesPage';
 import EditLeadModal from './components/EditLeadModal';
 import ConfirmDialog from './components/ConfirmDialog';
+import SectionErrorBoundary from './components/SectionErrorBoundary';
 import DailyReminder from './components/DailyReminder';
 import DateRangeFilter from './components/DateRangeFilter';
 import ToastContainer from './components/ToastContainer';
@@ -44,7 +45,7 @@ const VALID_TABS = [
 ];
 
 export default function App() {
-  const { user, setUser, loading: authLoading, logout } = useAuth();
+  const { user, setUser, loading: authLoading, error: authError, retryAuth, logout } = useAuth();
   const { toasts, addToast } = useToast();
 
   const [enquiries, setEnquiries] = useState([]);
@@ -55,6 +56,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [feeLoadError, setFeeLoadError] = useState('');
+  const [dashboardRefreshKey, setDashboardRefreshKey] = useState(0);
 
   // Navigation & View state (Persistent via URL Hash and localStorage fallback)
   const getInitialTab = () => {
@@ -184,30 +186,37 @@ export default function App() {
     setLoadError('');
     setFeeLoadError('');
     try {
-      const [enquiryList, feeResult, studentList, enrollmentList, usersRes] = await Promise.all([
-        api.getEnquiries().catch(err => {
-          console.warn('Enquiries fetch notice:', err.message);
-          return [];
-        }),
-        api.getFees()
-          .then(data => ({ data, error: null }))
-          .catch(error => ({ data: [], error })),
-        api.getStudents().catch(() => []),
-        api.getEnrollments().catch(() => []),
-        api.getUsers().catch(() => [])
+      const fetchResult = async (fetcher) => {
+        try {
+          return { data: await fetcher(), error: null };
+        } catch (error) {
+          return { data: [], error };
+        }
+      };
+      const [enquiryResult, feeResult, studentResult, enrollmentResult, usersResult] = await Promise.all([
+        fetchResult(() => api.getEnquiries()),
+        fetchResult(() => api.getFees()),
+        fetchResult(() => api.getStudents()),
+        fetchResult(() => api.getEnrollments()),
+        fetchResult(() => api.getUsers())
       ]);
+      const results = [enquiryResult, feeResult, studentResult, enrollmentResult, usersResult];
 
-      if (feeResult.error?.code === 401) {
+      if (results.some(result => result.error?.code === 401)) {
         logout();
         return;
       }
 
-      setEnquiries(Array.isArray(enquiryList) ? enquiryList : []);
-      setFees(Array.isArray(feeResult.data) ? feeResult.data : []);
+      setEnquiries(enquiryResult.data);
+      setFees(feeResult.data);
       setFeeLoadError(feeResult.error && feeResult.error.code !== 403 ? feeResult.error.message || "Couldn't load payment records." : '');
-      setStudents(Array.isArray(studentList) ? studentList : []);
-      setEnrollments(Array.isArray(enrollmentList) ? enrollmentList : []);
-      setUsersList(Array.isArray(usersRes) ? usersRes : []);
+      setStudents(studentResult.data);
+      setEnrollments(enrollmentResult.data);
+      setUsersList(usersResult.data);
+      const loadFailures = results
+        .map(result => result.error)
+        .filter(error => error && error.code !== 403);
+      setLoadError(loadFailures.map(error => error.message || "Couldn't load data from the server.").join(" "));
       dataLoadedRef.current = true;
     } catch (err) {
       console.error('Initial data load error:', err);
@@ -220,6 +229,12 @@ export default function App() {
       if (!silent) setLoading(false);
     }
   }, [logout]);
+
+  const refreshDashboard = useCallback(() => {
+    clearDashboardCache();
+    setDashboardRefreshKey(value => value + 1);
+    return loadData(false);
+  }, [loadData]);
 
   // Load data whenever user signs in
   useEffect(() => {
@@ -469,6 +484,17 @@ export default function App() {
     );
   }
 
+  if (authError) {
+    return (
+      <div className="boot-splash err">
+        <p role="alert">{authError}</p>
+        <button className="btn primary" type="button" onClick={retryAuth}>
+          Retry connection
+        </button>
+      </div>
+    );
+  }
+
   if (!user) {
     return <LoginPage onLoginSuccess={(loggedInUser) => setUser(loggedInUser)} />;
   }
@@ -531,10 +557,7 @@ export default function App() {
                 <button
                   className="btn"
                   type="button"
-                  onClick={() => {
-                    clearDashboardCache();
-                    loadData(false);
-                  }}
+                  onClick={refreshDashboard}
                   title="Refresh Dashboard Data"
                 >
                   <span className={'ic ' + (loading ? 'spin' : '')}><Icon name="refresh" size={16} /></span>
@@ -612,6 +635,10 @@ export default function App() {
           )}
 
           {/* Page Routing */}
+          <SectionErrorBoundary
+            key={tab}
+            onRetry={refreshDashboard}
+          >
           {tab === 'dashboard' && (
             <DashboardPage
               user={user}
@@ -624,12 +651,13 @@ export default function App() {
               dashRangeKind={dashRangeKind}
               dashFrom={dashFrom}
               dashTo={dashTo}
+              refreshKey={dashboardRefreshKey}
               onNavigate={(destTab) => setTab(destTab)}
               onOpenEdit={(id) => setEditLeadId(id)}
               onConfirmAdmission={handleConfirmAdmission}
               onDrillIntoTable={handleDrillIntoTable}
               onGoToNewLead={() => setTab('new')}
-              onRefresh={() => loadData(false)}
+              onRefresh={refreshDashboard}
               onToast={addToast}
             />
           )}
@@ -741,6 +769,7 @@ export default function App() {
           {tab === 'users' && (
             <UserManagementPage currentUser={user} onUpdateUser={setUser} />
           )}
+          </SectionErrorBoundary>
         </div>
 
         {/* Site Footer */}

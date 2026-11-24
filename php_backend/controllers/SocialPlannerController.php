@@ -26,52 +26,6 @@ function ensureSocialPlannerTable($pdo) {
             KEY `idx_status` (`status`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
 
-        // Seed sample default posts if table is empty
-        $count = $pdo->query("SELECT COUNT(*) FROM social_media_planner")->fetchColumn();
-        if ($count == 0) {
-            $samplePosts = [
-                [
-                    "New Batch Announcement: Full Stack & Python",
-                    "Instagram",
-                    "Reel",
-                    date('Y-m-d', strtotime('+1 day')),
-                    "11:00 AM",
-                    "Scheduled",
-                    "🚀 Launch your tech career with our new Full Stack Developer & Python batch starting this Monday at LBSTI Malviya Nagar!\n\n💡 Hands-on live projects\n💡 Placement assistance\n💡 1-on-1 mentorship\n\nDM us or call +91-9990352721 to reserve your seat!",
-                    "#LBSTI #FullStackDeveloper #PythonProgramming #CodingInstitute #DelhiTech #LearnCoding",
-                    "Admissions Team"
-                ],
-                [
-                    "Student Achievement Spotlight: ADCA Certified",
-                    "LinkedIn",
-                    "Post",
-                    date('Y-m-d', strtotime('+3 days')),
-                    "02:00 PM",
-                    "In Review",
-                    "Congratulations to our student Aryan Sharma for completing the Advance Diploma in Computer Applications (ADCA) with top grades and securing an internship!\n\nAt LBSTI, we focus on industry-ready digital and computing skills.",
-                    "#StudentSuccess #ADCA #CareerGrowth #SkillDevelopment #LBSTIMalviyaNagar",
-                    "Academic Counselor"
-                ],
-                [
-                    "Top 5 Excel Hacks Every Accountant Must Know",
-                    "YouTube",
-                    "Video",
-                    date('Y-m-d', strtotime('+5 days')),
-                    "05:00 PM",
-                    "Draft",
-                    "Watch these 5 essential Advance Excel & VBA tricks to automate your daily reports in minutes. Full tutorial covering VLOOKUP, XLOOKUP, Pivot Tables and conditional formatting.",
-                    "#ExcelTutorial #AdvanceExcel #AccountingTips #TallyPrime #VBA #LBSTI",
-                    "Faculty - Excel"
-                ]
-            ];
-
-            $stmt = $pdo->prepare("INSERT INTO social_media_planner (title, platform, content_type, scheduled_date, scheduled_time, status, caption_text, hashtags, assigned_to, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'System')");
-            foreach ($samplePosts as $sp) {
-                try {
-                    $stmt->execute($sp);
-                } catch (Exception $e) {}
-            }
-        }
     } catch (Exception $e) {}
 }
 
@@ -83,8 +37,13 @@ function getSocialPosts($pdo) {
         $month = $_GET['month'] ?? null;
         $q = $_GET['q'] ?? null;
 
-        $conditions = [];
-        $params = [];
+        $conditions = ["NOT (created_by = ? AND title IN (?, ?, ?))"];
+        $params = [
+            "System",
+            "New Batch Announcement: Full Stack & Python",
+            "Student Achievement Spotlight: ADCA Certified",
+            "Top 5 Excel Hacks Every Accountant Must Know"
+        ];
 
         if (!empty($platform) && strtolower($platform) !== 'all') {
             $conditions[] = "LOWER(TRIM(platform)) = LOWER(TRIM(?))";
@@ -248,4 +207,3 @@ function deleteSocialPost($pdo, $id) {
         echo json_encode(["message" => "Database error: " . $e->getMessage()]);
     }
 }
-
