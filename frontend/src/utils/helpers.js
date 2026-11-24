@@ -271,7 +271,10 @@ export const fmtDay = (v) => {
   return `${d.getDate()} ${MON[d.getMonth()]}${d.getFullYear() === curYear ? "" : ` ${d.getFullYear()}`}`;
 };
 
-export const fmtShort = (d) => `${d.getDate()} ${MON[d.getMonth()]}`;
+export const fmtShort = (value) => {
+  const d = parseDate(value);
+  return d ? `${d.getDate()} ${MON[d.getMonth()]}` : "–";
+};
 
 export const fmtDateTime = (v) => {
   const d = parseDate(v);
