@@ -107,10 +107,10 @@ export default function Topbar({
         >
           <span className="ic"><Icon name="sidebar" size={20} /></span>
         </button>
-        <div className="logo-mark sm">
-          {ORG.logoUrl ? <img src={ORG.logoUrl} alt="" /> : <span>{ORG.initials}</span>}
+        <div className="logo-mark sm" style={{ pointerEvents: 'none', cursor: 'default', userSelect: 'none' }} aria-hidden="true">
+          {ORG.logoUrl ? <img src={ORG.logoUrl} alt="" style={{ pointerEvents: 'none' }} /> : <span>{ORG.initials}</span>}
         </div>
-        <h1>Admin Portal</h1>
+        <h1 style={{ cursor: 'default', userSelect: 'none' }}>Admin Portal</h1>
       </div>
 
       <div className="r">

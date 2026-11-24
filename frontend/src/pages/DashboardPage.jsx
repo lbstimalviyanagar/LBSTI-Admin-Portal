@@ -13,6 +13,16 @@ import {
 } from '../utils/helpers';
 import { hasMenuAccess } from '../utils/permissions';
 
+// Module-level in-memory cache to prevent repeated re-fetching and loop requests
+let dashboardCache = null;
+let dashboardCacheTime = 0;
+const CACHE_TTL_MS = 60000; // 60s cache
+
+export function clearDashboardCache() {
+  dashboardCache = null;
+  dashboardCacheTime = 0;
+}
+
 export default function DashboardPage({
   user,
   enquiries = [],
@@ -45,13 +55,24 @@ export default function DashboardPage({
   const [showEnquiryPipeline, setShowEnquiryPipeline] = useState(false);
   const [activeActivityTab, setActiveActivityTab] = useState('leads'); // 'leads' | 'payments' | 'batches' | 'attendance'
 
-  // Fetch cross-module statistics on mount
+  const userRole = String(user?.role || '').toLowerCase();
+  const isAdmin = userRole === 'admin';
+
+  // Fetch cross-module statistics on mount (with caching to prevent infinite loops)
   useEffect(() => {
     let isMounted = true;
+
+    // Use cached data if fresh (prevents redundant API calls on tab switching)
+    if (dashboardCache && (Date.now() - dashboardCacheTime < CACHE_TTL_MS)) {
+      setExtraData(dashboardCache);
+      setExtraLoading(false);
+      return;
+    }
+
     async function loadExtraData() {
       try {
         const [expensesRes, attRes, studentAttRes, batchesRes, tasksRes, coursesRes] = await Promise.all([
-          api.getExpenses().catch(() => []),
+          isAdmin ? api.getExpenses().catch(() => []) : Promise.resolve([]),
           api.getAttendance().catch(() => []),
           api.getStudentAttendance().catch(() => []),
           api.getBatches().catch(() => []),
@@ -59,15 +80,20 @@ export default function DashboardPage({
           api.getCourses().catch(() => [])
         ]);
 
+        const freshData = {
+          expenses: Array.isArray(expensesRes) ? expensesRes : (expensesRes?.data || []),
+          attendance: Array.isArray(attRes) ? attRes : (attRes?.data || []),
+          studentAttendance: Array.isArray(studentAttRes) ? studentAttRes : (studentAttRes?.data || []),
+          batches: Array.isArray(batchesRes) ? batchesRes : (batchesRes?.data || []),
+          tasks: Array.isArray(tasksRes) ? tasksRes : (tasksRes?.data || []),
+          courses: Array.isArray(coursesRes) ? coursesRes : (coursesRes?.data || [])
+        };
+
+        dashboardCache = freshData;
+        dashboardCacheTime = Date.now();
+
         if (isMounted) {
-          setExtraData({
-            expenses: Array.isArray(expensesRes) ? expensesRes : (expensesRes?.data || []),
-            attendance: Array.isArray(attRes) ? attRes : (attRes?.data || []),
-            studentAttendance: Array.isArray(studentAttRes) ? studentAttRes : (studentAttRes?.data || []),
-            batches: Array.isArray(batchesRes) ? batchesRes : (batchesRes?.data || []),
-            tasks: Array.isArray(tasksRes) ? tasksRes : (tasksRes?.data || []),
-            courses: Array.isArray(coursesRes) ? coursesRes : (coursesRes?.data || [])
-          });
+          setExtraData(freshData);
         }
       } catch (err) {
         console.error('Error fetching dashboard extra data:', err);
@@ -75,9 +101,10 @@ export default function DashboardPage({
         if (isMounted) setExtraLoading(false);
       }
     }
+
     loadExtraData();
     return () => { isMounted = false; };
-  }, []);
+  }, [isAdmin]);
 
   // Compute Active Date Range
   const range = useMemo(() => {
@@ -217,7 +244,6 @@ export default function DashboardPage({
     return extraData.attendance.filter(a => String(a.date || '').slice(0, 10) === todayStr).slice(0, 6);
   }, [extraData.attendance, todayStr]);
 
-  const isAdmin = String(user?.role || '').toLowerCase() === 'admin';
   const userName = user?.name || user?.fullName || 'Administrator';
 
   const rangeLabel = useMemo(() => {

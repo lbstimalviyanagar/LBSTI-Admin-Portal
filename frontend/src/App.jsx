@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Sidebar from './components/Sidebar';
 import Topbar from './components/Topbar';
-import DashboardPage from './pages/DashboardPage';
+import DashboardPage, { clearDashboardCache } from './pages/DashboardPage';
 import NewEnquiryPage from './pages/NewEnquiryPage';
 import EnquiriesPage from './pages/EnquiriesPage';
 import PaymentsPage from './pages/PaymentsPage';
@@ -55,7 +55,7 @@ export default function App() {
   const [tab, setTabState] = useState(getInitialTab);
 
   const setTab = useCallback((newTab) => {
-    setTabState(newTab);
+    setTabState(prev => (prev !== newTab ? newTab : prev));
     try {
       localStorage.setItem('lbstimn_active_tab', newTab);
       if (window.location.hash !== `#${newTab}`) {
@@ -69,13 +69,16 @@ export default function App() {
       const hash = window.location.hash.replace(/^#\/?/, '').trim();
       const validTabs = ['dashboard', 'new', 'table', 'payments', 'expenses', 'students', 'student-attendance', 'attendance', 'course-content', 'social-planner', 'tasks', 'batches', 'users'];
       if (hash && validTabs.includes(hash)) {
-        setTabState(hash);
+        setTabState(prev => (prev !== hash ? hash : prev));
         try { localStorage.setItem('lbstimn_active_tab', hash); } catch (e) {}
       }
     };
     window.addEventListener('hashchange', onHashChange);
     return () => window.removeEventListener('hashchange', onHashChange);
   }, []);
+
+  const userRole = user?.role ? String(user.role).toLowerCase() : '';
+  const userId = user?.id || user?.sub;
 
   useEffect(() => {
     if (!user) return;
@@ -100,19 +103,22 @@ export default function App() {
     const isAllowed = requiredPermission === null
       ? true
       : requiredPermission === 'admin'
-        ? String(user.role || '').toLowerCase() === 'admin'
+        ? userRole === 'admin'
         : hasMenuAccess(user, requiredPermission);
 
     if (!isAllowed) {
-      const fallbackTabs = ['attendance', 'batches', 'tasks', 'dashboard', 'payments', 'students'];
+      const fallbackTabs = ['dashboard', 'attendance', 'batches', 'tasks', 'payments', 'students'];
       const nextAllowedTab = fallbackTabs.find(t => {
         const perm = TAB_PERMISSION_MAP[t];
-        return perm === 'admin' ? String(user.role || '').toLowerCase() === 'admin' : hasMenuAccess(user, perm);
-      }) || 'attendance';
+        if (perm === null) return true; // Dashboard is ALWAYS allowed!
+        return perm === 'admin' ? userRole === 'admin' : hasMenuAccess(user, perm);
+      }) || 'dashboard';
 
-      setTab(nextAllowedTab);
+      if (nextAllowedTab !== tab) {
+        setTab(nextAllowedTab);
+      }
     }
-  }, [user, tab, setTab]);
+  }, [userRole, userId, tab, setTab]);
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -150,6 +156,8 @@ export default function App() {
     onConfirm: () => {}
   });
 
+  const dataLoadedRef = useRef(false);
+
   // Fetch initial data
   const loadData = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -157,7 +165,10 @@ export default function App() {
     setFeeLoadError('');
     try {
       const [enquiryList, feeResult, studentList, enrollmentList, usersRes] = await Promise.all([
-        api.getEnquiries(),
+        api.getEnquiries().catch(err => {
+          console.warn('Enquiries fetch notice:', err.message);
+          return [];
+        }),
         api.getFees()
           .then(data => ({ data, error: null }))
           .catch(error => ({ data: [], error })),
@@ -165,18 +176,21 @@ export default function App() {
         api.getEnrollments().catch(() => []),
         api.getUsers().catch(() => [])
       ]);
+
       if (feeResult.error?.code === 401) {
         logout();
         return;
       }
-      setEnquiries(enquiryList || []);
-      setFees(feeResult.data || []);
-      setFeeLoadError(feeResult.error ? feeResult.error.message || "Couldn't load payment records." : '');
-      setStudents(studentList || []);
-      setEnrollments(enrollmentList || []);
-      setUsersList(usersRes || []);
+
+      setEnquiries(Array.isArray(enquiryList) ? enquiryList : []);
+      setFees(Array.isArray(feeResult.data) ? feeResult.data : []);
+      setFeeLoadError(feeResult.error && feeResult.error.code !== 403 ? feeResult.error.message || "Couldn't load payment records." : '');
+      setStudents(Array.isArray(studentList) ? studentList : []);
+      setEnrollments(Array.isArray(enrollmentList) ? enrollmentList : []);
+      setUsersList(Array.isArray(usersRes) ? usersRes : []);
+      dataLoadedRef.current = true;
     } catch (err) {
-      console.error(err);
+      console.error('Initial data load error:', err);
       if (err.code === 401) {
         logout();
       } else {
@@ -189,13 +203,15 @@ export default function App() {
 
   // Load data whenever user signs in
   useEffect(() => {
-    if (user) {
+    if (userId && !dataLoadedRef.current) {
       loadData();
     }
-  }, [user, loadData]);
+  }, [userId, loadData]);
 
   // Handle Logout
   const handleLogout = () => {
+    dataLoadedRef.current = false;
+    clearDashboardCache();
     logout();
     setEnquiries([]);
     setFees([]);
@@ -491,7 +507,10 @@ export default function App() {
                 <button
                   className="btn"
                   type="button"
-                  onClick={() => loadData(false)}
+                  onClick={() => {
+                    clearDashboardCache();
+                    loadData(false);
+                  }}
                   title="Refresh Dashboard Data"
                 >
                   <span className={'ic ' + (loading ? 'spin' : '')}><Icon name="refresh" size={16} /></span>
