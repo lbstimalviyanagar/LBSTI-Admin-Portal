@@ -501,7 +501,7 @@ export default function StudentAttendancePage({ user, onToast }) {
               </div>
             ) : (
               <div className="table-wrap">
-                <table className="table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <table className="table mobile-card-stack" style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ background: '#f8fafc', borderBottom: '1.5px solid #e2e8f0', textAlign: 'left', fontSize: '0.85rem', color: '#475569' }}>
                       <th style={{ padding: '0.85rem 1rem', width: '50px' }}>#</th>
@@ -527,12 +527,12 @@ export default function StudentAttendancePage({ user, onToast }) {
                           }}
                         >
                           {/* Index */}
-                          <td style={{ padding: '0.85rem 1rem', fontSize: '0.85rem', color: '#64748b' }}>
+                          <td data-label="#" style={{ padding: '0.85rem 1rem', fontSize: '0.85rem', color: '#64748b' }}>
                             {idx + 1}
                           </td>
 
                           {/* Student Details */}
-                          <td style={{ padding: '0.85rem 1rem' }}>
+                          <td data-label="Student Name" data-card-primary style={{ padding: '0.85rem 1rem' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
                               <div style={{
                                 width: '32px',
@@ -556,13 +556,13 @@ export default function StudentAttendancePage({ user, onToast }) {
                           </td>
 
                           {/* Course & Batch */}
-                          <td style={{ padding: '0.85rem 1rem', fontSize: '0.88rem' }}>
+                          <td data-label="Course & Batch" style={{ padding: '0.85rem 1rem', fontSize: '0.88rem' }}>
                             <span style={{ fontWeight: 600, color: '#1e293b', display: 'block' }}>{s.course}</span>
                             <span style={{ fontSize: '0.8rem', color: '#64748b' }}>{s.batchTime}</span>
                           </td>
 
                           {/* Contact */}
-                          <td style={{ padding: '0.85rem 1rem', fontSize: '0.85rem', color: '#334155' }}>
+                          <td data-label="Contact" style={{ padding: '0.85rem 1rem', fontSize: '0.85rem', color: '#334155' }}>
                             {s.phone ? (
                               <a href={`tel:${s.phone}`} style={{ color: '#2563eb', textDecoration: 'none' }}>
                                 {s.phone}
@@ -573,8 +573,8 @@ export default function StudentAttendancePage({ user, onToast }) {
                           </td>
 
                           {/* Status Toggles (Present / Absent / Leave) */}
-                          <td style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>
-                            <div style={{ display: 'inline-flex', borderRadius: '6px', overflow: 'hidden', border: '1px solid #cbd5e1' }}>
+                          <td data-label="Attendance Status" data-card-actions style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>
+                            <div data-card-action-grid style={{ display: 'inline-flex', borderRadius: '6px', overflow: 'hidden', border: '1px solid #cbd5e1' }}>
                               <button
                                 type="button"
                                 onClick={() => setStudentStatus(s.id, 'Present')}
@@ -629,7 +629,7 @@ export default function StudentAttendancePage({ user, onToast }) {
                           </td>
 
                           {/* Remarks */}
-                          <td style={{ padding: '0.85rem 1rem' }}>
+                          <td data-label="Remarks / Reason" style={{ padding: '0.85rem 1rem' }}>
                             <input
                               type="text"
                               className="input"
@@ -641,7 +641,7 @@ export default function StudentAttendancePage({ user, onToast }) {
                           </td>
 
                           {/* Individual History Link */}
-                          <td style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>
+                          <td data-label="History" data-card-actions style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>
                             <button
                               type="button"
                               className="btn"
@@ -751,7 +751,7 @@ export default function StudentAttendancePage({ user, onToast }) {
                   </div>
                 ) : (
                   <div className="table-wrap">
-                    <table className="table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <table className="table mobile-card-stack" style={{ width: '100%', borderCollapse: 'collapse' }}>
                       <thead>
                         <tr style={{ background: '#f8fafc', borderBottom: '1.5px solid #e2e8f0', textAlign: 'left', fontSize: '0.85rem', color: '#475569' }}>
                           <th style={{ padding: '0.85rem 1rem' }}>Date</th>
@@ -768,13 +768,13 @@ export default function StudentAttendancePage({ user, onToast }) {
 
                           return (
                             <tr key={item.id || idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                              <td style={{ padding: '0.85rem 1rem', fontWeight: 600, color: '#0f172a' }}>
+                              <td data-label="Date" data-card-primary style={{ padding: '0.85rem 1rem', fontWeight: 600, color: '#0f172a' }}>
                                 {fmtDay(item.date)}
                               </td>
-                              <td style={{ padding: '0.85rem 1rem', color: '#475569', fontSize: '0.88rem' }}>
+                              <td data-label="Batch Time" style={{ padding: '0.85rem 1rem', color: '#475569', fontSize: '0.88rem' }}>
                                 {item.batch_time || '–'}
                               </td>
-                              <td style={{ padding: '0.85rem 1rem' }}>
+                              <td data-label="Status" style={{ padding: '0.85rem 1rem' }}>
                                 <span style={{
                                   padding: '3px 10px',
                                   borderRadius: '6px',
@@ -786,10 +786,10 @@ export default function StudentAttendancePage({ user, onToast }) {
                                   {item.status}
                                 </span>
                               </td>
-                              <td style={{ padding: '0.85rem 1rem', color: '#475569', fontSize: '0.85rem' }}>
+                              <td data-label="Remarks" style={{ padding: '0.85rem 1rem', color: '#475569', fontSize: '0.85rem' }}>
                                 {item.remarks || '–'}
                               </td>
-                              <td style={{ padding: '0.85rem 1rem', color: '#94a3b8', fontSize: '0.8rem' }}>
+                              <td data-label="Logged At" style={{ padding: '0.85rem 1rem', color: '#94a3b8', fontSize: '0.8rem' }}>
                                 {item.created_at ? fmtDay(item.created_at) : '–'}
                               </td>
                             </tr>
@@ -850,7 +850,7 @@ export default function StudentAttendancePage({ user, onToast }) {
               </div>
             ) : (
               <div className="table-wrap">
-                <table className="table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <table className="table mobile-card-stack" style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ background: '#f8fafc', borderBottom: '1.5px solid #e2e8f0', textAlign: 'left', fontSize: '0.85rem', color: '#475569' }}>
                       <th style={{ padding: '0.85rem 1rem' }}>Student Name</th>
@@ -870,26 +870,26 @@ export default function StudentAttendancePage({ user, onToast }) {
 
                       return (
                         <tr key={row.student_id || idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                          <td style={{ padding: '0.85rem 1rem' }}>
+                          <td data-label="Student Name" data-card-primary style={{ padding: '0.85rem 1rem' }}>
                             <b style={{ color: '#0f172a' }}>{row.student_name}</b>
                             <span style={{ fontSize: '0.78rem', color: '#64748b', display: 'block' }}>ID: {row.student_id}</span>
                           </td>
-                          <td style={{ padding: '0.85rem 1rem', color: '#334155', fontSize: '0.88rem' }}>
+                          <td data-label="Course" style={{ padding: '0.85rem 1rem', color: '#334155', fontSize: '0.88rem' }}>
                             {row.course_name || '–'}
                           </td>
-                          <td style={{ padding: '0.85rem 1rem', textAlign: 'center', fontWeight: 600 }}>
+                          <td data-label="Total Classes" style={{ padding: '0.85rem 1rem', textAlign: 'center', fontWeight: 600 }}>
                             {row.total_classes}
                           </td>
-                          <td style={{ padding: '0.85rem 1rem', textAlign: 'center', color: '#16a34a', fontWeight: 600 }}>
+                          <td data-label="Present" style={{ padding: '0.85rem 1rem', textAlign: 'center', color: '#16a34a', fontWeight: 600 }}>
                             {row.present_count}
                           </td>
-                          <td style={{ padding: '0.85rem 1rem', textAlign: 'center', color: '#dc2626', fontWeight: 600 }}>
+                          <td data-label="Absent" style={{ padding: '0.85rem 1rem', textAlign: 'center', color: '#dc2626', fontWeight: 600 }}>
                             {row.absent_count}
                           </td>
-                          <td style={{ padding: '0.85rem 1rem', textAlign: 'center', color: '#d97706', fontWeight: 600 }}>
+                          <td data-label="Leave" style={{ padding: '0.85rem 1rem', textAlign: 'center', color: '#d97706', fontWeight: 600 }}>
                             {row.leave_count}
                           </td>
-                          <td style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>
+                          <td data-label="Attendance Rate" style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>
                             <span style={{
                               padding: '3px 10px',
                               borderRadius: '12px',
@@ -901,7 +901,7 @@ export default function StudentAttendancePage({ user, onToast }) {
                               {pct}%
                             </span>
                           </td>
-                          <td style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>
+                          <td data-label="Actions" data-card-actions style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>
                             <button
                               type="button"
                               className="btn"

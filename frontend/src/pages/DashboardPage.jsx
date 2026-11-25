@@ -816,7 +816,7 @@ export default function DashboardPage({
               <p style={{ textAlign: 'center', color: '#94a3b8', padding: '30px 0' }}>No enquiries found.</p>
             ) : (
               <div style={{ overflowX: 'auto' }}>
-                <table className="table" style={{ width: '100%', fontSize: '0.86rem' }}>
+                <table className="table mobile-card-stack" style={{ width: '100%', fontSize: '0.86rem' }}>
                   <thead>
                     <tr>
                       <th style={{ textAlign: 'left' }}>Student Name</th>
@@ -831,10 +831,10 @@ export default function DashboardPage({
                   <tbody>
                     {recentEnquiries.map(enq => (
                       <tr key={enq.id}>
-                        <td style={{ fontWeight: 600 }}>{enq.name}</td>
-                        <td>{enq.course || '—'}</td>
-                        <td>{enq.phone || '—'}</td>
-                        <td style={{ textAlign: 'center' }}>
+                        <td data-label="Student Name" data-card-primary style={{ fontWeight: 600 }}>{enq.name}</td>
+                        <td data-label="Course">{enq.course || '—'}</td>
+                        <td data-label="Phone">{enq.phone || '—'}</td>
+                        <td data-label="Status" style={{ textAlign: 'center' }}>
                           <span
                             style={{
                               display: 'inline-block',
@@ -849,9 +849,9 @@ export default function DashboardPage({
                             {enq.status || 'New'}
                           </span>
                         </td>
-                        <td>{enq.counselor || '—'}</td>
-                        <td style={{ textAlign: 'right', color: '#64748b' }}>{fmtShort(enq.createdAt || enq.inquiryDate)}</td>
-                        <td style={{ textAlign: 'center' }}>
+                        <td data-label="Counselor">{enq.counselor || '—'}</td>
+                        <td data-label="Date" style={{ textAlign: 'right', color: '#64748b' }}>{fmtShort(enq.createdAt || enq.inquiryDate)}</td>
+                        <td data-label="Action" data-card-actions style={{ textAlign: 'center' }}>
                           <button
                             className="btn sm"
                             type="button"
@@ -887,7 +887,7 @@ export default function DashboardPage({
               <p style={{ textAlign: 'center', color: '#94a3b8', padding: '30px 0' }}>No fee payments recorded.</p>
             ) : (
               <div style={{ overflowX: 'auto' }}>
-                <table className="table" style={{ width: '100%', fontSize: '0.86rem' }}>
+                <table className="table mobile-card-stack" style={{ width: '100%', fontSize: '0.86rem' }}>
                   <thead>
                     <tr>
                       <th style={{ textAlign: 'left' }}>Receipt / ID</th>
@@ -901,20 +901,20 @@ export default function DashboardPage({
                   <tbody>
                     {recentFees.map((fee, idx) => (
                       <tr key={fee.id || idx}>
-                        <td style={{ fontWeight: 600, color: 'var(--brand)' }}>
+                        <td data-label="Receipt / ID">
                           #{fee.receiptNumber || fee.receipt_number || fee.id}
                         </td>
-                        <td style={{ fontWeight: 600 }}>{fee.studentName || fee.name || '—'}</td>
-                        <td>{fee.course || fee.courseName || '—'}</td>
-                        <td style={{ textAlign: 'right', fontWeight: 700, color: '#059669' }}>
+                        <td data-label="Student Name" data-card-primary style={{ fontWeight: 600 }}>{fee.studentName || fee.name || '—'}</td>
+                        <td data-label="Course">{fee.course || fee.courseName || '—'}</td>
+                        <td data-label="Amount Paid" style={{ textAlign: 'right', fontWeight: 700, color: '#059669' }}>
                           ₹{Number(fee.amount || fee.paidAmount || 0).toLocaleString('en-IN')}
                         </td>
-                        <td style={{ textAlign: 'center' }}>
+                        <td data-label="Mode" style={{ textAlign: 'center' }}>
                           <span style={{ background: '#f1f5f9', padding: '2px 8px', borderRadius: '6px', fontSize: '0.78rem' }}>
                             {fee.paymentMode || fee.mode || 'Cash'}
                           </span>
                         </td>
-                        <td style={{ textAlign: 'right', color: '#64748b' }}>
+                        <td data-label="Payment Date" style={{ textAlign: 'right', color: '#64748b' }}>
                           {fmtShort(fee.paymentDate || fee.createdAt || fee.date)}
                         </td>
                       </tr>
@@ -943,7 +943,7 @@ export default function DashboardPage({
               <p style={{ textAlign: 'center', color: '#94a3b8', padding: '30px 0' }}>No batches configured.</p>
             ) : (
               <div style={{ overflowX: 'auto' }}>
-                <table className="table" style={{ width: '100%', fontSize: '0.86rem' }}>
+                <table className="table mobile-card-stack" style={{ width: '100%', fontSize: '0.86rem' }}>
                   <thead>
                     <tr>
                       <th style={{ textAlign: 'left' }}>Batch Name</th>
@@ -957,16 +957,16 @@ export default function DashboardPage({
                   <tbody>
                     {todayBatches.map(b => (
                       <tr key={b.id}>
-                        <td style={{ fontWeight: 600 }}>{b.batch_name || b.topic || `Batch #${b.id}`}</td>
-                        <td>{b.course_name || '—'}</td>
-                        <td>
+                        <td data-label="Batch Name" data-card-primary style={{ fontWeight: 600 }}>{b.batch_name || b.topic || `Batch #${b.id}`}</td>
+                        <td data-label="Course">{b.course_name || '—'}</td>
+                        <td data-label="Time Slot">
                           <span style={{ background: '#eff6ff', color: '#1d4ed8', padding: '2px 8px', borderRadius: '6px', fontWeight: 600, fontSize: '0.78rem' }}>
                             {b.batch_time}
                           </span>
                         </td>
-                        <td>{b.instructor_name || 'Unassigned'}</td>
-                        <td style={{ textAlign: 'center' }}>{b.student_count || 0}</td>
-                        <td style={{ textAlign: 'center' }}>
+                        <td data-label="Teacher / Faculty">{b.instructor_name || 'Unassigned'}</td>
+                        <td data-label="Students" style={{ textAlign: 'center' }}>{b.student_count || 0}</td>
+                        <td data-label="Status" style={{ textAlign: 'center' }}>
                           <span
                             style={{
                               display: 'inline-block',
@@ -1009,7 +1009,7 @@ export default function DashboardPage({
               </p>
             ) : (
               <div style={{ overflowX: 'auto' }}>
-                <table className="table" style={{ width: '100%', fontSize: '0.86rem' }}>
+                <table className="table mobile-card-stack" style={{ width: '100%', fontSize: '0.86rem' }}>
                   <thead>
                     <tr>
                       <th style={{ textAlign: 'left' }}>Staff Member</th>
@@ -1022,8 +1022,8 @@ export default function DashboardPage({
                   <tbody>
                     {todayStaffAttendance.map(att => (
                       <tr key={att.id}>
-                        <td style={{ fontWeight: 600 }}>{att.user_name || att.full_name || `User #${att.user_id}`}</td>
-                        <td style={{ textAlign: 'center' }}>
+                        <td data-label="Staff Member" data-card-primary style={{ fontWeight: 600 }}>{att.user_name || att.full_name || `User #${att.user_id}`}</td>
+                        <td data-label="Status" style={{ textAlign: 'center' }}>
                           <span
                             style={{
                               display: 'inline-block',
@@ -1038,9 +1038,9 @@ export default function DashboardPage({
                             {att.status}
                           </span>
                         </td>
-                        <td>{att.clock_in || '—'}</td>
-                        <td>{att.clock_out || '—'}</td>
-                        <td style={{ color: '#64748b' }}>{att.reason || att.notes || '—'}</td>
+                        <td data-label="Check In">{att.clock_in || '—'}</td>
+                        <td data-label="Check Out">{att.clock_out || '—'}</td>
+                        <td data-label="Notes / Remarks" style={{ color: '#64748b' }}>{att.reason || att.notes || '—'}</td>
                       </tr>
                     ))}
                   </tbody>

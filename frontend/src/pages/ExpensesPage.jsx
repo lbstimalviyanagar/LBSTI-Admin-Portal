@@ -512,7 +512,7 @@ export default function ExpensesPage({ onToast }) {
           )}
         </div>
         <div className="expense-table-scroll">
-          <table className="expense-table">
+          <table className="expense-table mobile-card-stack">
             <thead>
               <tr>
                 <SortableTh colKey="expenseId" label="Expense ID" sortKey={sort.key} sortDirection={sort.direction} onSort={toggleSort} />
@@ -528,18 +528,18 @@ export default function ExpensesPage({ onToast }) {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td className="expense-empty-cell" colSpan="9">Loading expense records...</td></tr>
+                <tr className="empty-row"><td className="expense-empty-cell" colSpan="9">Loading expense records...</td></tr>
               ) : visibleExpenses.length ? visibleExpenses.map(expense => (
                 <tr key={expense.id}>
-                  <td className="expense-id-cell">{expense.expenseId}</td>
-                  <td>{readableDate(expense.expenseDate)}</td>
-                  <td><strong>{expense.title}</strong></td>
-                  <td><span className="expense-category-tag">{expense.categoryName}</span></td>
-                  <td>{expense.vendorName}</td>
-                  <td className="expense-amount-cell">{currency(expense.amount)}</td>
-                  <td>{expense.paymentMethod}</td>
-                  <td><span className={`expense-status ${expense.paymentStatus.toLowerCase()}`}>{expense.paymentStatus}</span></td>
-                  <td>
+                  <td className="expense-id-cell" data-label="Expense ID">{expense.expenseId}</td>
+                  <td data-label="Date">{readableDate(expense.expenseDate)}</td>
+                  <td data-label="Expense" data-card-primary><strong>{expense.title}</strong></td>
+                  <td data-label="Category"><span className="expense-category-tag">{expense.categoryName}</span></td>
+                  <td data-label="Paid to">{expense.vendorName}</td>
+                  <td className="expense-amount-cell" data-label="Amount">{currency(expense.amount)}</td>
+                  <td data-label="Method">{expense.paymentMethod}</td>
+                  <td data-label="Status"><span className={`expense-status ${expense.paymentStatus.toLowerCase()}`}>{expense.paymentStatus}</span></td>
+                  <td data-label="Actions" data-card-actions>
                     <div className="expense-row-actions">
                       <button className="icon-btn" type="button" title="View expense" aria-label={`View ${expense.expenseId}`} onClick={() => setViewingExpense(expense)}><Icon name="eye" size={17} /></button>
                       <button className="icon-btn" type="button" title="Edit expense" aria-label={`Edit ${expense.expenseId}`} onClick={() => openEditExpense(expense)}><Icon name="edit" size={16} /></button>
@@ -548,7 +548,7 @@ export default function ExpensesPage({ onToast }) {
                   </td>
                 </tr>
               )) : (
-                <tr><td className="expense-empty-cell" colSpan="9">
+                <tr className="empty-row"><td className="expense-empty-cell" colSpan="9">
                   {expenses.length ? 'No expenses match these filters.' : 'No expenses recorded yet. Add an expense to get started.'}
                 </td></tr>
               )}
@@ -653,14 +653,14 @@ export default function ExpensesPage({ onToast }) {
             <div className="expense-monthly-table-wrap">
               <h4>Monthly totals</h4>
               <div className="expense-table-scroll">
-                <table className="expense-table expense-monthly-table">
+                <table className="expense-table expense-monthly-table mobile-card-stack">
                   <thead><tr><th>Month</th><th>Total expenses</th><th>Paid</th><th>Pending</th></tr></thead>
                   <tbody>{monthlyReport.map(row => (
                     <tr key={row.month}>
-                      <td>{row.month} {reportYear}</td>
-                      <td>{currency(row.total)}</td>
-                      <td>{currency(row.paid)}</td>
-                      <td>{currency(row.pending)}</td>
+                      <td data-label="Month" data-card-primary>{row.month} {reportYear}</td>
+                      <td data-label="Total expenses">{currency(row.total)}</td>
+                      <td data-label="Paid">{currency(row.paid)}</td>
+                      <td data-label="Pending">{currency(row.pending)}</td>
                     </tr>
                   ))}</tbody>
                 </table>

@@ -3085,6 +3085,170 @@ td:has(.empty), td:has(.skel) {
   table.mobile-card-stack tr.empty-row td > * {
     text-align: center !important;
   }
+
+  table.mobile-card-stack td[data-card-primary],
+  table.mobile-card-stack tbody th[scope="row"] {
+    order: -1;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    justify-content: flex-start !important;
+    padding: 2px 0 12px !important;
+    border-bottom: 1px solid #f1f5f9 !important;
+    text-align: left !important;
+  }
+
+  table.mobile-card-stack tbody th[scope="row"] {
+    display: flex !important;
+    width: 100% !important;
+  }
+
+  table.mobile-card-stack td[data-card-primary]::before,
+  table.mobile-card-stack tbody th[scope="row"]::before {
+    content: attr(data-label);
+    margin: 0 0 4px !important;
+    font-size: 0.72rem !important;
+    color: #64748b !important;
+  }
+
+  table.mobile-card-stack td[data-card-primary] > *,
+  table.mobile-card-stack tbody th[scope="row"] > * {
+    max-width: 100% !important;
+    min-width: 0 !important;
+    text-align: left !important;
+    overflow-wrap: anywhere;
+    white-space: normal !important;
+  }
+
+  table.mobile-card-stack td[data-card-primary] > .person {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center;
+    justify-content: flex-start;
+    width: 100%;
+    gap: 10px;
+  }
+
+  table.mobile-card-stack td[data-card-actions] {
+    order: 99;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px;
+    padding-top: 12px !important;
+    border-bottom: none !important;
+  }
+
+  table.mobile-card-stack td[data-card-actions]::before {
+    width: 100%;
+    margin: 0 !important;
+  }
+
+  table.mobile-card-stack td[data-card-actions] .acts,
+  table.mobile-card-stack td[data-card-actions] .expense-row-actions,
+  table.mobile-card-stack td[data-card-actions] .payment-actions-group,
+  table.mobile-card-stack td[data-card-actions] > div {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+  }
+
+  table.mobile-card-stack td[data-card-actions] [data-card-action-grid] {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    overflow: visible !important;
+    border-radius: 8px !important;
+  }
+
+  table.mobile-card-stack td[data-card-actions] a,
+  table.mobile-card-stack td[data-card-actions] button {
+    width: 100%;
+    min-width: 0;
+    min-height: 38px;
+    justify-content: center;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  table.mobile-card-stack td > *,
+  table.mobile-card-stack tbody th[scope="row"] > * {
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+
+  table.mobile-card-stack td .input {
+    width: auto !important;
+    min-width: 0 !important;
+    max-width: 62% !important;
+  }
+
+  table.mobile-card-stack td.mobile-edit-row {
+    display: block !important;
+    border: none !important;
+    padding: 0 !important;
+  }
+
+  table.mobile-card-stack td.mobile-edit-row form {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px !important;
+    width: 100%;
+  }
+
+  table.mobile-card-stack td.mobile-edit-row form .input,
+  table.mobile-card-stack td.mobile-edit-row form .select {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+
+  table.fee-breakdown.mobile-card-stack tfoot {
+    display: block !important;
+    width: 100% !important;
+  }
+
+  table.fee-breakdown.mobile-card-stack tfoot tr {
+    display: flex !important;
+    flex-direction: column !important;
+    width: 100% !important;
+  }
+
+  table.fee-breakdown.mobile-card-stack tfoot th[scope="row"] {
+    display: flex !important;
+    flex-direction: row !important;
+    justify-content: space-between !important;
+    width: 100% !important;
+    padding: 10px 0 !important;
+  }
+
+  table.fee-breakdown.mobile-card-stack tfoot th[scope="row"]::before {
+    content: attr(data-label);
+    color: #475569 !important;
+    font-weight: 700 !important;
+  }
+
+  table.fee-breakdown.mobile-card-stack input {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+
+  .expense-table-scroll {
+    overflow-x: visible !important;
+  }
+
+  .expense-table.mobile-card-stack {
+    min-width: 100% !important;
+    table-layout: fixed;
+  }
+
+  .expense-table.mobile-card-stack tbody td:last-child {
+    position: static !important;
+    right: auto !important;
+    z-index: auto !important;
+    box-shadow: none !important;
+  }
 }
 
 /* Responsive chart toggle and helpers */

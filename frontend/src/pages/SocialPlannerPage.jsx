@@ -487,7 +487,7 @@ export default function SocialPlannerPage({ user, onToast }) {
       {viewMode === 'table' && (
         <div className="card section" style={{ margin: 0, padding: 0, overflow: 'hidden' }}>
           <div className="table-wrap">
-            <table className="table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <table className="table mobile-card-stack" style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: '#f8fafc', borderBottom: '1.5px solid #e2e8f0', textAlign: 'left', fontSize: '0.85rem', color: '#475569' }}>
                   <th style={{ padding: '0.85rem 1rem' }}>Platform</th>
@@ -504,7 +504,7 @@ export default function SocialPlannerPage({ user, onToast }) {
 
                   return (
                     <tr key={post.id || idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                      <td style={{ padding: '0.85rem 1rem' }}>
+                      <td data-label="Platform" style={{ padding: '0.85rem 1rem' }}>
                         <span style={{
                           padding: '3px 10px',
                           borderRadius: '6px',
@@ -516,16 +516,16 @@ export default function SocialPlannerPage({ user, onToast }) {
                           {plat.name}
                         </span>
                       </td>
-                      <td style={{ padding: '0.85rem 1rem' }}>
+                      <td data-label="Title & Content" data-card-primary style={{ padding: '0.85rem 1rem' }}>
                         <b style={{ color: '#0f172a', display: 'block' }}>{post.title}</b>
                         <p style={{ margin: '0.2rem 0 0', fontSize: '0.82rem', color: '#64748b', maxWidth: '400px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {post.caption}
                         </p>
                       </td>
-                      <td style={{ padding: '0.85rem 1rem', fontSize: '0.85rem', color: '#475569' }}>
+                      <td data-label="Scheduled Date" style={{ padding: '0.85rem 1rem', fontSize: '0.85rem', color: '#475569' }}>
                         {post.scheduled_at ? fmtDay(post.scheduled_at) : '–'}
                       </td>
-                      <td style={{ padding: '0.85rem 1rem' }}>
+                      <td data-label="Status" style={{ padding: '0.85rem 1rem' }}>
                         <span style={{
                           padding: '3px 10px',
                           borderRadius: '12px',
@@ -537,7 +537,7 @@ export default function SocialPlannerPage({ user, onToast }) {
                           {post.status}
                         </span>
                       </td>
-                      <td style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>
+                      <td data-label="Actions" data-card-actions style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>
                         <div style={{ display: 'inline-flex', gap: '0.35rem' }}>
                           <button
                             type="button"

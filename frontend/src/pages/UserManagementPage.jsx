@@ -179,7 +179,7 @@ export default function UserManagementPage({ currentUser, onUpdateUser }) {
 
       <div className="card section">
         <div className="tbl-scroll">
-          <table className="mobile-table">
+          <table className="mobile-card-stack">
             <thead>
               <tr>
                 <th scope="col">User</th>
@@ -191,13 +191,13 @@ export default function UserManagementPage({ currentUser, onUpdateUser }) {
             </thead>
             <tbody>
               {loading ? (
-                <tr>
+                <tr className="empty-row">
                   <td colSpan="5">
                     <div className="skel" style={{ height: '160px' }} />
                   </td>
                 </tr>
               ) : users.length === 0 ? (
-                <tr>
+                <tr className="empty-row">
                   <td colSpan="5">
                     <div className="empty">
                       <b>No users found</b>
@@ -214,7 +214,7 @@ export default function UserManagementPage({ currentUser, onUpdateUser }) {
 
                   return (
                     <tr key={u.id}>
-                      <td>
+                      <td data-label="User" data-card-primary>
                         <div className="person">
                           <span className="av" style={u.profilePhotoUrl ? { background: `url(${u.profilePhotoUrl}) center/cover no-repeat`, color: 'transparent' } : { background: avColor(u.fullName) }}>
                             {initials(u.fullName)}
@@ -222,12 +222,12 @@ export default function UserManagementPage({ currentUser, onUpdateUser }) {
                           <span><b>{u.fullName}</b></span>
                         </div>
                       </td>
-                      <td>{u.username}</td>
-                      <td>
+                      <td data-label="Username">{u.username}</td>
+                      <td data-label="Role">
                         <span className={`pill s-${roleSlug}`}>{roleDisplay}</span>
                       </td>
-                      <td>{new Date(u.createdAt).toLocaleDateString()}</td>
-                      <td>
+                      <td data-label="Created Date">{new Date(u.createdAt).toLocaleDateString()}</td>
+                      <td data-label="Action" data-card-actions>
                         <div className="acts">
                           <button className="btn sm" onClick={() => handleOpenModal(u)}>
                             <Icon name="edit" size={15} /> Edit

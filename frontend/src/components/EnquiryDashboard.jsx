@@ -489,7 +489,7 @@ export default function EnquiryDashboard({
               )}
             </div>
           ) : (
-            <table>
+            <table className="mobile-card-stack">
               <thead>
                 <tr>
                   <th scope="col">Student</th>
@@ -509,7 +509,7 @@ export default function EnquiryDashboard({
                   const isOverdue = d && dayDiff(new Date(), d) < 0;
                   return (
                     <tr key={e.id}>
-                      <td>
+                      <td data-label="Student" data-card-primary>
                         <button
                           className="person"
                           type="button"
@@ -524,18 +524,18 @@ export default function EnquiryDashboard({
                           </span>
                         </button>
                       </td>
-                      <td>{e.course || "–"}</td>
-                      <td>{e.phone}</td>
-                      <td>{normalizeLeadSource(e.source)}</td>
-                      <td>
+                      <td data-label="Course">{e.course || "–"}</td>
+                      <td data-label="Phone">{e.phone}</td>
+                      <td data-label="Source">{normalizeLeadSource(e.source)}</td>
+                      <td data-label="Status">
                         <span className={`pill s-${slug(e.status)}`}>
                           {e.status}
                         </span>
                       </td>
-                      <td>
+                      <td data-label="Counselor">
                         {canonicalCounselorName(e.assignedTo) || <span className="muted">Unassigned</span>}
                       </td>
-                      <td>
+                      <td data-label="Follow-up">
                         {!OPEN_STATUSES.includes(e.status) ? (
                           <span className="muted">–</span>
                         ) : !d ? (
@@ -546,8 +546,8 @@ export default function EnquiryDashboard({
                           fmtDay(d)
                         )}
                       </td>
-                      <td>{fmtDay(e.createdAt)}</td>
-                      <td>
+                      <td data-label="Created">{fmtDay(e.createdAt)}</td>
+                      <td data-label="Action" data-card-actions>
                         <div className="acts">
                           {getTelUrl(e.phone) ? (
                             <a

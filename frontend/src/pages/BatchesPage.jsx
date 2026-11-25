@@ -939,7 +939,7 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
                 </thead>
                 <tbody>
                   {isCustomView && sortedBatches.length === 0 ? (
-                    <tr>
+                    <tr className="empty-row">
                       <td colSpan={6} style={{ padding: 0 }}>
                         <div className="empty" style={{ padding: '48px 16px', textAlign: 'center' }}>
                           <div className="ei" style={{ margin: '0 auto 12px' }}>
@@ -1036,7 +1036,7 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
                                   </div>
                                 </td>
                               )}
-                              <td data-label="Course & Batch Details" style={{ verticalAlign: 'middle', padding: '12px 14px' }}>
+                              <td data-label="Course & Batch Details" data-card-primary style={{ verticalAlign: 'middle', padding: '12px 14px' }}>
                                 <strong style={{ display: 'block', fontSize: '0.94rem', color: '#0f172a' }}>
                                   {batch.course_name}
                                 </strong>
@@ -1084,7 +1084,7 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
                                   {batch.status}
                                 </span>
                               </td>
-                              <td data-label="Actions" style={{ verticalAlign: 'middle', padding: '12px 14px', textAlign: 'center' }}>
+                              <td data-label="Actions" data-card-actions style={{ verticalAlign: 'middle', padding: '12px 14px', textAlign: 'center' }}>
                                 <div style={{ display: 'inline-flex', gap: '6px', alignItems: 'center', justifyContent: 'center' }}>
                                   <button
                                     className="btn icon-btn"
@@ -1158,7 +1158,7 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
                                 </div>
                               </div>
                             </td>
-                            <td colSpan={5} className="muted" style={{ verticalAlign: 'middle', padding: '12px 14px' }}>
+                            <td colSpan={5} className="muted" data-label="Schedule" style={{ verticalAlign: 'middle', padding: '12px 14px' }}>
                               <span>No batch scheduled.</span>
                               {canManageAny && (
                                 <button
@@ -1235,7 +1235,7 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
                                 </div>
                               </td>
                             )}
-                            <td data-label="Course & Batch Details" style={{ verticalAlign: 'middle', padding: '12px 14px' }}>
+                            <td data-label="Course & Batch Details" data-card-primary style={{ verticalAlign: 'middle', padding: '12px 14px' }}>
                               <strong style={{ display: 'block', fontSize: '0.94rem', color: '#0f172a' }}>{batch.course_name}</strong>
                               {batch.batch_name && batch.batch_name !== batch.course_name && (
                                 <div style={{ fontSize: '0.85rem', color: '#2563eb', fontWeight: 600, marginTop: '2px' }}>
@@ -1281,7 +1281,7 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
                                 {batch.status}
                               </span>
                             </td>
-                            <td data-label="Actions" style={{ verticalAlign: 'middle', padding: '12px 14px', textAlign: 'center' }}>
+                            <td data-label="Actions" data-card-actions style={{ verticalAlign: 'middle', padding: '12px 14px', textAlign: 'center' }}>
                                 <div style={{ display: 'inline-flex', gap: '6px', alignItems: 'center', justifyContent: 'center' }}>
                                   <button
                                     className="btn icon-btn"
@@ -1335,7 +1335,7 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
                               {batch.batch_time}
                             </div>
                           </td>
-                          <td data-label="Course & Batch Details" style={{ verticalAlign: 'middle', padding: '12px 14px' }}>
+                          <td data-label="Course & Batch Details" data-card-primary style={{ verticalAlign: 'middle', padding: '12px 14px' }}>
                             <strong style={{ display: 'block', fontSize: '0.94rem', color: '#0f172a' }}>{batch.course_name}</strong>
                             {batch.batch_name && batch.batch_name !== batch.course_name && (
                               <div style={{ fontSize: '0.85rem', color: '#2563eb', fontWeight: 600, marginTop: '2px' }}>
@@ -1376,7 +1376,7 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
                               {batch.status}
                             </span>
                           </td>
-                          <td data-label="Actions" style={{ verticalAlign: 'middle', padding: '12px 14px', textAlign: 'center' }}>
+                          <td data-label="Actions" data-card-actions style={{ verticalAlign: 'middle', padding: '12px 14px', textAlign: 'center' }}>
                                 <div style={{ display: 'inline-flex', gap: '6px', alignItems: 'center', justifyContent: 'center' }}>
                                   <button
                                     className="btn icon-btn"

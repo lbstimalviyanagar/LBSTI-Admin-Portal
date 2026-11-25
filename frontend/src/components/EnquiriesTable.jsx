@@ -456,7 +456,7 @@ export default function EnquiriesTable({
                   const isOverdue = d && dayDiff(new Date(), d) < 0;
                   return (
                     <tr key={e.id}>
-                      <td data-label="Student">
+                      <td data-label="Student" data-card-primary>
                         <button
                           className="person"
                           type="button"
@@ -494,7 +494,7 @@ export default function EnquiriesTable({
                         )}
                       </td>
                       <td data-label="Inquiry Date">{fmtDay(e.inquiryDate || e.createdAt)}</td>
-                      <td data-label="Actions">
+                      <td data-label="Actions" data-card-actions>
                         <div className="acts">
                           {getTelUrl(e.phone) ? (
                             <a

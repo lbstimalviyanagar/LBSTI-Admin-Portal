@@ -945,7 +945,7 @@ export default function StudentsSection({ students = [], enrollments = [], loadi
           </div>
 
           <div className="tbl-scroll">
-            <table>
+            <table className="mobile-card-stack">
               <thead>
                 <tr>
                   <SortableTh colKey="studentId" label="Student ID" sortKey={studentSortKey} sortDirection={studentSortDir} onSort={handleStudentSort} />
@@ -961,7 +961,7 @@ export default function StudentsSection({ students = [], enrollments = [], loadi
               </thead>
               <tbody>
                 {sortedStudents.length === 0 ? (
-                  <tr>
+                  <tr className="empty-row">
                     <td colSpan="9" style={{ textAlign: "center", padding: "2.5rem 1rem", color: "var(--muted)" }}>
                       {studentSearchQuery ? (
                         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}>
@@ -990,7 +990,7 @@ export default function StudentsSection({ students = [], enrollments = [], loadi
                     return (
                       <tr key={st.id}>
                         {editingStudent?.id === st.id ? (
-                          <td colSpan="9">
+                          <td colSpan="9" className="mobile-edit-row">
                             <form onSubmit={handleUpdateStudent} style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
                               <input className="input" value={editingStudent.studentId} onChange={e => setEditingStudent({ ...editingStudent, studentId: e.target.value })} placeholder="Student ID" />
                               <input className="input" value={editingStudent.name} onChange={e => setEditingStudent({ ...editingStudent, name: e.target.value })} placeholder="Name" />
@@ -1004,15 +1004,15 @@ export default function StudentsSection({ students = [], enrollments = [], loadi
                           </td>
                         ) : (
                           <>
-                            <td style={{ fontWeight: "600", color: "#1e293b" }}>{st.studentId}</td>
-                            <td><strong>{st.name}</strong></td>
-                            <td>{st.guardianName || "–"}</td>
-                            <td>{st.phone || "–"}</td>
-                            <td>{st.email || "–"}</td>
-                            <td>{courses.length ? courses.join(", ") : "–"}</td>
-                            <td>{faculty.length ? faculty.join(", ") : "–"}</td>
-                            <td>{st.remarks || "–"}</td>
-                            <td>
+                            <td data-label="Student ID" style={{ fontWeight: "600", color: "#1e293b" }}>{st.studentId}</td>
+                            <td data-label="Name" data-card-primary><strong>{st.name}</strong></td>
+                            <td data-label="Guardian Name">{st.guardianName || "–"}</td>
+                            <td data-label="Phone">{st.phone || "–"}</td>
+                            <td data-label="Email">{st.email || "–"}</td>
+                            <td data-label="Course Name">{courses.length ? courses.join(", ") : "–"}</td>
+                            <td data-label="Faculty">{faculty.length ? faculty.join(", ") : "–"}</td>
+                            <td data-label="Remarks">{st.remarks || "–"}</td>
+                            <td data-label="Actions" data-card-actions>
                               <div style={{ display: "flex", gap: "6px" }}>
                                 <button className="btn sm" onClick={() => setEditingStudent(st)}>Edit</button>
                                 <button className="btn sm danger" onClick={() => handleDeleteStudent(st.id)}>Del</button>
@@ -1148,7 +1148,7 @@ export default function StudentsSection({ students = [], enrollments = [], loadi
           </form>
 
           <div className="tbl-scroll">
-            <table>
+            <table className="mobile-card-stack">
               <thead>
                 <tr>
                   <SortableTh colKey="enrollmentId" label="Enrollment ID" sortKey={enrSortKey} sortDirection={enrSortDir} onSort={handleEnrSort} />
@@ -1162,7 +1162,7 @@ export default function StudentsSection({ students = [], enrollments = [], loadi
               </thead>
               <tbody>
                 {sortedEnrollments.length === 0 ? (
-                  <tr>
+                  <tr className="empty-row">
                     <td colSpan="7" style={{ textAlign: "center", padding: "2.5rem 1rem", color: "var(--muted)" }}>
                       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}>
                         <b>No enrollments found matching criteria</b>
@@ -1180,7 +1180,7 @@ export default function StudentsSection({ students = [], enrollments = [], loadi
                     return (
                       <tr key={en.id}>
                         {editingEnrollment?.id === en.id ? (
-                          <td colSpan="7">
+                          <td colSpan="7" className="mobile-edit-row">
                             <form onSubmit={handleUpdateEnrollment} style={{display:"flex", gap: "10px", flexWrap: "wrap"}}>
                               <input className="input" value={editingEnrollment.enrollmentId} onChange={e=>setEditingEnrollment({...editingEnrollment, enrollmentId: e.target.value})} placeholder="Enrollment ID" />
                               <input className="input" value={editingEnrollment.studentId} onChange={e=>setEditingEnrollment({...editingEnrollment, studentId: e.target.value})} placeholder="Student ID" />
@@ -1197,12 +1197,12 @@ export default function StudentsSection({ students = [], enrollments = [], loadi
                           </td>
                         ) : (
                           <>
-                            <td style={{ fontWeight: "600", color: "#1e293b" }}>{en.enrollmentId}</td>
-                            <td>{en.studentId}</td>
-                            <td><strong>{displayName}</strong></td>
-                            <td>{en.doa || "–"}</td>
-                            <td>{en.course || "–"}</td>
-                            <td>
+                            <td data-label="Enrollment ID" style={{ fontWeight: "600", color: "#1e293b" }}>{en.enrollmentId}</td>
+                            <td data-label="Student ID">{en.studentId}</td>
+                            <td data-label="Student Name" data-card-primary><strong>{displayName}</strong></td>
+                            <td data-label="DOA">{en.doa || "–"}</td>
+                            <td data-label="Course">{en.course || "–"}</td>
+                            <td data-label="Status">
                               <span style={{
                                 display: 'inline-flex',
                                 alignItems: 'center',
@@ -1224,7 +1224,7 @@ export default function StudentsSection({ students = [], enrollments = [], loadi
                                 {en.status || 'Active'}
                               </span>
                             </td>
-                            <td>
+                            <td data-label="Actions" data-card-actions>
                               <div style={{ display: "flex", gap: "6px" }}>
                                 <button className="btn sm" onClick={() => setEditingEnrollment(en)}>Edit</button>
                                 <button className="btn sm danger" onClick={() => handleDeleteEnrollment(en.id)}>Del</button>

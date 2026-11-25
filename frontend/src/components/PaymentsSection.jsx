@@ -1653,7 +1653,7 @@ export default function PaymentsSection({
             </div>
 
             <div className="tbl-scroll">
-              <table style={{ width: '100%' }}>
+              <table className="mobile-card-stack" style={{ width: '100%' }}>
                 <thead>
                   <tr>
                     <SortableTh colKey="receiptNo" label="Receipt No." sortKey={recentSortKey} sortDirection={recentSortDir} onSort={handleRecentSort} />
@@ -1668,7 +1668,7 @@ export default function PaymentsSection({
                 </thead>
                 <tbody>
                   {sortedRecentTx.length === 0 ? (
-                    <tr>
+                    <tr className="empty-row">
                       <td colSpan="8" style={{ textAlign: 'center', padding: '36px 20px' }}>
                         <div className="empty" style={{ margin: 0 }}>
                           <div className="ei"><Icon name="fee" size={24} /></div>
@@ -1699,17 +1699,17 @@ export default function PaymentsSection({
                   ) : (
                     sortedRecentTx.map((tx) => (
                     <tr key={tx.id}>
-                      <td>
+                      <td data-label="Receipt No.">
                         <span style={{ fontFamily: 'monospace', fontWeight: 600, color: 'var(--navy-700)', fontSize: '0.82rem' }}>
                           {tx.receiptNo}
                         </span>
                       </td>
-                      <td>
+                      <td data-label="Student Name" data-card-primary>
                         <div style={{ fontWeight: 700, color: '#0f172a' }}>{tx.studentName}</div>
                         {tx.studentPhone && <small style={{ color: 'var(--muted)', fontSize: '0.78rem' }}>{tx.studentPhone}</small>}
                       </td>
-                      <td>{tx.date}</td>
-                      <td>
+                      <td data-label="Date">{tx.date}</td>
+                      <td data-label="Course">
                         <div>{tx.course}</div>
                         {tx.othersDescription ? (
                           <small style={{ display: 'block', color: 'var(--muted)', fontSize: '0.78rem' }}>
@@ -1717,10 +1717,10 @@ export default function PaymentsSection({
                           </small>
                         ) : null}
                       </td>
-                      <td>
+                      <td data-label="Amount Paid">
                         <strong style={{ color: '#0f172a' }}>₹{Number(tx.amount || 0).toLocaleString('en-IN')}</strong>
                       </td>
-                      <td>
+                      <td data-label="Payment Mode">
                         <span style={{
                           display: 'inline-flex',
                           alignItems: 'center',
@@ -1735,7 +1735,7 @@ export default function PaymentsSection({
                           {tx.mode}
                         </span>
                       </td>
-                      <td>
+                      <td data-label="Status">
                         <span style={{
                           display: 'inline-flex',
                           alignItems: 'center',
@@ -1757,7 +1757,7 @@ export default function PaymentsSection({
                           {tx.status}
                         </span>
                       </td>
-                      <td>
+                      <td data-label="Actions" data-card-actions>
                         <div className="acts">
                           {getTelUrl(tx.studentPhone) ? (
                             <a
@@ -2343,7 +2343,7 @@ export default function PaymentsSection({
                 <div className="fld full fee-breakdown-field">
                   <span className="field-label">Fee particulars breakdown</span>
                   <div className="fee-breakdown-wrap">
-                    <table className="fee-breakdown">
+                    <table className="fee-breakdown mobile-card-stack">
                       <thead>
                         <tr>
                           <th scope="col">Particulars</th>
@@ -2355,7 +2355,7 @@ export default function PaymentsSection({
                       <tbody>
                         {FEE_ITEMS.map(([key, label]) => (
                           <tr key={key} className={key === 'others' ? 'particulars-row-others' : ''}>
-                            <th scope="row" style={{ verticalAlign: key === 'others' ? 'top' : 'middle' }}>
+                            <th scope="row" data-label="Particulars" data-card-primary style={{ verticalAlign: key === 'others' ? 'top' : 'middle' }}>
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                 <span style={{ fontWeight: 600 }}>{label}</span>
                                 {key === 'others' && (
@@ -2381,7 +2381,7 @@ export default function PaymentsSection({
                                 )}
                               </div>
                             </th>
-                            <td style={{ verticalAlign: key === 'others' ? 'top' : 'middle' }}>
+                            <td data-label="Cash (₹)" style={{ verticalAlign: key === 'others' ? 'top' : 'middle' }}>
                               <input
                                 className="input"
                                 type="number"
@@ -2391,7 +2391,7 @@ export default function PaymentsSection({
                                 onChange={(e) => handleBreakdownChange(key, 'cash', e.target.value)}
                               />
                             </td>
-                            <td style={{ verticalAlign: key === 'others' ? 'top' : 'middle' }}>
+                            <td data-label="Cheque (₹)" style={{ verticalAlign: key === 'others' ? 'top' : 'middle' }}>
                               <input
                                 className="input"
                                 type="number"
@@ -2401,7 +2401,7 @@ export default function PaymentsSection({
                                 onChange={(e) => handleBreakdownChange(key, 'cheque', e.target.value)}
                               />
                             </td>
-                            <td style={{ verticalAlign: key === 'others' ? 'top' : 'middle' }}>
+                            <td data-label="UPI / Online (₹)" style={{ verticalAlign: key === 'others' ? 'top' : 'middle' }}>
                               <input
                                 className="input"
                                 type="number"
@@ -2416,10 +2416,10 @@ export default function PaymentsSection({
                       </tbody>
                       <tfoot>
                         <tr>
-                          <th scope="row">Total</th>
-                          <td>₹{totals.cash.toLocaleString("en-IN")}</td>
-                          <td>₹{totals.cheque.toLocaleString("en-IN")}</td>
-                          <td>₹{totals.online.toLocaleString("en-IN")}</td>
+                          <th scope="row" data-label="Particulars" data-card-primary>Total</th>
+                          <td data-label="Cash (₹)">₹{totals.cash.toLocaleString("en-IN")}</td>
+                          <td data-label="Cheque (₹)">₹{totals.cheque.toLocaleString("en-IN")}</td>
+                          <td data-label="UPI / Online (₹)">₹{totals.online.toLocaleString("en-IN")}</td>
                         </tr>
                       </tfoot>
                     </table>
@@ -2667,7 +2667,7 @@ export default function PaymentsSection({
             </div>
 
             <div className="tbl-scroll">
-              <table>
+              <table className="mobile-card-stack">
                 <thead>
                   <tr>
                     <SortableTh colKey="studentName" label="Student" sortKey={historySortKey} sortDirection={historySortDir} onSort={handleHistorySort} />
@@ -2681,13 +2681,13 @@ export default function PaymentsSection({
                 </thead>
                 <tbody>
                   {loading ? (
-                    <tr>
+                    <tr className="empty-row">
                       <td colSpan="7">
                         <div className="skel" style={{ height: '160px' }} />
                       </td>
                     </tr>
                   ) : displayedHistoryFees.length === 0 ? (
-                    <tr>
+                    <tr className="empty-row">
                       <td colSpan="7">
                         <div className="empty">
                           <div className="ei"><Icon name="fee" size={24} /></div>
@@ -2731,19 +2731,19 @@ export default function PaymentsSection({
                   ) : (
                     displayedHistoryFees.map((f) => (
                       <tr key={f.id}>
-                        <td>
+                        <td data-label="Student" data-card-primary>
                           <b>{f.studentName || "Student"}</b>
                           {f.course ? <small style={{ display: 'block', color: 'var(--muted)', fontSize: '0.8rem' }}>{f.course}</small> : null}
                         </td>
-                        <td><strong>₹{Number(f.amount || 0).toLocaleString("en-IN")}</strong></td>
-                        <td>
+                        <td data-label="Amount"><strong>₹{Number(f.amount || 0).toLocaleString("en-IN")}</strong></td>
+                        <td data-label="Mode">
                           <span className={`pill ${String(f.mode || '').toLowerCase().includes('upi') ? 's-new' : String(f.mode || '').toLowerCase().includes('cash') ? 's-teacher' : 's-counselor'}`} style={{ fontSize: '0.75rem', padding: '2px 8px' }}>
                             {f.mode}
                           </span>
                         </td>
-                        <td>{fmtDate(f.paymentDate)}</td>
-                        <td>{f.receivedBy || "–"}</td>
-                        <td>
+                        <td data-label="Date">{fmtDate(f.paymentDate)}</td>
+                        <td data-label="Received by">{f.receivedBy || "–"}</td>
+                        <td data-label="Notes">
                           {f.othersDescription || f.receiptDetails?.othersDescription ? (
                             <div style={{ marginBottom: f.notes ? '4px' : 0 }}>
                               <span className="pill s-confirmed" style={{ fontSize: '0.75rem', padding: '1px 7px', display: 'inline-block' }}>
@@ -2753,7 +2753,7 @@ export default function PaymentsSection({
                           ) : null}
                           <span>{f.notes || (!f.othersDescription && !f.receiptDetails?.othersDescription ? "–" : "")}</span>
                         </td>
-                        <td className="payment-actions-cell">
+                        <td className="payment-actions-cell" data-label="Action" data-card-actions>
                           <div className="payment-actions-group">
                             <button
                               className="btn sm"
@@ -2881,7 +2881,7 @@ export default function PaymentsSection({
             {/* Table */}
             <div style={{ overflowY: 'auto', flex: 1, minHeight: '180px' }}>
               <div className="tbl-scroll">
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <table className="mobile-card-stack" style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ background: '#f8fafc', borderBottom: '1px solid var(--line)' }}>
                       <th style={{ padding: '12px 18px', textAlign: 'left', fontSize: '0.8rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
@@ -2903,7 +2903,7 @@ export default function PaymentsSection({
                   </thead>
                   <tbody>
                     {filteredPendingDues.length === 0 ? (
-                      <tr>
+                      <tr className="empty-row">
                         <td colSpan="5" style={{ textAlign: 'center', padding: '36px 20px', color: 'var(--muted)' }}>
                           No students found matching "{duesSearch}"
                         </td>
@@ -2911,7 +2911,7 @@ export default function PaymentsSection({
                     ) : (
                       filteredPendingDues.map((item) => (
                         <tr key={item.id} style={{ borderBottom: '1px solid var(--line)' }}>
-                          <td style={{ padding: '12px 18px' }}>
+                          <td data-label="Student Name" data-card-primary style={{ padding: '12px 18px' }}>
                             <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.92rem' }}>
                               {item.name}
                             </div>
@@ -2919,7 +2919,7 @@ export default function PaymentsSection({
                               ID: {item.studentId}
                             </div>
                           </td>
-                          <td style={{ padding: '12px 18px', whiteSpace: 'nowrap' }}>
+                          <td data-label="Phone Number" style={{ padding: '12px 18px', whiteSpace: 'normal' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                               <span style={{ fontSize: '0.88rem', color: '#334155', fontWeight: 600 }}>{item.phone}</span>
                               {item.phone && item.phone !== '–' && (
@@ -2946,7 +2946,7 @@ export default function PaymentsSection({
                               )}
                             </div>
                           </td>
-                          <td style={{ padding: '12px 18px' }}>
+                          <td data-label="Course" style={{ padding: '12px 18px' }}>
                             <span
                               style={{
                                 background: '#f1f5f9',
@@ -2961,7 +2961,7 @@ export default function PaymentsSection({
                               {item.course}
                             </span>
                           </td>
-                          <td style={{ padding: '12px 18px', textAlign: 'right' }}>
+                          <td data-label="Pending Amount" style={{ padding: '12px 18px', textAlign: 'right' }}>
                             <span
                               style={{
                                 display: 'inline-block',
@@ -2977,7 +2977,7 @@ export default function PaymentsSection({
                               ₹{Number(item.balance || 0).toLocaleString('en-IN')}
                             </span>
                           </td>
-                          <td style={{ padding: '12px 18px', textAlign: 'center' }}>
+                          <td data-label="Action" data-card-actions style={{ padding: '12px 18px', textAlign: 'center' }}>
                             <button
                               type="button"
                               className="btn sm primary"

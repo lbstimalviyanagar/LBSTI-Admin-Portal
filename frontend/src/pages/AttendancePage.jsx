@@ -917,7 +917,7 @@ export default function AttendancePage({ user, users = [], onToast }) {
                     return (
                       <tr key={r.id}>
                         {isAdmin && (
-                          <td data-label="Staff Member">
+                          <td data-label="Staff Member" data-card-primary>
                             <b>{r.staff_name || `Staff #${r.staff_id}`}</b>
                             {r.staff_username && (
                               <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--muted)' }}>
@@ -982,7 +982,7 @@ export default function AttendancePage({ user, users = [], onToast }) {
                           </span>
                         </td>
                         {isAdmin && (
-                          <td data-label="Actions" style={{ textAlign: 'center' }}>
+                          <td data-label="Actions" data-card-actions style={{ textAlign: 'center' }}>
                             <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
                               <button
                                 className="btn sm"
