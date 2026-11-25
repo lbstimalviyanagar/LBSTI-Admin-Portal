@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useState } from 'react';
 import EnquiryDashboard from '../components/EnquiryDashboard';
 import EnquiriesTable from '../components/EnquiriesTable';
 
@@ -17,21 +17,35 @@ export default function EnquiriesPage({
   onGoToNewLead,
   onDrillIntoTable
 }) {
-  const pendingTableScroll = useRef(false);
-
-  useEffect(() => {
-    if (!pendingTableScroll.current) return;
-    pendingTableScroll.current = false;
-    document.getElementById('enquiries-table')?.scrollIntoView({
-      behavior: 'smooth',
-      block: 'start'
-    });
-  }, [filterParams]);
+  const [showAllEnquiries, setShowAllEnquiries] = useState(false);
 
   const handleDrillIntoTable = (patch) => {
-    pendingTableScroll.current = true;
     onDrillIntoTable(patch);
+    setShowAllEnquiries(true);
   };
+
+  if (showAllEnquiries) {
+    return (
+      <>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px' }}>
+          <button className="btn" type="button" onClick={() => setShowAllEnquiries(false)}>
+            Back to analytics
+          </button>
+        </div>
+        <EnquiriesTable
+          enquiries={enquiries}
+          loading={loading}
+          counselorList={counselorList}
+          filterParams={filterParams}
+          setFilterParams={setFilterParams}
+          onOpenEdit={onOpenEdit}
+          onConfirmAdmission={onConfirmAdmission}
+          onRefresh={onRefresh}
+          onGoToNewLead={onGoToNewLead}
+        />
+      </>
+    );
+  }
 
   return (
     <>
@@ -42,20 +56,10 @@ export default function EnquiriesPage({
         dashFrom={dashFrom}
         dashTo={dashTo}
         showTrendRangeFilters
+        showRecentLeads={false}
         onOpenEdit={onOpenEdit}
         onConfirmAdmission={onConfirmAdmission}
         onDrillIntoTable={handleDrillIntoTable}
-        onGoToNewLead={onGoToNewLead}
-      />
-      <EnquiriesTable
-        enquiries={enquiries}
-        loading={loading}
-        counselorList={counselorList}
-        filterParams={filterParams}
-        setFilterParams={setFilterParams}
-        onOpenEdit={onOpenEdit}
-        onConfirmAdmission={onConfirmAdmission}
-        onRefresh={onRefresh}
         onGoToNewLead={onGoToNewLead}
       />
     </>

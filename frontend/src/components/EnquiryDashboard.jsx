@@ -46,6 +46,7 @@ export default function EnquiryDashboard({
   dashFrom = "",
   dashTo = "",
   showTrendRangeFilters = false,
+  showRecentLeads = true,
   onOpenEdit,
   onConfirmAdmission,
   onDrillIntoTable,
@@ -57,12 +58,11 @@ export default function EnquiryDashboard({
   const [trendDays, setTrendDays] = useState(30);
 
   const handleSourceClick = (sourceName) => {
-    setActiveSourceFilter(prev => {
-      if (prev && String(prev).trim().toLowerCase() === String(sourceName).trim().toLowerCase()) {
-        return null;
-      }
-      return sourceName;
-    });
+    const nextSource = activeSourceFilter && String(activeSourceFilter).trim().toLowerCase() === String(sourceName).trim().toLowerCase()
+      ? null
+      : sourceName;
+    setActiveSourceFilter(nextSource);
+    if (!showRecentLeads) onDrillIntoTable({ source: nextSource || 'All' });
   };
 
   const r = rangeOf(dashRangeKind, dashFrom, dashTo);
@@ -333,7 +333,26 @@ export default function EnquiryDashboard({
         )}
       </div>
 
+      {!showRecentLeads && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '18px' }}>
+          <button
+            className="btn"
+            type="button"
+            onClick={() => onDrillIntoTable({
+              dashboardCategory: 'all',
+              source: 'All',
+              dateKind: 'all',
+              from: '',
+              to: ''
+            })}
+          >
+            View all <Icon name="chevR" size={16} />
+          </button>
+        </div>
+      )}
+
       {/* Recent Leads Table Card */}
+      {showRecentLeads && (
       <div className="card section" id="dashboard-recent-leads">
         <div className="card-head">
           <div>
@@ -602,6 +621,7 @@ export default function EnquiryDashboard({
           )}
         </div>
       </div>
+      )}
 
       {/* Analytics Charts Grid */}
       {total > 0 || (showTrendRangeFilters && enquiries.length > 0) ? (
