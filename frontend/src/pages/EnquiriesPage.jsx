@@ -49,6 +49,17 @@ export default function EnquiriesPage({
 
   return (
     <>
+      <div className="tabs fees-tabs" role="tablist" aria-label="Enquiries sections" style={{ marginBottom: '20px' }}>
+        <button
+          className="fee-tab"
+          type="button"
+          role="tab"
+          aria-selected="true"
+          onClick={() => setShowAllEnquiries(false)}
+        >
+          Dashboard
+        </button>
+      </div>
       <EnquiryDashboard
         enquiries={enquiries}
         loading={loading}

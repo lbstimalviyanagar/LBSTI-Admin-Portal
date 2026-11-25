@@ -581,14 +581,6 @@ export default function App() {
                     onToChange={setDashTo}
                   />
                 )}
-                <button
-                  className="btn"
-                  type="button"
-                  onClick={() => loadData(false)}
-                >
-                  <span className={'ic ' + (loading ? 'spin' : '')}><Icon name="refresh" size={18} /></span>
-                  Refresh
-                </button>
                 {tab === 'table' && (
                   <button
                     className="btn primary"
@@ -599,6 +591,14 @@ export default function App() {
                     New Enquiry
                   </button>
                 )}
+                <button
+                  className="btn"
+                  type="button"
+                  onClick={() => loadData(false)}
+                >
+                  <span className={'ic ' + (loading ? 'spin' : '')}><Icon name="refresh" size={18} /></span>
+                  Refresh
+                </button>
               </div>
             </div>
           )}
