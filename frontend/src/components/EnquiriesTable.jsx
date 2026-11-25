@@ -394,8 +394,8 @@ export default function EnquiriesTable({
         )}
 
         {/* Data Table */}
-        <div className="tbl-scroll">
-          <table>
+        <div className="tbl-scroll enquiries-table-scroll">
+          <table className="mobile-card-stack enquiries-mobile-table">
             <thead>
               <tr>
                 {columns.map((col) => {
@@ -419,13 +419,13 @@ export default function EnquiriesTable({
             </thead>
             <tbody>
               {loading ? (
-                <tr>
+                <tr className="empty-row">
                   <td colSpan="9">
                     <div className="skel" style={{ height: '260px' }} />
                   </td>
                 </tr>
               ) : paginatedRows.length === 0 ? (
-                <tr>
+                <tr className="empty-row">
                   <td colSpan="9">
                     {enquiries.length === 0 ? (
                       <div className="empty">
@@ -471,9 +471,9 @@ export default function EnquiriesTable({
                           </span>
                         </button>
                       </td>
-                      <td data-label="Course">{e.course || "–"}</td>
-                      <td data-label="Phone">{e.phone}</td>
-                      <td data-label="Source">{normalizeLeadSource(e.source)}</td>
+                      <td data-label="Course"><span className="mobile-cell-value">{e.course || "–"}</span></td>
+                      <td data-label="Phone"><span className="mobile-cell-value">{e.phone}</span></td>
+                      <td data-label="Source"><span className="mobile-cell-value">{normalizeLeadSource(e.source)}</span></td>
                       <td data-label="Status">
                         <span className={`pill s-${slug(e.status)}`}>
                           {e.status}
@@ -505,6 +505,7 @@ export default function EnquiriesTable({
                               style={{ textDecoration: 'none' }}
                             >
                               <Icon name="phone" size={15} />
+                              <span className="mobile-action-label">Call</span>
                             </a>
                           ) : (
                             <button
@@ -514,6 +515,7 @@ export default function EnquiriesTable({
                               onClick={() => onToast && onToast("No valid phone number available for this lead.", true)}
                             >
                               <Icon name="phone" size={15} />
+                              <span className="mobile-action-label">Call</span>
                             </button>
                           )}
 
@@ -528,6 +530,7 @@ export default function EnquiriesTable({
                               style={{ color: '#16a34a', textDecoration: 'none' }}
                             >
                               <Icon name="whatsapp" size={16} />
+                              <span className="mobile-action-label">WhatsApp</span>
                             </a>
                           ) : (
                             <button
@@ -537,6 +540,7 @@ export default function EnquiriesTable({
                               onClick={() => onToast && onToast("No valid phone number available for this lead.", true)}
                             >
                               <Icon name="whatsapp" size={16} />
+                              <span className="mobile-action-label">WhatsApp</span>
                             </button>
                           )}
 
@@ -545,7 +549,9 @@ export default function EnquiriesTable({
                             type="button"
                             onClick={() => onOpenEdit(e.id)}
                           >
-                            <Icon name="edit" size={15} /> Edit
+                            <Icon name="edit" size={15} />
+                            <span className="desktop-action-label">Edit</span>
+                            <span className="mobile-action-label">Edit lead</span>
                           </button>
                           {e.status !== "Admission Confirmed" && e.status !== "Confirmed" && isPendingFU(e) && (
                             <button
@@ -556,6 +562,7 @@ export default function EnquiriesTable({
                               onClick={() => onConfirmAdmission(e.id)}
                             >
                               <Icon name="check" size={16} />
+                              <span className="mobile-action-label">Confirm</span>
                             </button>
                           )}
                         </div>
