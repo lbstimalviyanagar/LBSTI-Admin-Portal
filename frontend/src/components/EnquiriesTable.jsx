@@ -222,7 +222,7 @@ export default function EnquiriesTable({
   const activeDashboardCategory = dashboardCategoryLabels[dashboardCategory];
 
   return (
-    <section>
+    <section id="enquiries-table">
       <div className="card">
         {activeDashboardCategory && (
           <div className="card-head enquiry-filter-summary">

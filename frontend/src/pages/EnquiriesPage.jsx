@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import EnquiryDashboard from '../components/EnquiryDashboard';
 import EnquiriesTable from '../components/EnquiriesTable';
 
@@ -17,6 +17,22 @@ export default function EnquiriesPage({
   onGoToNewLead,
   onDrillIntoTable
 }) {
+  const pendingTableScroll = useRef(false);
+
+  useEffect(() => {
+    if (!pendingTableScroll.current) return;
+    pendingTableScroll.current = false;
+    document.getElementById('enquiries-table')?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start'
+    });
+  }, [filterParams]);
+
+  const handleDrillIntoTable = (patch) => {
+    pendingTableScroll.current = true;
+    onDrillIntoTable(patch);
+  };
+
   return (
     <>
       <EnquiryDashboard
@@ -28,7 +44,7 @@ export default function EnquiriesPage({
         showTrendRangeFilters
         onOpenEdit={onOpenEdit}
         onConfirmAdmission={onConfirmAdmission}
-        onDrillIntoTable={onDrillIntoTable}
+        onDrillIntoTable={handleDrillIntoTable}
         onGoToNewLead={onGoToNewLead}
       />
       <EnquiriesTable
