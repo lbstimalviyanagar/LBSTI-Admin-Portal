@@ -4423,6 +4423,18 @@ td:has(.empty), td:has(.skel) {
     flex: 1 1 auto;
     justify-content: center;
   }
+  .pager {
+    padding-inline: 12px;
+  }
+  .pager .btns {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    flex-wrap: wrap;
+  }
+  .pager .rows {
+    flex-wrap: wrap;
+  }
   .dashboard-master-container {
     gap: 16px !important;
   }
