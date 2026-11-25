@@ -603,30 +603,6 @@ export default function App() {
             </div>
           )}
 
-          {/* Enquiries Sub Tabs */}
-          {(tab === 'new' || tab === 'table') && (
-            <div className="tabs" role="tablist" aria-label="Enquiries sections">
-              <button
-                className="tab"
-                role="tab"
-                aria-selected={tab === 'table'}
-                onClick={() => setTab('table')}
-              >
-                <span className="ic"><Icon name="inbox" size={18} /></span>
-                Enquiries Table
-              </button>
-              <button
-                className="tab"
-                role="tab"
-                aria-selected={tab === 'new'}
-                onClick={() => setTab('new')}
-              >
-                <span className="ic"><Icon name="plus" size={18} /></span>
-                New Enquiry
-              </button>
-            </div>
-          )}
-
           {/* Error Banner */}
           {loadError && (tab === 'dashboard' || tab === 'new' || tab === 'table') && (
             <div className="banner" role="alert">
