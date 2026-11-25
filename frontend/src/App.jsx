@@ -589,16 +589,6 @@ export default function App() {
                   <span className={'ic ' + (loading ? 'spin' : '')}><Icon name="refresh" size={18} /></span>
                   Refresh
                 </button>
-                {tab === 'table' && (
-                  <button
-                    className="btn primary"
-                    type="button"
-                    onClick={() => setTab('new')}
-                  >
-                    <span className="ic"><Icon name="plus" size={18} /></span>
-                    New Enquiry
-                  </button>
-                )}
               </div>
             </div>
           )}
