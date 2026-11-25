@@ -570,15 +570,17 @@ export default function App() {
               </div>
 
               <div className="controls">
-                <button
-                  className="btn primary"
-                  type="button"
-                  onClick={() => setTab('new')}
-                >
-                  <span className="ic"><Icon name="plus" size={18} /></span>
-                  New Enquiry
-                </button>
-
+                {tab === 'table' && (
+                  <DateRangeFilter
+                    id="enquiries-range"
+                    value={dashRangeKind}
+                    onChange={setDashRangeKind}
+                    from={dashFrom}
+                    to={dashTo}
+                    onFromChange={setDashFrom}
+                    onToChange={setDashTo}
+                  />
+                )}
                 <button
                   className="btn"
                   type="button"
@@ -587,6 +589,16 @@ export default function App() {
                   <span className={'ic ' + (loading ? 'spin' : '')}><Icon name="refresh" size={18} /></span>
                   Refresh
                 </button>
+                {tab === 'table' && (
+                  <button
+                    className="btn primary"
+                    type="button"
+                    onClick={() => setTab('new')}
+                  >
+                    <span className="ic"><Icon name="plus" size={18} /></span>
+                    New Enquiry
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -676,6 +688,10 @@ export default function App() {
               onRefresh={() => loadData(false)}
               onGoToNewLead={() => setTab('new')}
               onToast={addToast}
+              dashRangeKind={dashRangeKind}
+              dashFrom={dashFrom}
+              dashTo={dashTo}
+              onDrillIntoTable={handleDrillIntoTable}
             />
           )}
 

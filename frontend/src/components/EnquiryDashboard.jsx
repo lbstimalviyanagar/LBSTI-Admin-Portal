@@ -45,6 +45,7 @@ export default function EnquiryDashboard({
   dashRangeKind = "all",
   dashFrom = "",
   dashTo = "",
+  showTrendRangeFilters = false,
   onOpenEdit,
   onConfirmAdmission,
   onDrillIntoTable,
@@ -53,6 +54,7 @@ export default function EnquiryDashboard({
   const { width: windowWidth, isMobile, isTablet } = useResponsive();
   const [courseViewMode, setCourseViewMode] = useState('auto'); // 'auto' | 'bars' (horizontal rows) | 'columns' (vertical bars)
   const [activeSourceFilter, setActiveSourceFilter] = useState(null);
+  const [trendDays, setTrendDays] = useState(30);
 
   const handleSourceClick = (sourceName) => {
     setActiveSourceFilter(prev => {
@@ -100,45 +102,65 @@ export default function EnquiryDashboard({
 
   // Calculate bucket points for the LineChart
   const getBuckets = () => {
-    const tomorrow = addDays(today, 1);
-    if (dashRangeKind === "today") {
-      const c = Array(24).fill(0);
+    if (!showTrendRangeFilters) {
+      const tomorrow = addDays(today, 1);
+      if (dashRangeKind === "today") {
+        const counts = Array(24).fill(0);
+        list.forEach(e => {
+          const d = parseDate(e.inquiryDate || e.createdAt);
+          if (d) counts[d.getHours()]++;
+        });
+        return counts.map((v, hour) => {
+          const label = `${hour % 12 || 12}${hour < 12 ? ' AM' : ' PM'}`;
+          return { v, label, full: label };
+        });
+      }
+
+      let start = r.start;
+      if (!start) {
+        const dates = list.map(e => parseDate(e.inquiryDate || e.createdAt)).filter(Boolean);
+        start = dates.length ? sod(new Date(Math.min(...dates))) : addDays(tomorrow, -30);
+      }
+      let end = r.end && r.end < tomorrow ? r.end : tomorrow;
+      if (end <= start) end = addDays(start, 1);
+
+      const span = dayDiff(start, end);
+      const weekly = span > 62;
+      const bucketCount = weekly ? Math.ceil(span / 7) : span;
+      const counts = Array(bucketCount).fill(0);
       list.forEach(e => {
         const d = parseDate(e.inquiryDate || e.createdAt);
-        if (d) c[d.getHours()]++;
+        if (!d) return;
+        const index = Math.floor(dayDiff(start, d) / (weekly ? 7 : 1));
+        if (index >= 0 && index < bucketCount) counts[index]++;
       });
-      return c.map((v, h) => {
-        const l = `${h % 12 || 12}${h < 12 ? ' AM' : ' PM'}`;
-        return { v, label: l, full: l };
+
+      return counts.map((v, index) => {
+        const d = addDays(start, index * (weekly ? 7 : 1));
+        return {
+          v,
+          label: fmtShort(d),
+          full: weekly ? `Week of ${fmtShort(d)}` : `${d.getDate()} ${MON[d.getMonth()]} ${d.getFullYear()}`
+        };
       });
     }
 
-    let start = r.start;
-    if (!start) {
-      const ds = list.map(e => parseDate(e.inquiryDate || e.createdAt)).filter(Boolean);
-      start = ds.length ? sod(new Date(Math.min(...ds))) : addDays(tomorrow, -30);
-    }
-    let end = r.end && r.end < tomorrow ? r.end : tomorrow;
-    if (end <= start) end = addDays(start, 1);
+    const start = addDays(today, 1 - trendDays);
+    const counts = Array(trendDays).fill(0);
 
-    const span = dayDiff(start, end);
-    const weekly = span > 62;
-    const n = weekly ? Math.ceil(span / 7) : span;
-    const c = Array(n).fill(0);
-
-    list.forEach(e => {
+    enquiries.forEach(e => {
       const d = parseDate(e.inquiryDate || e.createdAt);
       if (!d) return;
-      const i = Math.floor(dayDiff(start, d) / (weekly ? 7 : 1));
-      if (i >= 0 && i < n) c[i]++;
+      const index = dayDiff(start, sod(d));
+      if (index >= 0 && index < trendDays) counts[index]++;
     });
 
-    return c.map((v, i) => {
-      const d = addDays(start, i * (weekly ? 7 : 1));
+    return counts.map((v, i) => {
+      const d = addDays(start, i);
       return {
         v,
         label: fmtShort(d),
-        full: weekly ? `Week of ${fmtShort(d)}` : `${d.getDate()} ${MON[d.getMonth()]} ${d.getFullYear()}`
+        full: `${d.getDate()} ${MON[d.getMonth()]} ${d.getFullYear()}`
       };
     });
   };
@@ -582,11 +604,35 @@ export default function EnquiryDashboard({
       </div>
 
       {/* Analytics Charts Grid */}
-      {total > 0 ? (
+      {total > 0 || (showTrendRangeFilters && enquiries.length > 0) ? (
         <div className="charts-grid">
           <div className="card chart-card">
-            <h3>Inquiry Trends</h3>
-            <p>New enquiries · {rangeLabels[dashRangeKind]}</p>
+            {showTrendRangeFilters ? (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '8px' }}>
+                <div>
+                  <h3>Inquiry Trends</h3>
+                  <p>New enquiries · Last {trendDays} days</p>
+                </div>
+                <div className="chart-mode-toggle" role="group" aria-label="Inquiry trend date range">
+                  {[7, 30, 90].map(days => (
+                    <button
+                      key={days}
+                      type="button"
+                      className={`chart-mode-btn ${trendDays === days ? 'active' : ''}`}
+                      aria-pressed={trendDays === days}
+                      onClick={() => setTrendDays(days)}
+                    >
+                      {days}D
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <>
+                <h3>Inquiry Trends</h3>
+                <p>New enquiries · {rangeLabels[dashRangeKind]}</p>
+              </>
+            )}
             <div style={{ width: '100%', height: isMobile ? 260 : 300 }}>
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={getBuckets()} margin={{ top: 20, right: isMobile ? 15 : 35, left: isMobile ? -15 : 0, bottom: 20 }}>
