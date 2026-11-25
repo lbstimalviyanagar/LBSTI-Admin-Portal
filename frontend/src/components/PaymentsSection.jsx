@@ -241,6 +241,7 @@ export default function PaymentsSection({
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+  const [paymentTableRequest, setPaymentTableRequest] = useState(0);
 
   // Outstanding Dues Modal state
   const [showDuesModal, setShowDuesModal] = useState(false);
@@ -286,6 +287,26 @@ export default function PaymentsSection({
     setDateRangeKind('all');
     setCustomFrom('');
     setCustomTo('');
+  };
+
+  useEffect(() => {
+    if (!paymentTableRequest || feeTab !== 'dashboard') return;
+    document.getElementById('payments-recent-transactions')?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start'
+    });
+  }, [paymentTableRequest, feeTab]);
+
+  const showPaymentTransactions = (range = 'current') => {
+    if (range === 'month') {
+      setDateRangeKind('month');
+      setCustomFrom('');
+      setCustomTo('');
+    }
+
+    setHistorySearchQuery('');
+    setFeeTab('dashboard');
+    setPaymentTableRequest(request => request + 1);
   };
 
   const handleRefresh = async () => {
@@ -1493,7 +1514,12 @@ export default function PaymentsSection({
               ))
             ) : (
               <>
-                <div className="card stat">
+                <button
+                  className="card stat kpi-interactive"
+                  type="button"
+                  onClick={() => showPaymentTransactions()}
+                  title="Show transactions included in this total"
+                >
                   <div className="stat-top">
                     <span className="stat-ico"><Icon name="award" size={20} /></span>
                     <span className="stat-label">{hasDateFilter ? "Total in Period" : "Total collected"}</span>
@@ -1504,9 +1530,14 @@ export default function PaymentsSection({
                       ? `${feesCount} payment ${feesCount === 1 ? 'record' : 'records'}`
                       : `${feesCount} ${feesCount === 1 ? 'payment recorded' : 'payments recorded'}`}
                   </div>
-                </div>
+                </button>
 
-                <div className="card stat">
+                <button
+                  className="card stat kpi-interactive"
+                  type="button"
+                  onClick={() => showPaymentTransactions(hasDateFilter ? 'current' : 'month')}
+                  title="Show transactions for this collection period"
+                >
                   <div className="stat-top">
                     <span className="stat-ico"><Icon name="clock" size={20} /></span>
                     <span className="stat-label">{hasDateFilter ? rangeLabel : "Collected this month"}</span>
@@ -1517,9 +1548,14 @@ export default function PaymentsSection({
                       ? `Filter active: ${rangeLabel}`
                       : `${monthFeesCount} ${monthFeesCount === 1 ? 'payment' : 'payments'} this month`}
                   </div>
-                </div>
+                </button>
 
-                <div className="card stat">
+                <button
+                  className="card stat kpi-interactive"
+                  type="button"
+                  onClick={() => showPaymentTransactions()}
+                  title="Show transactions included in this average"
+                >
                   <div className="stat-top">
                     <span className="stat-ico"><Icon name="users" size={20} /></span>
                     <span className="stat-label">Average payment</span>
@@ -1528,7 +1564,7 @@ export default function PaymentsSection({
                   <div className="stat-sub">
                     {hasDateFilter ? `Average for ${rangeLabel}` : "Across all recorded payments"}
                   </div>
-                </div>
+                </button>
 
                 {/* 4. Fee Dues Analytics Card (Interactive with Outstanding Dues Modal) */}
                 <div
@@ -1580,7 +1616,7 @@ export default function PaymentsSection({
           </div>
 
           {/* 1. Full-Width Recent Transactions Table Card at the Very Top */}
-          <div className="card section w-full" style={{ width: '100%', marginTop: '22px', marginBottom: '22px' }}>
+          <div id="payments-recent-transactions" className="card section w-full" style={{ width: '100%', marginTop: '22px', marginBottom: '22px' }}>
             <div className="card-head">
               <div>
                 <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800 }}>Recent Transactions</h3>
