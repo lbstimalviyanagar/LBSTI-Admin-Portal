@@ -777,7 +777,7 @@ export default function DashboardPage({
           </div>
 
           {/* Activity Sub-Tabs */}
-          <div style={{ display: 'flex', gap: '6px' }}>
+          <div className="dashboard-activity-tabs" style={{ display: 'flex', gap: '6px' }}>
             <button
               className={`btn sm ${activeActivityTab === 'leads' ? 'primary' : ''}`}
               type="button"

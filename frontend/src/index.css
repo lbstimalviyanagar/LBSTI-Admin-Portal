@@ -4437,6 +4437,12 @@ td:has(.empty), td:has(.skel) {
   }
   .dashboard-master-container {
     gap: 16px !important;
+    min-width: 0;
+  }
+  .dashboard-master-container > * {
+    box-sizing: border-box;
+    min-width: 0;
+    max-width: 100%;
   }
   .dashboard-hero {
     align-items: flex-start !important;
@@ -4463,6 +4469,14 @@ td:has(.empty), td:has(.skel) {
     align-items: flex-start !important;
     flex-wrap: wrap;
     gap: 10px;
+  }
+  .dashboard-activity-tabs {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+  .dashboard-activity-tabs .btn {
+    flex: 1 1 100px;
+    justify-content: center;
   }
   .dashboard-metric-grid {
     grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)) !important;
