@@ -286,6 +286,7 @@ export default function DashboardPage({
       {/* 1. WELCOME HERO BANNER & QUICK LAUNCH ACTIONS                */}
       {/* ============================================================ */}
       <div
+        className="dashboard-hero"
         style={{
           background: 'linear-gradient(135deg, var(--navy-900) 0%, #1e293b 100%)',
           color: '#fff',
@@ -299,7 +300,7 @@ export default function DashboardPage({
           gap: '20px'
         }}
       >
-        <div style={{ maxWidth: '650px' }}>
+        <div className="dashboard-hero-copy" style={{ maxWidth: '650px' }}>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', background: 'rgba(255,255,255,0.12)', padding: '4px 12px', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 600, marginBottom: '10px' }}>
             <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} />
             LBSTIMN Central Portal &bull; {rangeLabel}
@@ -313,7 +314,7 @@ export default function DashboardPage({
         </div>
 
         {/* Quick Launch Buttons */}
-        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+        <div className="dashboard-hero-actions" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
           {onGoToNewLead && (
             <button
               className="btn"
@@ -381,7 +382,7 @@ export default function DashboardPage({
       {/* 2. EXECUTIVE SUMMARY CARDS GRID (ALL SECTIONS)              */}
       {/* ============================================================ */}
       <div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+        <div className="dashboard-section-heading" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
           <div>
             <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 700, color: '#0f172a' }}>
               Institute Key Metrics & Summary
@@ -405,6 +406,7 @@ export default function DashboardPage({
         </div>
 
         <div
+          className="dashboard-metric-grid"
           style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(270px, 1fr))',
@@ -1071,6 +1073,7 @@ export default function DashboardPage({
         </p>
 
         <div
+          className="dashboard-module-grid"
           style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))',

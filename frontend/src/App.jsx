@@ -58,18 +58,8 @@ export default function App() {
   const [feeLoadError, setFeeLoadError] = useState('');
   const [dashboardRefreshKey, setDashboardRefreshKey] = useState(0);
 
-  // Navigation & View state (Persistent via URL Hash and localStorage fallback)
-  const getInitialTab = () => {
-    try {
-      const hash = window.location.hash.replace(/^#\/?/, '').trim();
-      if (VALID_TABS.includes(hash)) return hash;
-      const saved = localStorage.getItem('lbstimn_active_tab');
-      if (VALID_TABS.includes(saved)) return saved;
-    } catch (e) {}
-    return 'dashboard';
-  };
-
-  const [tab, setTabState] = useState(getInitialTab);
+  // Start each session in Enquiries; the logo is the dashboard entry point.
+  const [tab, setTabState] = useState('table');
 
   const setTab = useCallback((newTab) => {
     const nextTab = VALID_TABS.includes(newTab) ? newTab : 'dashboard';
@@ -84,6 +74,10 @@ export default function App() {
       }
     } catch (e) {}
   }, []);
+
+  useEffect(() => {
+    setTab('table');
+  }, [setTab]);
 
   useEffect(() => {
     const onHashChange = () => {
@@ -666,7 +660,7 @@ export default function App() {
             <NewEnquiryPage
               counselorList={counselorList}
               onSubmit={handleCreateEnquiry}
-              onCancel={() => setTab('dashboard')}
+              onCancel={() => setTab('table')}
             />
           )}
 
