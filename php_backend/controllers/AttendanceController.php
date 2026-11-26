@@ -17,6 +17,7 @@ function ensureStaffAttendanceTables($pdo) {
             `clock_out` DATETIME DEFAULT NULL,
             `total_hours` DECIMAL(5,2) DEFAULT 0.00,
             `status` VARCHAR(50) DEFAULT 'Present',
+            `leave_type` VARCHAR(80) NULL DEFAULT NULL,
             `is_admin_modified` TINYINT(1) DEFAULT 0,
             `last_modified_by` VARCHAR(150) NULL DEFAULT NULL,
             `last_modified_at` DATETIME NULL DEFAULT NULL,
@@ -30,8 +31,14 @@ function ensureStaffAttendanceTables($pdo) {
         try {
             $pdo->exec("ALTER TABLE `staff_attendance` MODIFY `clock_in` DATETIME NULL DEFAULT NULL;");
         } catch (Exception $e) {}
+        try {
+            $pdo->exec("ALTER TABLE `staff_attendance` MODIFY `status` VARCHAR(50) DEFAULT 'Present';");
+        } catch (Exception $e) {}
 
         // Add admin modification tracking columns if not already present
+        try {
+            $pdo->exec("ALTER TABLE `staff_attendance` ADD COLUMN `leave_type` VARCHAR(80) NULL DEFAULT NULL;");
+        } catch (Exception $e) {}
         try {
             $pdo->exec("ALTER TABLE `staff_attendance` ADD COLUMN `is_admin_modified` TINYINT(1) DEFAULT 0;");
         } catch (Exception $e) {}
@@ -146,7 +153,7 @@ function getAttendanceFilterOptions($pdo, $user) {
     ensureStaffAttendanceTables($pdo);
     try {
         $staff = [];
-        $statuses = ['Present', 'Half Day', 'Leave', 'Absent'];
+        $statuses = ['Present', 'Half Day', 'Leave', 'On Leave', 'Absent'];
 
         if (strtolower($user['role'] ?? '') === 'admin') {
             try {
@@ -232,7 +239,7 @@ function clockOut($pdo, $user, $body) {
         $date    = date('Y-m-d');           // Today in IST
         $now     = date('Y-m-d H:i:s');     // Current time in IST
 
-        $stmt = $pdo->prepare("SELECT * FROM staff_attendance WHERE staff_id = ? AND `date` = ? AND clock_out IS NULL ORDER BY clock_in DESC LIMIT 1");
+        $stmt = $pdo->prepare("SELECT * FROM staff_attendance WHERE staff_id = ? AND `date` = ? AND clock_in IS NOT NULL AND clock_out IS NULL AND LOWER(TRIM(status)) NOT IN ('absent', 'leave', 'on leave') ORDER BY clock_in DESC LIMIT 1");
         $stmt->execute([$staffId, $date]);
         $record = $stmt->fetch();
 
@@ -254,6 +261,118 @@ function clockOut($pdo, $user, $body) {
         
         echo json_encode($stmt->fetch());
     } catch (PDOException $e) {
+        http_response_code(500);
+        echo json_encode(["message" => "Database error: " . $e->getMessage()]);
+    }
+}
+
+function markStaffLeave($pdo, $user, $body) {
+    ensureStaffAttendanceTables($pdo);
+    try {
+        date_default_timezone_set('Asia/Kolkata');
+
+        $isAdmin = strtolower($user['role'] ?? '') === 'admin';
+        $staffId = $isAdmin
+            ? (int)($body['staff_id'] ?? 0)
+            : (int)($user['sub'] ?? 0);
+        $date = trim($body['date'] ?? '');
+        $leaveType = trim($body['leave_type'] ?? '');
+        $reason = trim($body['reason'] ?? '');
+        $allowedLeaveTypes = ['Sick', 'Casual', 'Paid', 'Unpaid', 'Other'];
+
+        if (!$staffId) {
+            http_response_code(400);
+            echo json_encode(["message" => "Please select a valid staff member."]);
+            return;
+        }
+        if (!$isAdmin && isset($body['staff_id']) && (int)$body['staff_id'] !== $staffId) {
+            http_response_code(403);
+            echo json_encode(["message" => "Staff members can only mark leave for themselves."]);
+            return;
+        }
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) || !checkdate((int)substr($date, 5, 2), (int)substr($date, 8, 2), (int)substr($date, 0, 4))) {
+            http_response_code(400);
+            echo json_encode(["message" => "A valid leave date in YYYY-MM-DD format is required."]);
+            return;
+        }
+        if (!in_array($leaveType, $allowedLeaveTypes, true)) {
+            http_response_code(400);
+            echo json_encode(["message" => "Please select a valid leave type."]);
+            return;
+        }
+        if ($reason === '' || strlen($reason) > 2000) {
+            http_response_code(400);
+            echo json_encode(["message" => "A leave reason of 1 to 2000 characters is required."]);
+            return;
+        }
+
+        $userStmt = $pdo->prepare("SELECT id, full_name, username FROM portal_users WHERE id = ?");
+        $userStmt->execute([$staffId]);
+        $staffUser = $userStmt->fetch();
+        if (!$staffUser) {
+            http_response_code(404);
+            echo json_encode(["message" => "Staff member not found in the database."]);
+            return;
+        }
+
+        $existingStmt = $pdo->prepare("SELECT id FROM staff_attendance WHERE staff_id = ? AND `date` = ? LIMIT 1");
+        $existingStmt->execute([$staffId, $date]);
+        if ($existingStmt->fetch()) {
+            http_response_code(409);
+            echo json_encode(["message" => "An attendance record already exists for this staff member on that date."]);
+            return;
+        }
+
+        $actorId = (int)($user['sub'] ?? 0);
+        $actorName = trim($user['name'] ?? $user['username'] ?? ($isAdmin ? 'Admin' : 'Staff'));
+        $pdo->beginTransaction();
+        $insertStmt = $pdo->prepare("
+            INSERT INTO staff_attendance
+                (staff_id, `date`, clock_in, clock_out, total_hours, status, leave_type, is_admin_modified, last_modified_by, last_modified_at, modification_reason)
+            VALUES (?, ?, NULL, NULL, 0.00, 'On Leave', ?, ?, ?, NOW(), ?)
+        ");
+        $insertStmt->execute([$staffId, $date, $leaveType, $isAdmin ? 1 : 0, $actorName, $reason]);
+        $attendanceId = $pdo->lastInsertId();
+
+        $updatedData = [
+            'staff_id' => $staffId,
+            'staff_name' => $staffUser['full_name'] ?: $staffUser['username'],
+            'date' => $date,
+            'status' => 'On Leave',
+            'leave_type' => $leaveType,
+            'total_hours' => 0,
+            'reason' => $reason
+        ];
+        $auditStmt = $pdo->prepare("
+            INSERT INTO staff_attendance_audit_logs
+                (attendance_id, staff_id, admin_id, admin_name, action, previous_data, updated_data, reason, created_at)
+            VALUES (?, ?, ?, ?, 'CREATE', NULL, ?, ?, NOW())
+        ");
+        $auditStmt->execute([
+            $attendanceId,
+            $staffId,
+            $actorId,
+            $actorName,
+            json_encode($updatedData, JSON_UNESCAPED_UNICODE),
+            $reason
+        ]);
+        $pdo->commit();
+
+        $fetchStmt = $pdo->prepare("
+            SELECT a.*, u.full_name AS staff_name, u.username AS staff_username, u.role AS staff_role
+            FROM staff_attendance a
+            LEFT JOIN portal_users u ON u.id = a.staff_id
+            WHERE a.id = ?
+        ");
+        $fetchStmt->execute([$attendanceId]);
+        http_response_code(201);
+        echo json_encode([
+            "ok" => true,
+            "message" => "Leave marked successfully.",
+            "record" => $fetchStmt->fetch()
+        ]);
+    } catch (PDOException $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
         http_response_code(500);
         echo json_encode(["message" => "Database error: " . $e->getMessage()]);
     }
@@ -310,16 +429,10 @@ function adminAddAttendance($pdo, $user, $body) {
         $clockIn = null;
         $clockOut = null;
 
-        if (in_array(strtolower($status), ['absent', 'leave'])) {
-            if (!empty($rawClockIn)) {
-                $clockIn = (strlen($rawClockIn) <= 8) ? "{$date} {$rawClockIn}" : date('Y-m-d H:i:s', strtotime($rawClockIn));
-            }
-            if (!empty($rawClockOut)) {
-                $clockOut = (strlen($rawClockOut) <= 8) ? "{$date} {$rawClockOut}" : date('Y-m-d H:i:s', strtotime($rawClockOut));
-            }
-            if ($totalHours === null) {
-                $totalHours = 0.00;
-            }
+        if (in_array(strtolower($status), ['absent', 'leave', 'on leave'])) {
+            $clockIn = null;
+            $clockOut = null;
+            $totalHours = 0.00;
         } else {
             if (!empty($rawClockIn)) {
                 $clockIn = (strlen($rawClockIn) <= 8) ? "{$date} {$rawClockIn}" : date('Y-m-d H:i:s', strtotime($rawClockIn));
@@ -465,20 +578,10 @@ function adminUpdateAttendance($pdo, $id, $user, $body) {
         $clockIn = $existing['clock_in'];
         $clockOut = $existing['clock_out'];
 
-        if (in_array(strtolower($status), ['absent', 'leave'])) {
-            if ($rawClockIn === '' || $rawClockIn === null) {
-                $clockIn = null;
-            } else {
-                $clockIn = (strlen($rawClockIn) <= 8) ? "{$date} {$rawClockIn}" : date('Y-m-d H:i:s', strtotime($rawClockIn));
-            }
-            if ($rawClockOut === '' || $rawClockOut === null) {
-                $clockOut = null;
-            } else {
-                $clockOut = (strlen($rawClockOut) <= 8) ? "{$date} {$rawClockOut}" : date('Y-m-d H:i:s', strtotime($rawClockOut));
-            }
-            if ($totalHours === null) {
-                $totalHours = 0.00;
-            }
+        if (in_array(strtolower($status), ['absent', 'leave', 'on leave'])) {
+            $clockIn = null;
+            $clockOut = null;
+            $totalHours = 0.00;
         } else {
             if ($rawClockIn !== null) {
                 $clockIn = !empty($rawClockIn) ? ((strlen($rawClockIn) <= 8) ? "{$date} {$rawClockIn}" : date('Y-m-d H:i:s', strtotime($rawClockIn))) : null;

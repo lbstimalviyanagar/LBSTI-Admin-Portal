@@ -120,7 +120,7 @@ const extractTimeString = (dateTimeStr) => {
 
 // Calculate total hours from clock-in and clock-out HH:MM
 const calculateTotalHours = (inTime, outTime, status) => {
-  if (status === 'Absent' || status === 'Leave') return '0.00';
+  if (['Absent', 'Leave', 'On Leave'].includes(status)) return '0.00';
   if (!inTime || !outTime) {
     return status === 'Half Day' ? '4.00' : '';
   }
@@ -141,6 +141,14 @@ export default function AttendancePage({ user, users = [], onToast }) {
   const [loading, setLoading] = useState(true);
   const [clockingIn, setClockingIn] = useState(false);
   const [clockingOut, setClockingOut] = useState(false);
+  const [showLeaveModal, setShowLeaveModal] = useState(false);
+  const [savingLeave, setSavingLeave] = useState(false);
+  const [leaveForm, setLeaveForm] = useState({
+    staff_id: '',
+    leave_type: 'Sick',
+    date: getTodayIST(),
+    reason: ''
+  });
   const [filterOptions, setFilterOptions] = useState({ staff: [], statuses: [], dates: [] });
 
   // Search & Filter state
@@ -305,7 +313,7 @@ export default function AttendancePage({ user, users = [], onToast }) {
 
   // Status options (from backend or default portal statuses)
   const statusOptions = useMemo(() => {
-    const set = new Set(['Present', 'Half Day', 'Leave', 'Absent']);
+    const set = new Set(['Present', 'Half Day', 'Leave', 'On Leave', 'Absent']);
     if (Array.isArray(filterOptions?.statuses)) {
       filterOptions.statuses.forEach(s => {
         if (s && typeof s === 'string') set.add(s.trim());
@@ -475,10 +483,49 @@ export default function AttendancePage({ user, users = [], onToast }) {
     setShowAddModal(true);
   };
 
+  const handleOpenLeave = () => {
+    const currentStaffId = String(user?.id || user?.sub || '');
+    const defaultStaff = isAdmin
+      ? (staffOptions[0]?.id || '')
+      : (staffOptions.find(s => s.id === currentStaffId)?.id || currentStaffId);
+    setLeaveForm({
+      staff_id: defaultStaff,
+      leave_type: 'Sick',
+      date: getTodayIST(),
+      reason: ''
+    });
+    setShowLeaveModal(true);
+  };
+
+  const handleSubmitLeave = async (e) => {
+    e.preventDefault();
+    if (!leaveForm.staff_id || !leaveForm.date || !leaveForm.leave_type || !leaveForm.reason.trim()) {
+      onToast('Please complete all leave details.', true);
+      return;
+    }
+
+    setSavingLeave(true);
+    try {
+      await api.markLeave({
+        staff_id: leaveForm.staff_id,
+        leave_type: leaveForm.leave_type,
+        date: leaveForm.date,
+        reason: leaveForm.reason.trim()
+      });
+      onToast('Leave marked successfully.');
+      setShowLeaveModal(false);
+      loadRecords();
+    } catch (err) {
+      onToast(err.message || 'Failed to mark leave.', true);
+    } finally {
+      setSavingLeave(false);
+    }
+  };
+
   const handleAddStatusChange = (newStatus) => {
     let inTime = addForm.clock_in;
     let outTime = addForm.clock_out;
-    if (newStatus === 'Absent' || newStatus === 'Leave') {
+    if (['Absent', 'Leave', 'On Leave'].includes(newStatus)) {
       inTime = '';
       outTime = '';
     } else if (!inTime) {
@@ -568,7 +615,7 @@ export default function AttendancePage({ user, users = [], onToast }) {
   const handleEditStatusChange = (newStatus) => {
     let inTime = editForm.clock_in;
     let outTime = editForm.clock_out;
-    if (newStatus === 'Absent' || newStatus === 'Leave') {
+    if (['Absent', 'Leave', 'On Leave'].includes(newStatus)) {
       inTime = '';
       outTime = '';
     } else if (!inTime) {
@@ -748,6 +795,16 @@ export default function AttendancePage({ user, users = [], onToast }) {
           >
             <span className="ic"><Icon name="clock" size={16} /></span>
             {clockingOut ? 'Clocking Out...' : 'Clock Out'}
+          </button>
+          <button
+            className="btn"
+            type="button"
+            onClick={handleOpenLeave}
+            style={{ color: '#6d28d9', borderColor: '#c4b5fd' }}
+            title="Mark a staff member as on leave"
+          >
+            <span className="ic"><Icon name="calendar" size={16} /></span>
+            Mark Leave
           </button>
         </div>
       </div>
@@ -968,7 +1025,9 @@ export default function AttendancePage({ user, users = [], onToast }) {
                           )}
                         </td>
                         <td data-label="Total Hours">
-                          {r.total_hours != null && r.total_hours !== '' ? (
+                          {['absent', 'leave', 'on leave'].includes(String(r.status || '').toLowerCase()) ? (
+                            <span className="muted">0.00 hrs</span>
+                          ) : r.total_hours != null && r.total_hours !== '' ? (
                             <span>{Number(r.total_hours).toFixed(2)} hrs</span>
                           ) : !r.clock_out && r.clock_in ? (
                             <span className="muted" style={{ fontSize: '0.82rem' }}>In progress</span>
@@ -977,9 +1036,14 @@ export default function AttendancePage({ user, users = [], onToast }) {
                           )}
                         </td>
                         <td data-label="Status">
-                          <span className={`pill s-${statusSlug}`}>
+                          <span className={`pill s-${statusSlug}`} title={r.leave_type ? `Leave type: ${r.leave_type}` : undefined}>
                             {r.status || 'Present'}
                           </span>
+                          {r.leave_type && (
+                            <span style={{ display: 'block', marginTop: '3px', fontSize: '0.75rem', color: 'var(--muted)' }}>
+                              {r.leave_type}
+                            </span>
+                          )}
                         </td>
                         {isAdmin && (
                           <td data-label="Actions" data-card-actions style={{ textAlign: 'center' }}>
@@ -1182,6 +1246,7 @@ export default function AttendancePage({ user, users = [], onToast }) {
                       <option value="Present">Present</option>
                       <option value="Half Day">Half Day</option>
                       <option value="Leave">Leave</option>
+                      <option value="On Leave">On Leave</option>
                       <option value="Absent">Absent</option>
                     </select>
                   </div>
@@ -1268,6 +1333,140 @@ export default function AttendancePage({ user, users = [], onToast }) {
                   disabled={savingAdd}
                 >
                   {savingAdd ? 'Saving...' : 'Add Attendance Record'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showLeaveModal && (
+        <div
+          className="modal-backdrop"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.65)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1050,
+            padding: '16px'
+          }}
+          onClick={(e) => { if (e.target === e.currentTarget && !savingLeave) setShowLeaveModal(false); }}
+        >
+          <div
+            className="modal"
+            style={{
+              background: '#fff',
+              borderRadius: '12px',
+              maxWidth: '500px',
+              width: '100%',
+              boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04)'
+            }}
+          >
+            <div className="modal-head" style={{ padding: '16px 20px', borderBottom: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.15rem' }}>Mark Leave</h3>
+                <p style={{ margin: '3px 0 0', fontSize: '0.82rem', color: 'var(--muted)' }}>
+                  Mark approved leave for a staff member. Leave is recorded with zero working hours.
+                </p>
+              </div>
+              <button
+                className="btn close-btn"
+                type="button"
+                onClick={() => setShowLeaveModal(false)}
+                disabled={savingLeave}
+                aria-label="Close modal"
+              >
+                ×
+              </button>
+            </div>
+            <form onSubmit={handleSubmitLeave}>
+              <div className="modal-body" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div>
+                  <label className="label" style={{ fontWeight: 600, fontSize: '0.85rem', display: 'block', marginBottom: '4px' }}>
+                    Staff Member *
+                  </label>
+                  <select
+                    className="select"
+                    value={leaveForm.staff_id}
+                    onChange={(e) => setLeaveForm({ ...leaveForm, staff_id: e.target.value })}
+                    required
+                    disabled={!isAdmin}
+                    style={{ width: '100%' }}
+                  >
+                    <option value="" disabled>-- Select Staff Member --</option>
+                    {staffOptions.map(s => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div>
+                    <label className="label" style={{ fontWeight: 600, fontSize: '0.85rem', display: 'block', marginBottom: '4px' }}>
+                      Leave Type *
+                    </label>
+                    <select
+                      className="select"
+                      value={leaveForm.leave_type}
+                      onChange={(e) => setLeaveForm({ ...leaveForm, leave_type: e.target.value })}
+                      required
+                      style={{ width: '100%' }}
+                    >
+                      <option value="Sick">Sick</option>
+                      <option value="Casual">Casual</option>
+                      <option value="Paid">Paid</option>
+                      <option value="Unpaid">Unpaid</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="label" style={{ fontWeight: 600, fontSize: '0.85rem', display: 'block', marginBottom: '4px' }}>
+                      Leave Date *
+                    </label>
+                    <input
+                      type="date"
+                      className="input"
+                      value={leaveForm.date}
+                      onChange={(e) => setLeaveForm({ ...leaveForm, date: e.target.value })}
+                      required
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="label" style={{ fontWeight: 600, fontSize: '0.85rem', display: 'block', marginBottom: '4px' }}>
+                    Reason *
+                  </label>
+                  <textarea
+                    className="input"
+                    rows={3}
+                    value={leaveForm.reason}
+                    onChange={(e) => setLeaveForm({ ...leaveForm, reason: e.target.value })}
+                    required
+                    maxLength={2000}
+                    placeholder="Enter the reason for this leave."
+                    style={{ width: '100%', resize: 'vertical' }}
+                  />
+                </div>
+              </div>
+              <div className="modal-footer" style={{ padding: '14px 20px', borderTop: '1px solid var(--line)', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => setShowLeaveModal(false)}
+                  disabled={savingLeave}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn"
+                  disabled={savingLeave}
+                  style={{ color: '#fff', background: '#7c3aed', borderColor: '#7c3aed' }}
+                >
+                  {savingLeave ? 'Saving...' : 'Mark Leave'}
                 </button>
               </div>
             </form>
@@ -1383,6 +1582,7 @@ export default function AttendancePage({ user, users = [], onToast }) {
                       <option value="Present">Present</option>
                       <option value="Half Day">Half Day</option>
                       <option value="Leave">Leave</option>
+                      <option value="On Leave">On Leave</option>
                       <option value="Absent">Absent</option>
                     </select>
                   </div>
@@ -1399,7 +1599,7 @@ export default function AttendancePage({ user, users = [], onToast }) {
                       className="input"
                       value={editForm.clock_in}
                       onChange={(e) => handleEditClockChange('clock_in', e.target.value)}
-                      disabled={['Absent', 'Leave'].includes(editForm.status)}
+                      disabled={['Absent', 'Leave', 'On Leave'].includes(editForm.status)}
                       style={{ width: '100%' }}
                     />
                   </div>
@@ -1412,7 +1612,7 @@ export default function AttendancePage({ user, users = [], onToast }) {
                       className="input"
                       value={editForm.clock_out}
                       onChange={(e) => handleEditClockChange('clock_out', e.target.value)}
-                      disabled={['Absent', 'Leave'].includes(editForm.status)}
+                      disabled={['Absent', 'Leave', 'On Leave'].includes(editForm.status)}
                       style={{ width: '100%' }}
                     />
                   </div>

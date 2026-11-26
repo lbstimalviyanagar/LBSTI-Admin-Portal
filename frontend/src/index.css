@@ -1472,6 +1472,7 @@ tbody tr:last-child td {
 .s-present { --c: #059669; }
 .s-halfday, .s-half-day { --c: #d97706; }
 .s-leave { --c: #2563eb; }
+.s-onleave { --c: #7c3aed; }
 .s-absent { --c: #dc2626; }
 .s-active, .s-clockedin, .s-inprogress { --c: #0284c7; }
 

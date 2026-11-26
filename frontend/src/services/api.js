@@ -445,7 +445,7 @@ export const api = {
     try {
       return await request("/attendance/options", { method: "GET" });
     } catch (e) {
-      return { staff: [], statuses: ['Present', 'Half Day', 'Leave', 'Absent'], dates: [] };
+      return { staff: [], statuses: ['Present', 'Half Day', 'Leave', 'On Leave', 'Absent'], dates: [] };
     }
   },
   async clockIn() {
@@ -456,6 +456,9 @@ export const api = {
   },
   async adminAddAttendance(data) {
     return request("/attendance/admin-record", { method: "POST", body: data });
+  },
+  async markLeave(data) {
+    return request("/attendance/leave", { method: "POST", body: data });
   },
   async adminUpdateAttendance(id, data) {
     return request(`/attendance/admin-update/${id}`, { method: "PUT", body: data });

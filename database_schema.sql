@@ -136,6 +136,7 @@ CREATE TABLE IF NOT EXISTS `staff_attendance` (
   `clock_out` DATETIME DEFAULT NULL,
   `total_hours` DECIMAL(5,2) DEFAULT 0.00,
   `status` VARCHAR(50) DEFAULT 'Present',
+  `leave_type` VARCHAR(80) DEFAULT NULL,
   `is_admin_modified` TINYINT(1) DEFAULT 0,
   `last_modified_by` VARCHAR(150) NULL DEFAULT NULL,
   `last_modified_at` DATETIME NULL DEFAULT NULL,

@@ -286,6 +286,8 @@ if ($route === 'auth/login') {
         clockIn($pdo, $user);
     } elseif ($method === "PUT" && $action === "clock-out") {
         clockOut($pdo, $user, $body);
+    } elseif ($method === "POST" && $action === "leave") {
+        markStaffLeave($pdo, $user, $body);
     } elseif ($method === "POST" && ($action === "admin-record" || $action === "record")) {
         adminAddAttendance($pdo, $user, $body);
     } elseif (($method === "PUT" || $method === "PATCH") && ($action === "admin-update" || is_numeric($action))) {
