@@ -3,6 +3,7 @@ import api from '../services/api';
 import Icon from '../components/Icons';
 import { useTableSort } from '../hooks/useTableSort';
 import { SortableTh } from '../components/SortableHeader';
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
 /**
  * Parses any time slot string into minutes from midnight (0 - 1439).
@@ -368,6 +369,19 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
     return sortBatches(filteredBatches, batchCustomGetters);
   }, [filteredBatches, batchSortKey, sortBatches, batchCustomGetters]);
 
+  const batchEnrollmentStats = useMemo(() => {
+    const data = batches.map(batch => ({
+      id: batch.id,
+      batch: batch.batch_name || batch.topic || batch.course_name || `Batch ${batch.id}`,
+      course: batch.course_name || '',
+      students: Math.max(0, Number(batch.student_count) || 0)
+    }));
+    const total = data.reduce((sum, batch) => sum + batch.students, 0);
+    const highest = data.reduce((best, batch) => !best || batch.students > best.students ? batch : best, null);
+    const lowest = data.reduce((best, batch) => !best || batch.students < best.students ? batch : best, null);
+    return { data, total, highest, lowest };
+  }, [batches]);
+
   const clearFilters = () => {
     setSearchQuery('');
     setCourseFilter('All');
@@ -616,6 +630,61 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
           <button className="btn" type="button" onClick={loadBatches}>Try again</button>
         </div>
       )}
+
+      <div className="card section" style={{ margin: '0 0 1.25rem', padding: '1.1rem 1.25rem' }}>
+        <div style={{ marginBottom: '1rem' }}>
+          <h3 style={{ margin: 0, fontSize: '1.05rem' }}>Student Batch Statistics</h3>
+          <p style={{ margin: '4px 0 0', color: 'var(--muted)', fontSize: '0.84rem' }}>
+            Enrollment totals from the current batch records. Refreshes with batch data.
+          </p>
+        </div>
+        {loading && batches.length === 0 ? (
+          <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--muted)' }}>Loading batch statistics...</div>
+        ) : batches.length === 0 ? (
+          <div style={{ padding: '1.25rem', textAlign: 'center', color: 'var(--muted)' }}>No batch enrollment data is available yet.</div>
+        ) : (
+          <>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginBottom: '1rem' }}>
+              {[
+                { label: 'Total students across batches', value: batchEnrollmentStats.total, detail: `${batches.length} batches` },
+                { label: 'Highest-enrolled batch', value: batchEnrollmentStats.highest?.students ?? 0, detail: batchEnrollmentStats.highest?.batch || '—' },
+                { label: 'Lowest-enrolled batch', value: batchEnrollmentStats.lowest?.students ?? 0, detail: batchEnrollmentStats.lowest?.batch || '—' }
+              ].map(stat => (
+                <div key={stat.label} style={{ border: '1px solid var(--line)', borderRadius: '9px', padding: '12px 14px', background: 'var(--card)' }}>
+                  <div style={{ color: 'var(--muted)', fontSize: '0.78rem', marginBottom: '5px' }}>{stat.label}</div>
+                  <div style={{ color: '#0f172a', fontWeight: 700, fontSize: '1.35rem', lineHeight: 1.25 }}>{stat.value}</div>
+                  <div title={stat.detail} style={{ color: '#475569', fontSize: '0.8rem', marginTop: '3px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{stat.detail}</div>
+                </div>
+              ))}
+            </div>
+            <div aria-label="Students per batch bar chart" role="img" style={{ width: '100%', height: 300 }}>
+              <ResponsiveContainer>
+                <BarChart data={batchEnrollmentStats.data} margin={{ top: 8, right: 12, left: 0, bottom: 56 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis
+                    dataKey="batch"
+                    interval={0}
+                    angle={-30}
+                    textAnchor="end"
+                    height={70}
+                    tick={{ fontSize: 11 }}
+                    tickFormatter={value => String(value).length > 18 ? `${String(value).slice(0, 17)}…` : value}
+                  />
+                  <YAxis allowDecimals={false} width={36} />
+                  <Tooltip
+                    formatter={(value, _name, item) => [value, 'Students']}
+                    labelFormatter={(label, items) => {
+                      const course = items?.[0]?.payload?.course;
+                      return course ? `${label} · ${course}` : label;
+                    }}
+                  />
+                  <Bar dataKey="students" name="Students" fill="#2563eb" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </>
+        )}
+      </div>
 
       <div className="card table-container">
         {/* Dynamic Search & Filters Toolbar */}

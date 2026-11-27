@@ -70,6 +70,23 @@ function ensureStaffAttendanceTables($pdo) {
             KEY `idx_audit_created` (`created_at`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
 
+        $pdo->exec("CREATE TABLE IF NOT EXISTS `staff_leave_requests` (
+            `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `staff_id` BIGINT UNSIGNED NOT NULL,
+            `leave_type` VARCHAR(80) NOT NULL,
+            `start_date` DATE NOT NULL,
+            `end_date` DATE NOT NULL,
+            `reason` TEXT NOT NULL,
+            `status` ENUM('Pending', 'Approved', 'Rejected') NOT NULL DEFAULT 'Pending',
+            `reviewed_by` BIGINT UNSIGNED DEFAULT NULL,
+            `reviewed_by_name` VARCHAR(150) DEFAULT NULL,
+            `reviewed_at` DATETIME DEFAULT NULL,
+            `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            KEY `idx_leave_staff_dates` (`staff_id`, `start_date`, `end_date`),
+            KEY `idx_leave_status` (`status`, `created_at`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
+
         $initialized = true;
     } catch (Exception $e) {
         error_log("Staff attendance table setup warning: " . $e->getMessage());
@@ -272,6 +289,11 @@ function markStaffLeave($pdo, $user, $body) {
         date_default_timezone_set('Asia/Kolkata');
 
         $isAdmin = strtolower($user['role'] ?? '') === 'admin';
+        if (!$isAdmin) {
+            http_response_code(403);
+            echo json_encode(["message" => "Staff must submit a leave request for administrator approval."]);
+            return;
+        }
         $staffId = $isAdmin
             ? (int)($body['staff_id'] ?? 0)
             : (int)($user['sub'] ?? 0);
@@ -375,6 +397,253 @@ function markStaffLeave($pdo, $user, $body) {
         if ($pdo->inTransaction()) $pdo->rollBack();
         http_response_code(500);
         echo json_encode(["message" => "Database error: " . $e->getMessage()]);
+    }
+}
+
+function getStaffLeaveRequests($pdo, $user) {
+    ensureStaffAttendanceTables($pdo);
+    try {
+        $isAdmin = strtolower($user['role'] ?? '') === 'admin';
+        $params = [];
+        $where = '';
+        if (!$isAdmin) {
+            $where = 'WHERE lr.staff_id = ?';
+            $params[] = (int)$user['sub'];
+        } elseif (!empty($_GET['status']) && in_array($_GET['status'], ['Pending', 'Approved', 'Rejected'], true)) {
+            $where = 'WHERE lr.status = ?';
+            $params[] = $_GET['status'];
+        }
+
+        $stmt = $pdo->prepare("
+            SELECT lr.*, COALESCE(NULLIF(u.full_name, ''), u.username) AS staff_name
+            FROM staff_leave_requests lr
+            LEFT JOIN portal_users u ON u.id = lr.staff_id
+            {$where}
+            ORDER BY CASE WHEN lr.status = 'Pending' THEN 0 ELSE 1 END, lr.created_at DESC, lr.id DESC
+        ");
+        $stmt->execute($params);
+        echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC));
+    } catch (PDOException $e) {
+        http_response_code(500);
+        echo json_encode(["message" => "Database error: " . $e->getMessage()]);
+    }
+}
+
+function submitStaffLeaveRequest($pdo, $user, $body) {
+    ensureStaffAttendanceTables($pdo);
+    try {
+        $isAdmin = strtolower($user['role'] ?? '') === 'admin';
+        $staffId = $isAdmin && !empty($body['staff_id'])
+            ? (int)$body['staff_id']
+            : (int)($user['sub'] ?? 0);
+        $startDate = trim($body['start_date'] ?? '');
+        $endDate = trim($body['end_date'] ?? '');
+        $leaveType = trim($body['leave_type'] ?? '');
+        $reason = trim($body['reason'] ?? '');
+        $allowedLeaveTypes = ['Sick', 'Casual', 'Paid', 'Unpaid', 'Other'];
+        $isValidDate = function($date) {
+            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) return false;
+            return checkdate((int)substr($date, 5, 2), (int)substr($date, 8, 2), (int)substr($date, 0, 4));
+        };
+
+        if (!$staffId) {
+            http_response_code(401);
+            echo json_encode(["message" => "A valid staff account is required."]);
+            return;
+        }
+        if (!$isValidDate($startDate) || !$isValidDate($endDate) || $endDate < $startDate) {
+            http_response_code(400);
+            echo json_encode(["message" => "Enter a valid leave start and end date; the end date cannot be before the start date."]);
+            return;
+        }
+        if (!in_array($leaveType, $allowedLeaveTypes, true)) {
+            http_response_code(400);
+            echo json_encode(["message" => "Please select a valid leave type."]);
+            return;
+        }
+        if ($reason === '' || strlen($reason) > 2000) {
+            http_response_code(400);
+            echo json_encode(["message" => "A leave reason of 1 to 2000 characters is required."]);
+            return;
+        }
+
+        $pdo->beginTransaction();
+        $overlap = $pdo->prepare("
+            SELECT id FROM staff_leave_requests
+            WHERE staff_id = ? AND status IN ('Pending', 'Approved')
+              AND start_date <= ? AND end_date >= ?
+            LIMIT 1
+        ");
+        $overlap->execute([$staffId, $endDate, $startDate]);
+        if ($overlap->fetch()) {
+            $pdo->rollBack();
+            http_response_code(409);
+            echo json_encode(["message" => "A pending or approved leave request already overlaps these dates."]);
+            return;
+        }
+
+        $staffStmt = $pdo->prepare("SELECT id FROM portal_users WHERE id = ?");
+        $staffStmt->execute([$staffId]);
+        if (!$staffStmt->fetch()) {
+            $pdo->rollBack();
+            http_response_code(404);
+            echo json_encode(["message" => "Staff member not found."]);
+            return;
+        }
+
+        $stmt = $pdo->prepare("
+            INSERT INTO staff_leave_requests (staff_id, leave_type, start_date, end_date, reason, status)
+            VALUES (?, ?, ?, ?, ?, 'Pending')
+        ");
+        $stmt->execute([$staffId, $leaveType, $startDate, $endDate, $reason]);
+        $requestId = (int)$pdo->lastInsertId();
+        $pdo->commit();
+
+        $fetch = $pdo->prepare("
+            SELECT lr.*, COALESCE(NULLIF(u.full_name, ''), u.username) AS staff_name
+            FROM staff_leave_requests lr
+            LEFT JOIN portal_users u ON u.id = lr.staff_id
+            WHERE lr.id = ?
+        ");
+        $fetch->execute([$requestId]);
+        http_response_code(201);
+        echo json_encode($fetch->fetch(PDO::FETCH_ASSOC));
+    } catch (PDOException $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        http_response_code(500);
+        echo json_encode(["message" => "Database error: " . $e->getMessage()]);
+    }
+}
+
+function reviewStaffLeaveRequest($pdo, $user, $id, $body) {
+    ensureStaffAttendanceTables($pdo);
+    if (strtolower($user['role'] ?? '') !== 'admin') {
+        http_response_code(403);
+        echo json_encode(["message" => "Only administrators can review staff leave requests."]);
+        return;
+    }
+
+    $requestId = (int)$id;
+    $decision = trim($body['status'] ?? '');
+    if (!$requestId || !in_array($decision, ['Approved', 'Rejected'], true)) {
+        http_response_code(400);
+        echo json_encode(["message" => "A valid request ID and Approved or Rejected decision are required."]);
+        return;
+    }
+
+    try {
+        $pdo->beginTransaction();
+        $requestStmt = $pdo->prepare("SELECT * FROM staff_leave_requests WHERE id = ? FOR UPDATE");
+        $requestStmt->execute([$requestId]);
+        $request = $requestStmt->fetch(PDO::FETCH_ASSOC);
+        if (!$request) {
+            $pdo->rollBack();
+            http_response_code(404);
+            echo json_encode(["message" => "Leave request not found."]);
+            return;
+        }
+        if ($request['status'] !== 'Pending') {
+            $pdo->rollBack();
+            http_response_code(409);
+            echo json_encode(["message" => "This leave request has already been reviewed."]);
+            return;
+        }
+
+        $adminId = (int)($user['sub'] ?? 0);
+        $adminName = trim($user['name'] ?? $user['username'] ?? 'Admin');
+        $review = $pdo->prepare("
+            UPDATE staff_leave_requests
+            SET status = ?, reviewed_by = ?, reviewed_by_name = ?, reviewed_at = NOW()
+            WHERE id = ? AND status = 'Pending'
+        ");
+        $review->execute([$decision, $adminId, $adminName, $requestId]);
+
+        if ($decision === 'Approved') {
+            $staffStmt = $pdo->prepare("SELECT full_name, username FROM portal_users WHERE id = ?");
+            $staffStmt->execute([(int)$request['staff_id']]);
+            $staff = $staffStmt->fetch(PDO::FETCH_ASSOC);
+            if (!$staff) {
+                throw new RuntimeException("Staff member for this leave request no longer exists.");
+            }
+            $staffName = $staff['full_name'] ?: $staff['username'];
+            $start = new DateTimeImmutable($request['start_date']);
+            $end = new DateTimeImmutable($request['end_date']);
+            $day = new DateInterval('P1D');
+            $period = new DatePeriod($start, $day, $end->modify('+1 day'));
+
+            foreach ($period as $date) {
+                $dateValue = $date->format('Y-m-d');
+                $existingStmt = $pdo->prepare("SELECT * FROM staff_attendance WHERE staff_id = ? AND `date` = ?");
+                $existingStmt->execute([(int)$request['staff_id'], $dateValue]);
+                $existingRows = $existingStmt->fetchAll(PDO::FETCH_ASSOC);
+                $previousData = $existingRows
+                    ? json_encode($existingRows, JSON_UNESCAPED_UNICODE)
+                    : null;
+
+                if ($existingRows) {
+                    $updateAttendance = $pdo->prepare("
+                        UPDATE staff_attendance
+                        SET clock_in = NULL, clock_out = NULL, total_hours = 0.00, status = 'On Leave',
+                            leave_type = ?, is_admin_modified = 1, last_modified_by = ?,
+                            last_modified_at = NOW(), modification_reason = ?
+                        WHERE staff_id = ? AND `date` = ?
+                    ");
+                    $updateAttendance->execute([
+                        $request['leave_type'], $adminName, $request['reason'],
+                        (int)$request['staff_id'], $dateValue
+                    ]);
+                    $ids = array_column($existingRows, 'id');
+                } else {
+                    $insertAttendance = $pdo->prepare("
+                        INSERT INTO staff_attendance
+                            (staff_id, `date`, clock_in, clock_out, total_hours, status, leave_type,
+                             is_admin_modified, last_modified_by, last_modified_at, modification_reason)
+                        VALUES (?, ?, NULL, NULL, 0.00, 'On Leave', ?, 1, ?, NOW(), ?)
+                    ");
+                    $insertAttendance->execute([
+                        (int)$request['staff_id'], $dateValue, $request['leave_type'],
+                        $adminName, $request['reason']
+                    ]);
+                    $ids = [(int)$pdo->lastInsertId()];
+                }
+
+                foreach ($ids as $attendanceId) {
+                    $updatedData = [
+                        'staff_id' => (int)$request['staff_id'],
+                        'staff_name' => $staffName,
+                        'date' => $dateValue,
+                        'status' => 'On Leave',
+                        'leave_type' => $request['leave_type'],
+                        'total_hours' => 0,
+                        'leave_request_id' => $requestId
+                    ];
+                    $audit = $pdo->prepare("
+                        INSERT INTO staff_attendance_audit_logs
+                            (attendance_id, staff_id, admin_id, admin_name, action, previous_data, updated_data, reason, created_at)
+                        VALUES (?, ?, ?, ?, 'LEAVE_APPROVED', ?, ?, ?, NOW())
+                    ");
+                    $audit->execute([
+                        (int)$attendanceId, (int)$request['staff_id'], $adminId, $adminName,
+                        $previousData, json_encode($updatedData, JSON_UNESCAPED_UNICODE),
+                        "Leave request #{$requestId} approved. " . $request['reason']
+                    ]);
+                }
+            }
+        }
+
+        $pdo->commit();
+        $fetch = $pdo->prepare("
+            SELECT lr.*, COALESCE(NULLIF(u.full_name, ''), u.username) AS staff_name
+            FROM staff_leave_requests lr
+            LEFT JOIN portal_users u ON u.id = lr.staff_id
+            WHERE lr.id = ?
+        ");
+        $fetch->execute([$requestId]);
+        echo json_encode($fetch->fetch(PDO::FETCH_ASSOC));
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        http_response_code(500);
+        echo json_encode(["message" => "Unable to review leave request: " . $e->getMessage()]);
     }
 }
 

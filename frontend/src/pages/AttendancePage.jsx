@@ -143,10 +143,14 @@ export default function AttendancePage({ user, users = [], onToast }) {
   const [clockingOut, setClockingOut] = useState(false);
   const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [savingLeave, setSavingLeave] = useState(false);
+  const [leaveRequests, setLeaveRequests] = useState([]);
+  const [loadingLeaveRequests, setLoadingLeaveRequests] = useState(true);
+  const [reviewingLeaveId, setReviewingLeaveId] = useState(null);
   const [leaveForm, setLeaveForm] = useState({
     staff_id: '',
     leave_type: 'Sick',
-    date: getTodayIST(),
+    start_date: getTodayIST(),
+    end_date: getTodayIST(),
     reason: ''
   });
   const [filterOptions, setFilterOptions] = useState({ staff: [], statuses: [], dates: [] });
@@ -210,9 +214,21 @@ export default function AttendancePage({ user, users = [], onToast }) {
     }
   }, [onToast]);
 
+  const loadLeaveRequests = useCallback(async () => {
+    setLoadingLeaveRequests(true);
+    try {
+      setLeaveRequests(await api.getLeaveRequests());
+    } catch (err) {
+      onToast(err.message || 'Failed to load leave requests.', true);
+    } finally {
+      setLoadingLeaveRequests(false);
+    }
+  }, [onToast]);
+
   useEffect(() => {
     loadRecords();
-  }, [loadRecords]);
+    loadLeaveRequests();
+  }, [loadRecords, loadLeaveRequests]);
 
   // Load filter options from backend
   useEffect(() => {
@@ -491,7 +507,8 @@ export default function AttendancePage({ user, users = [], onToast }) {
     setLeaveForm({
       staff_id: defaultStaff,
       leave_type: 'Sick',
-      date: getTodayIST(),
+      start_date: getTodayIST(),
+      end_date: getTodayIST(),
       reason: ''
     });
     setShowLeaveModal(true);
@@ -499,26 +516,40 @@ export default function AttendancePage({ user, users = [], onToast }) {
 
   const handleSubmitLeave = async (e) => {
     e.preventDefault();
-    if (!leaveForm.staff_id || !leaveForm.date || !leaveForm.leave_type || !leaveForm.reason.trim()) {
+    if ((isAdmin && !leaveForm.staff_id) || !leaveForm.start_date || !leaveForm.end_date || leaveForm.end_date < leaveForm.start_date || !leaveForm.leave_type || !leaveForm.reason.trim()) {
       onToast('Please complete all leave details.', true);
       return;
     }
 
     setSavingLeave(true);
     try {
-      await api.markLeave({
-        staff_id: leaveForm.staff_id,
+      await api.submitLeaveRequest({
+        ...(isAdmin ? { staff_id: leaveForm.staff_id } : {}),
         leave_type: leaveForm.leave_type,
-        date: leaveForm.date,
+        start_date: leaveForm.start_date,
+        end_date: leaveForm.end_date,
         reason: leaveForm.reason.trim()
       });
-      onToast('Leave marked successfully.');
+      onToast('Leave request submitted for approval.');
       setShowLeaveModal(false);
-      loadRecords();
+      await loadLeaveRequests();
     } catch (err) {
-      onToast(err.message || 'Failed to mark leave.', true);
+      onToast(err.message || 'Failed to submit leave request.', true);
     } finally {
       setSavingLeave(false);
+    }
+  };
+
+  const handleReviewLeaveRequest = async (request, status) => {
+    setReviewingLeaveId(request.id);
+    try {
+      await api.reviewLeaveRequest(request.id, status);
+      onToast(`Leave request ${status.toLowerCase()}.`);
+      await Promise.all([loadLeaveRequests(), loadRecords()]);
+    } catch (err) {
+      onToast(err.message || 'Failed to review leave request.', true);
+    } finally {
+      setReviewingLeaveId(null);
     }
   };
 
@@ -743,8 +774,8 @@ export default function AttendancePage({ user, users = [], onToast }) {
           <h2>Staff Attendance</h2>
           <p>
             {isAdmin
-              ? 'Comprehensive administrative attendance tracking, adjustments, missing entry additions, and audit logging.'
-              : 'Track and review your daily clock-in, clock-out, and attendance history.'}
+          ? 'Manage staff attendance, review leave requests, adjust records, and inspect audit history.'
+          : 'Track your attendance, request leave, and review your attendance history.'}
           </p>
         </div>
         <div className="controls">
@@ -801,12 +832,88 @@ export default function AttendancePage({ user, users = [], onToast }) {
             type="button"
             onClick={handleOpenLeave}
             style={{ color: '#6d28d9', borderColor: '#c4b5fd' }}
-            title="Mark a staff member as on leave"
+            title="Submit a staff leave request for approval"
           >
             <span className="ic"><Icon name="calendar" size={16} /></span>
-            Mark Leave
+            Request Leave
           </button>
         </div>
+      </div>
+
+      <div className="card section" style={{ marginBottom: '1.25rem', padding: '1.1rem 1.25rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap', marginBottom: '0.8rem' }}>
+          <div>
+            <h3 style={{ margin: 0, fontSize: '1rem' }}>{isAdmin ? 'Staff Leave Requests' : 'My Leave Requests'}</h3>
+            <p style={{ margin: '3px 0 0', color: 'var(--muted)', fontSize: '0.82rem' }}>
+              {isAdmin ? 'Approve or reject pending requests. Approved dates are recorded as On Leave.' : 'Requests remain pending until an administrator reviews them.'}
+            </p>
+          </div>
+          <button className="btn" type="button" onClick={loadLeaveRequests} disabled={loadingLeaveRequests}>
+            <span className={`ic ${loadingLeaveRequests ? 'spin' : ''}`}><Icon name="refresh" size={15} /></span>
+            Refresh
+          </button>
+        </div>
+        {loadingLeaveRequests ? (
+          <div style={{ padding: '1rem', color: 'var(--muted)' }}>Loading leave requests...</div>
+        ) : leaveRequests.length === 0 ? (
+          <div style={{ padding: '1rem', border: '1px dashed var(--line)', borderRadius: '8px', color: 'var(--muted)' }}>
+            No leave requests yet.
+          </div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table className="table">
+              <thead>
+                <tr>
+                  {isAdmin && <th>Staff</th>}
+                  <th>Dates</th>
+                  <th>Type</th>
+                  <th>Reason</th>
+                  <th>Status</th>
+                  {isAdmin && <th style={{ textAlign: 'right' }}>Actions</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {leaveRequests.map(request => (
+                  <tr key={request.id}>
+                    {isAdmin && <td>{request.staff_name || `Staff #${request.staff_id}`}</td>}
+                    <td>{formatDateDisplay(request.start_date).display} to {formatDateDisplay(request.end_date).display}</td>
+                    <td>{request.leave_type}</td>
+                    <td style={{ minWidth: '180px', whiteSpace: 'pre-wrap' }}>{request.reason}</td>
+                    <td>
+                      <span
+                        className="pill"
+                        style={{
+                          background: request.status === 'Approved' ? '#dcfce7' : request.status === 'Rejected' ? '#fee2e2' : '#fef3c7',
+                          color: request.status === 'Approved' ? '#166534' : request.status === 'Rejected' ? '#991b1b' : '#92400e'
+                        }}
+                      >
+                        {request.status}
+                      </span>
+                    </td>
+                    {isAdmin && (
+                      <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                        {request.status === 'Pending' ? (
+                          <span style={{ display: 'inline-flex', gap: '6px' }}>
+                            <button className="btn primary" type="button" disabled={reviewingLeaveId === request.id} onClick={() => handleReviewLeaveRequest(request, 'Approved')}>
+                              Approve
+                            </button>
+                            <button className="btn" type="button" disabled={reviewingLeaveId === request.id} onClick={() => handleReviewLeaveRequest(request, 'Rejected')}>
+                              Reject
+                            </button>
+                          </span>
+                        ) : (
+                          <span style={{ color: 'var(--muted)', fontSize: '0.8rem' }}>
+                            {request.reviewed_by_name ? `Reviewed by ${request.reviewed_by_name}` : ''}
+                          </span>
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Dynamic Search & Filtering Toolbar */}
@@ -1367,9 +1474,9 @@ export default function AttendancePage({ user, users = [], onToast }) {
           >
             <div className="modal-head" style={{ padding: '16px 20px', borderBottom: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div>
-                <h3 style={{ margin: 0, fontSize: '1.15rem' }}>Mark Leave</h3>
+                <h3 style={{ margin: 0, fontSize: '1.15rem' }}>Request Leave</h3>
                 <p style={{ margin: '3px 0 0', fontSize: '0.82rem', color: 'var(--muted)' }}>
-                  Mark approved leave for a staff member. Leave is recorded with zero working hours.
+                  Leave will be recorded in attendance only after it is approved.
                 </p>
               </div>
               <button
@@ -1384,7 +1491,7 @@ export default function AttendancePage({ user, users = [], onToast }) {
             </div>
             <form onSubmit={handleSubmitLeave}>
               <div className="modal-body" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                <div>
+                {isAdmin && <div>
                   <label className="label" style={{ fontWeight: 600, fontSize: '0.85rem', display: 'block', marginBottom: '4px' }}>
                     Staff Member *
                   </label>
@@ -1401,7 +1508,7 @@ export default function AttendancePage({ user, users = [], onToast }) {
                       <option key={s.id} value={s.id}>{s.name}</option>
                     ))}
                   </select>
-                </div>
+                </div>}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <div>
                     <label className="label" style={{ fontWeight: 600, fontSize: '0.85rem', display: 'block', marginBottom: '4px' }}>
@@ -1423,17 +1530,31 @@ export default function AttendancePage({ user, users = [], onToast }) {
                   </div>
                   <div>
                     <label className="label" style={{ fontWeight: 600, fontSize: '0.85rem', display: 'block', marginBottom: '4px' }}>
-                      Leave Date *
+                      Start Date *
                     </label>
                     <input
                       type="date"
                       className="input"
-                      value={leaveForm.date}
-                      onChange={(e) => setLeaveForm({ ...leaveForm, date: e.target.value })}
+                      value={leaveForm.start_date}
+                      onChange={(e) => setLeaveForm({ ...leaveForm, start_date: e.target.value })}
                       required
                       style={{ width: '100%' }}
                     />
                   </div>
+                </div>
+                <div>
+                  <label className="label" style={{ fontWeight: 600, fontSize: '0.85rem', display: 'block', marginBottom: '4px' }}>
+                    End Date *
+                  </label>
+                  <input
+                    type="date"
+                    className="input"
+                    min={leaveForm.start_date}
+                    value={leaveForm.end_date}
+                    onChange={(e) => setLeaveForm({ ...leaveForm, end_date: e.target.value })}
+                    required
+                    style={{ width: '100%' }}
+                  />
                 </div>
                 <div>
                   <label className="label" style={{ fontWeight: 600, fontSize: '0.85rem', display: 'block', marginBottom: '4px' }}>
@@ -1466,7 +1587,7 @@ export default function AttendancePage({ user, users = [], onToast }) {
                   disabled={savingLeave}
                   style={{ color: '#fff', background: '#7c3aed', borderColor: '#7c3aed' }}
                 >
-                  {savingLeave ? 'Saving...' : 'Mark Leave'}
+                  {savingLeave ? 'Submitting...' : 'Submit Request'}
                 </button>
               </div>
             </form>

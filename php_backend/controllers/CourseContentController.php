@@ -694,3 +694,218 @@ function deleteCourseNotes($pdo, $id) {
     }
 }
 
+function ensureCourseResourceTable($pdo) {
+    try {
+        require_once __DIR__ . '/BatchController.php';
+        ensureBatchesTable($pdo);
+        $pdo->exec("CREATE TABLE IF NOT EXISTS `course_resources` (
+            `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `course_id` BIGINT UNSIGNED NOT NULL,
+            `batch_id` BIGINT UNSIGNED DEFAULT NULL,
+            `title` VARCHAR(255) NOT NULL,
+            `file_name` VARCHAR(255) NOT NULL,
+            `file_type` VARCHAR(150) NOT NULL,
+            `file_size` BIGINT UNSIGNED NOT NULL,
+            `file_data` LONGBLOB NOT NULL,
+            `created_by` VARCHAR(190) NOT NULL,
+            `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            KEY `idx_course_resources_course` (`course_id`, `created_at`),
+            KEY `idx_course_resources_batch` (`batch_id`),
+            CONSTRAINT `fk_course_resources_course` FOREIGN KEY (`course_id`) REFERENCES `courses` (`id`) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
+    } catch (Exception $e) {
+        error_log("Course resource table setup failed: " . $e->getMessage());
+        throw $e;
+    }
+}
+
+function getCourseResources($pdo) {
+    ensureCourseContentTables($pdo);
+    ensureCourseResourceTable($pdo);
+    $courseId = isset($_GET['course_id']) ? (int)$_GET['course_id'] : 0;
+    if (!$courseId) {
+        http_response_code(400);
+        echo json_encode(["message" => "A valid course ID is required."]);
+        return;
+    }
+    try {
+        $stmt = $pdo->prepare("
+            SELECT cr.id, cr.course_id, cr.batch_id, cr.title, cr.file_name, cr.file_type,
+                   cr.file_size, cr.created_by, cr.created_at, c.name AS course_name,
+                   b.batch_name, b.course_name AS batch_course_name
+            FROM course_resources cr
+            JOIN courses c ON c.id = cr.course_id
+            LEFT JOIN institute_batches b ON b.id = cr.batch_id
+            WHERE cr.course_id = ?
+            ORDER BY cr.created_at DESC, cr.id DESC
+        ");
+        $stmt->execute([$courseId]);
+        echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC));
+    } catch (PDOException $e) {
+        http_response_code(500);
+        echo json_encode(["message" => "Database error: " . $e->getMessage()]);
+    }
+}
+
+function uploadCourseResource($pdo, $user) {
+    ensureCourseContentTables($pdo);
+    ensureCourseResourceTable($pdo);
+    if (strtolower($user['role'] ?? '') !== 'admin') {
+        http_response_code(403);
+        echo json_encode(["message" => "Only administrators can upload course materials."]);
+        return;
+    }
+
+    $courseId = (int)($_POST['course_id'] ?? 0);
+    $batchId = isset($_POST['batch_id']) && $_POST['batch_id'] !== '' ? (int)$_POST['batch_id'] : null;
+    $title = trim($_POST['title'] ?? '');
+    $file = $_FILES['file'] ?? null;
+    $maxBytes = 20 * 1024 * 1024;
+    $allowedExtensions = ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'jpg', 'jpeg', 'png', 'gif', 'webp', 'txt', 'csv', 'zip', 'mp4'];
+
+    if (!$courseId || !$file || !isset($file['error'])) {
+        http_response_code(400);
+        echo json_encode(["message" => "Select a course and a material file to upload."]);
+        return;
+    }
+    if ($file['error'] !== UPLOAD_ERR_OK) {
+        http_response_code(400);
+        echo json_encode(["message" => $file['error'] === UPLOAD_ERR_INI_SIZE || $file['error'] === UPLOAD_ERR_FORM_SIZE
+            ? "The selected file exceeds the server's upload limit."
+            : "The file upload did not complete successfully. Please try again."]);
+        return;
+    }
+    if (!is_uploaded_file($file['tmp_name']) || $file['size'] < 1 || $file['size'] > $maxBytes) {
+        http_response_code(400);
+        echo json_encode(["message" => "Course materials must be between 1 byte and 20 MB."]);
+        return;
+    }
+
+    $fileName = basename(str_replace('\\', '/', $file['name']));
+    $extension = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
+    if (!in_array($extension, $allowedExtensions, true)) {
+        http_response_code(400);
+        echo json_encode(["message" => "This file type is not supported. Upload PDF, Office documents, images, text/CSV, ZIP, or MP4 files."]);
+        return;
+    }
+    if ($title === '') $title = $fileName;
+    if (strlen($title) > 255 || strlen($fileName) > 255) {
+        http_response_code(400);
+        echo json_encode(["message" => "The title and file name must not exceed 255 characters."]);
+        return;
+    }
+
+    try {
+        $courseStmt = $pdo->prepare("SELECT id, name FROM courses WHERE id = ?");
+        $courseStmt->execute([$courseId]);
+        $course = $courseStmt->fetch(PDO::FETCH_ASSOC);
+        if (!$course) {
+            http_response_code(404);
+            echo json_encode(["message" => "Course not found."]);
+            return;
+        }
+        if ($batchId !== null) {
+            $batchStmt = $pdo->prepare("SELECT id FROM institute_batches WHERE id = ? AND LOWER(TRIM(course_name)) = LOWER(TRIM(?))");
+            $batchStmt->execute([$batchId, $course['name']]);
+            if (!$batchStmt->fetch()) {
+                http_response_code(400);
+                echo json_encode(["message" => "The selected batch does not belong to this course."]);
+                return;
+            }
+        }
+
+        $finfo = new finfo(FILEINFO_MIME_TYPE);
+        $mimeType = $finfo->file($file['tmp_name']) ?: 'application/octet-stream';
+        $fileData = file_get_contents($file['tmp_name']);
+        if ($fileData === false) {
+            throw new RuntimeException("Unable to read the uploaded file.");
+        }
+        $createdBy = trim($user['name'] ?? $user['username'] ?? 'Admin');
+        $stmt = $pdo->prepare("
+            INSERT INTO course_resources
+                (course_id, batch_id, title, file_name, file_type, file_size, file_data, created_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ");
+        $stmt->execute([$courseId, $batchId, $title, $fileName, $mimeType, (int)$file['size'], $fileData, $createdBy]);
+        $id = (int)$pdo->lastInsertId();
+        $fetch = $pdo->prepare("
+            SELECT cr.id, cr.course_id, cr.batch_id, cr.title, cr.file_name, cr.file_type,
+                   cr.file_size, cr.created_by, cr.created_at, c.name AS course_name,
+                   b.batch_name
+            FROM course_resources cr
+            JOIN courses c ON c.id = cr.course_id
+            LEFT JOIN institute_batches b ON b.id = cr.batch_id
+            WHERE cr.id = ?
+        ");
+        $fetch->execute([$id]);
+        http_response_code(201);
+        echo json_encode($fetch->fetch(PDO::FETCH_ASSOC));
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(["message" => "Unable to upload course material: " . $e->getMessage()]);
+    }
+}
+
+function getCourseResourceFile($pdo, $id) {
+    ensureCourseResourceTable($pdo);
+    $id = (int)$id;
+    if (!$id) {
+        http_response_code(400);
+        echo json_encode(["message" => "Invalid course material ID."]);
+        return;
+    }
+    try {
+        $stmt = $pdo->prepare("SELECT file_name, file_type, file_data FROM course_resources WHERE id = ?");
+        $stmt->execute([$id]);
+        $file = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$file) {
+            http_response_code(404);
+            echo json_encode(["message" => "Course material not found."]);
+            return;
+        }
+
+        $safeName = str_replace(["\r", "\n", '"'], ['', '', "'"], $file['file_name']);
+        $inlineTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+        $disposition = in_array($file['file_type'], $inlineTypes, true) && empty($_GET['download'])
+            ? 'inline'
+            : 'attachment';
+        header('Content-Type: ' . $file['file_type']);
+        header('X-Content-Type-Options: nosniff');
+        header('Content-Disposition: ' . $disposition . '; filename="' . $safeName . '"; filename*=UTF-8\'\'' . rawurlencode($file['file_name']));
+        header('Content-Length: ' . strlen($file['file_data']));
+        echo $file['file_data'];
+    } catch (PDOException $e) {
+        http_response_code(500);
+        echo json_encode(["message" => "Database error: " . $e->getMessage()]);
+    }
+}
+
+function deleteCourseResource($pdo, $user, $id) {
+    ensureCourseResourceTable($pdo);
+    if (strtolower($user['role'] ?? '') !== 'admin') {
+        http_response_code(403);
+        echo json_encode(["message" => "Only administrators can delete course materials."]);
+        return;
+    }
+    $id = (int)$id;
+    if (!$id) {
+        http_response_code(400);
+        echo json_encode(["message" => "Invalid course material ID."]);
+        return;
+    }
+    try {
+        $stmt = $pdo->prepare("DELETE FROM course_resources WHERE id = ?");
+        $stmt->execute([$id]);
+        if (!$stmt->rowCount()) {
+            http_response_code(404);
+            echo json_encode(["message" => "Course material not found."]);
+            return;
+        }
+        echo json_encode(["ok" => true, "deletedId" => $id]);
+    } catch (PDOException $e) {
+        http_response_code(500);
+        echo json_encode(["message" => "Database error: " . $e->getMessage()]);
+    }
+}
+

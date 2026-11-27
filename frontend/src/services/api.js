@@ -460,6 +460,19 @@ export const api = {
   async markLeave(data) {
     return request("/attendance/leave", { method: "POST", body: data });
   },
+  async getLeaveRequests() {
+    const data = await request("/attendance/leave-requests", { method: "GET" });
+    return recordList(data, "staff leave requests");
+  },
+  async submitLeaveRequest(data) {
+    return request("/attendance/leave-requests", { method: "POST", body: data });
+  },
+  async reviewLeaveRequest(id, status) {
+    return request(`/attendance/leave-requests/${id}/review`, {
+      method: "POST",
+      body: { status }
+    });
+  },
   async adminUpdateAttendance(id, data) {
     return request(`/attendance/admin-update/${id}`, { method: "PUT", body: data });
   },
@@ -630,6 +643,43 @@ export const api = {
   },
   async deleteCourseNotes(id) {
     return request(`/course-notes/${id}`, { method: "DELETE" });
+  },
+
+  // Uploaded course materials
+  async getCourseResources(courseId) {
+    const data = await request(`/course-resources?course_id=${encodeURIComponent(courseId)}`, { method: "GET" });
+    return recordList(data, "course materials");
+  },
+  async uploadCourseResource({ courseId, batchId, title, file }) {
+    const formData = new FormData();
+    formData.append("course_id", String(courseId));
+    if (batchId) formData.append("batch_id", String(batchId));
+    if (title?.trim()) formData.append("title", title.trim());
+    formData.append("file", file);
+    return request("/course-resources/upload", { method: "POST", body: formData });
+  },
+  async getCourseResourceFile(id, download = false) {
+    const base = getApiBase();
+    const query = download ? "?download=1" : "";
+    const url = `${base}/course-resources/${encodeURIComponent(id)}/file${query}`;
+    const headers = {};
+    const token = getToken();
+    if (token) headers.Authorization = `Bearer ${token}`;
+
+    const response = await fetch(url, { headers });
+    if (!response.ok) {
+      const text = await response.text();
+      let message = `Request failed (HTTP ${response.status})`;
+      try {
+        const data = JSON.parse(text);
+        message = data.message || message;
+      } catch {}
+      throw new Error(message);
+    }
+    return response.blob();
+  },
+  async deleteCourseResource(id) {
+    return request(`/course-resources/${id}`, { method: "DELETE" });
   },
 
   // Student Attendance (Phase 5)

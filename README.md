@@ -39,11 +39,13 @@ The production workflow builds `frontend/` and deploys `php_backend/` under `/ap
 | Expenses | `expenses`, `expense_categories` |
 | Students | `students`, `enrollments` |
 | Student Attendance | `student_attendance`, `students`, `enrollments` |
-| Staff Attendance | `staff_attendance`, `portal_users`, `staff_attendance_audit_logs` |
-| Course Content | `courses`, `course_content`, `course_syllabus`, `course_notes` |
+| Staff Attendance | `staff_attendance`, `staff_leave_requests`, `portal_users`, `staff_attendance_audit_logs` |
+| Course Content | `courses`, `course_content`, `course_syllabus`, `course_notes`, `course_resources` |
 | Content Planner | `social_media_planner` |
 | Tasks | `staff_tasks`, `task_notifications` |
 | Batches | `institute_batches`, `portal_users` |
+
+Batch enrollment charts use the saved `institute_batches.student_count` values and refresh with batch data. Staff leave requests are stored in `staff_leave_requests`; approval creates or updates the corresponding `staff_attendance` records and audit entries. Uploaded course materials are stored as MySQL blobs in `course_resources`, limited to 20 MB per file; the PHP host's `upload_max_filesize` and `post_max_size` must also permit uploads of that size.
 
 Course names, batch time-slot labels, and select-menu options are UI constants; they are not presented as saved records. Business records and dashboard metrics are loaded from the API.
 
@@ -141,6 +143,8 @@ The API requires a Bearer token for enquiry, remark, fee, and receipt operations
 - `GET|POST /api/enquiries/:id/remarks`
 - `GET|POST /api/fees`, `DELETE /api/fees/:id`
 - `POST /api/receipts`
+- `GET /api/attendance/leave-requests`, `POST /api/attendance/leave-requests`, `POST /api/attendance/leave-requests/:id/review`
+- `GET /api/course-resources?course_id=:id`, `POST /api/course-resources/upload`, `GET /api/course-resources/:id/file`, `DELETE /api/course-resources/:id`
 - `GET|POST /api/expenses`, `GET|PUT|DELETE /api/expenses/:id`
 - `GET|POST /api/expenses/categories`, `PATCH|DELETE /api/expenses/categories/:id`
 - `GET /api/expenses/:id/receipt`

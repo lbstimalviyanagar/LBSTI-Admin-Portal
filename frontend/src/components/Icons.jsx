@@ -90,6 +90,13 @@ export const ICONS = {
       <path d="M5 21h14" />
     </>
   ),
+  upload: (
+    <>
+      <path d="M12 16V4" />
+      <path d="m7 9 5-5 5 5" />
+      <path d="M5 20h14" />
+    </>
+  ),
   edit: (
     <>
       <path d="M12 20h9" />

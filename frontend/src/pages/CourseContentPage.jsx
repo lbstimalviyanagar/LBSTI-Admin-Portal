@@ -64,6 +64,7 @@ function CourseDataError({ message, onRetry }) {
 }
 
 export default function CourseContentPage({ user, onToast }) {
+  const isAdmin = String(user?.role || '').toLowerCase() === 'admin';
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedCourseId, setSelectedCourseId] = useState(null);
@@ -73,8 +74,14 @@ export default function CourseContentPage({ user, onToast }) {
   const [contentList, setContentList] = useState([]);
   const [syllabusList, setSyllabusList] = useState([]);
   const [notesList, setNotesList] = useState([]);
+  const [courseResources, setCourseResources] = useState([]);
+  const [batchOptions, setBatchOptions] = useState([]);
   const [subLoading, setSubLoading] = useState(false);
   const [resourceLoadErrors, setResourceLoadErrors] = useState({});
+  const [selectedMaterialFile, setSelectedMaterialFile] = useState(null);
+  const [materialTitle, setMaterialTitle] = useState('');
+  const [materialBatchId, setMaterialBatchId] = useState('');
+  const [uploadingMaterial, setUploadingMaterial] = useState(false);
 
   // Search & Filter
   const [searchQuery, setSearchQuery] = useState('');
@@ -124,12 +131,13 @@ export default function CourseContentPage({ user, onToast }) {
       const results = await Promise.allSettled([
         api.getCourseContent(courseId),
         api.getCourseSyllabus(courseId),
-        api.getCourseNotes(courseId)
+        api.getCourseNotes(courseId),
+        api.getCourseResources(courseId)
       ]);
       const errors = {};
-      const [contents, syllabuses, notes] = results.map((result, index) => {
+      const [contents, syllabuses, notes, resources] = results.map((result, index) => {
         if (result.status === 'rejected') {
-          const section = ['modules', 'syllabus', 'notes'][index];
+          const section = ['modules', 'syllabus', 'notes', 'resources'][index];
           errors[section] = result.reason?.message || 'Unable to load course resources.';
           return [];
         }
@@ -138,6 +146,7 @@ export default function CourseContentPage({ user, onToast }) {
       setContentList(contents);
       setSyllabusList(syllabuses);
       setNotesList(notes);
+      setCourseResources(resources);
       setResourceLoadErrors(errors);
       if (Object.keys(errors).length && onToast) {
         onToast('Some course resources could not be loaded. Please retry.', true);
@@ -151,6 +160,18 @@ export default function CourseContentPage({ user, onToast }) {
   }, [onToast]);
 
   useEffect(() => {
+    if (!isAdmin) return undefined;
+    let active = true;
+    api.getBatches().then(batches => {
+      if (active) setBatchOptions(Array.isArray(batches) ? batches : []);
+    }).catch(err => {
+      console.error('Unable to load batch options for course materials:', err);
+      if (active && onToast) onToast(err.message || 'Unable to load batches for material assignment.', true);
+    });
+    return () => { active = false; };
+  }, [isAdmin, onToast]);
+
+  useEffect(() => {
     if (selectedCourseId) {
       loadCourseData(selectedCourseId);
     }
@@ -160,6 +181,80 @@ export default function CourseContentPage({ user, onToast }) {
   const selectedCourse = useMemo(() => {
     return courses.find(c => String(c.id) === String(selectedCourseId)) || null;
   }, [courses, selectedCourseId]);
+
+  const selectedCourseBatches = useMemo(() => batchOptions.filter(batch =>
+    String(batch.course_name || '').trim().toLowerCase() === String(selectedCourse?.name || '').trim().toLowerCase()
+  ), [batchOptions, selectedCourse]);
+
+  const handleUploadMaterial = async (event) => {
+    event.preventDefault();
+    if (!isAdmin) {
+      if (onToast) onToast('Only administrators can upload course materials.', true);
+      return;
+    }
+    if (!selectedCourseId || !selectedMaterialFile) {
+      if (onToast) onToast('Select a file to upload.', true);
+      return;
+    }
+    if (selectedMaterialFile.size > 20 * 1024 * 1024) {
+      if (onToast) onToast('Course materials must not exceed 20 MB.', true);
+      return;
+    }
+    setUploadingMaterial(true);
+    try {
+      await api.uploadCourseResource({
+        courseId: selectedCourseId,
+        batchId: materialBatchId,
+        title: materialTitle,
+        file: selectedMaterialFile
+      });
+      setSelectedMaterialFile(null);
+      setMaterialTitle('');
+      setMaterialBatchId('');
+      event.target.reset();
+      await loadCourseData(selectedCourseId);
+      if (onToast) onToast('Course material uploaded.');
+    } catch (err) {
+      if (onToast) onToast(err.message || 'Failed to upload course material.', true);
+    } finally {
+      setUploadingMaterial(false);
+    }
+  };
+
+  const handleOpenCourseResource = async (resource, download = false) => {
+    const previewWindow = download ? null : window.open('', '_blank');
+    try {
+      const blob = await api.getCourseResourceFile(resource.id, download);
+      const objectUrl = URL.createObjectURL(blob);
+      if (download) {
+        const anchor = document.createElement('a');
+        anchor.href = objectUrl;
+        anchor.download = resource.file_name;
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+      } else if (previewWindow) {
+        previewWindow.location.href = objectUrl;
+      } else {
+        throw new Error('Your browser blocked the preview window. Allow pop-ups and try again.');
+      }
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
+    } catch (err) {
+      if (previewWindow && !previewWindow.closed) previewWindow.close();
+      if (onToast) onToast(err.message || 'Unable to open course material.', true);
+    }
+  };
+
+  const handleDeleteCourseResource = async (resource) => {
+    if (!isAdmin || !window.confirm(`Delete "${resource.file_name}" from this course?`)) return;
+    try {
+      await api.deleteCourseResource(resource.id);
+      await loadCourseData(selectedCourseId);
+      if (onToast) onToast('Course material deleted.');
+    } catch (err) {
+      if (onToast) onToast(err.message || 'Failed to delete course material.', true);
+    }
+  };
 
   // Categories extraction
   const categories = useMemo(() => {
@@ -549,6 +644,15 @@ export default function CourseContentPage({ user, onToast }) {
                 >
                   <span className="ic"><Icon name="check" size={16} /></span>
                   Study Notes & Materials ({notesList.length})
+                </button>
+                <button
+                  className="tab"
+                  role="tab"
+                  aria-selected={activeTab === 'files'}
+                  onClick={() => setActiveTab('files')}
+                >
+                  <span className="ic"><Icon name="download" size={16} /></span>
+                  Uploaded Files ({courseResources.length})
                 </button>
               </div>
             </div>
@@ -1021,9 +1125,115 @@ export default function CourseContentPage({ user, onToast }) {
                           {note.content}
                         </div>
                       )}
+
                     </div>
                     );
                   })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {selectedCourse && activeTab === 'files' && (
+            <div className="card section" style={{ margin: 0, padding: '1.25rem' }}>
+              <div style={{ marginBottom: '1rem' }}>
+                <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 600 }}>Course Materials</h3>
+                <p style={{ margin: '0.2rem 0 0', fontSize: '0.85rem', color: '#64748b' }}>
+                  Upload and manage course files, or assign materials to a batch.
+                </p>
+              </div>
+
+              {isAdmin && (
+                <form onSubmit={handleUploadMaterial} className="card" style={{ padding: '1rem', marginBottom: '1rem', border: '1px solid #dbeafe', background: '#f8fbff' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '0.75rem', alignItems: 'end' }}>
+                    <div>
+                      <label className="label" htmlFor="course-resource-file">File *</label>
+                      <input
+                        id="course-resource-file"
+                        className="input"
+                        type="file"
+                        accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.webp,.txt,.csv,.zip,.mp4"
+                        required
+                        onChange={event => setSelectedMaterialFile(event.target.files?.[0] || null)}
+                      />
+                    </div>
+                    <div>
+                      <label className="label" htmlFor="course-resource-title">Display title (optional)</label>
+                      <input
+                        id="course-resource-title"
+                        className="input"
+                        type="text"
+                        maxLength={255}
+                        value={materialTitle}
+                        onChange={event => setMaterialTitle(event.target.value)}
+                        placeholder="Use the file name"
+                      />
+                    </div>
+                    <div>
+                      <label className="label" htmlFor="course-resource-batch">Assign to batch (optional)</label>
+                      <select
+                        id="course-resource-batch"
+                        className="select"
+                        value={materialBatchId}
+                        onChange={event => setMaterialBatchId(event.target.value)}
+                      >
+                        <option value="">All batches for this course</option>
+                        {selectedCourseBatches.map(batch => (
+                          <option key={batch.id} value={batch.id}>{batch.batch_name || batch.topic || batch.course_name} · {batch.batch_time}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <button className="btn primary" type="submit" disabled={uploadingMaterial || !selectedMaterialFile}>
+                      <span className="ic"><Icon name="upload" size={15} /></span>
+                      {uploadingMaterial ? 'Uploading...' : 'Upload File'}
+                    </button>
+                  </div>
+                  <div style={{ color: '#64748b', fontSize: '0.78rem', marginTop: '0.55rem' }}>
+                    PDF, DOC/DOCX, PPT/PPTX, XLS/XLSX, images, TXT, CSV, ZIP, or MP4 · Maximum 20 MB
+                  </div>
+                </form>
+              )}
+
+              {resourceLoadErrors.resources ? (
+                <CourseDataError message={resourceLoadErrors.resources} onRetry={() => loadCourseData(selectedCourseId)} />
+              ) : subLoading ? (
+                <div style={{ padding: '1.5rem', textAlign: 'center', color: '#64748b' }}>Loading course materials...</div>
+              ) : courseResources.length === 0 ? (
+                <div style={{ padding: '2rem', textAlign: 'center', border: '1.5px dashed #cbd5e1', borderRadius: '8px', color: '#64748b' }}>
+                  No uploaded files for {selectedCourse.name}.
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                  {courseResources.map(resource => (
+                    <div key={resource.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap', padding: '0.85rem 1rem', border: '1px solid #e2e8f0', borderRadius: '8px', background: '#fff' }}>
+                      <div style={{ minWidth: 0, flex: '1 1 260px' }}>
+                        <b style={{ display: 'block', color: '#0f172a', overflowWrap: 'anywhere' }}>{resource.title || resource.file_name}</b>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem 0.6rem', marginTop: '0.25rem', color: '#64748b', fontSize: '0.78rem' }}>
+                          <span>{resource.file_name}</span>
+                          <span>{String(resource.file_type || '').split('/').pop().toUpperCase()}</span>
+                          <span>{formatResourceFileSize(resource.file_size)}</span>
+                          {resource.batch_id && <span>Batch: {resource.batch_name || resource.batch_course_name || `#${resource.batch_id}`}</span>}
+                          <span>Uploaded {resource.created_at ? fmtDay(resource.created_at) : 'date unavailable'}</span>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: '0.4rem' }}>
+                        <button className="btn" type="button" onClick={() => handleOpenCourseResource(resource)} title="View course material">
+                          <span className="ic"><Icon name="eye" size={14} /></span>
+                          View
+                        </button>
+                        <button className="btn primary" type="button" onClick={() => handleOpenCourseResource(resource, true)} title="Download course material">
+                          <span className="ic"><Icon name="download" size={14} /></span>
+                          Download
+                        </button>
+                        {isAdmin && (
+                          <button className="btn" type="button" onClick={() => handleDeleteCourseResource(resource)} title="Delete course material" style={{ color: '#b91c1c' }}>
+                            <span className="ic"><Icon name="trash" size={14} /></span>
+                            Delete
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>

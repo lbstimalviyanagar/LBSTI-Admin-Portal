@@ -280,6 +280,12 @@ if ($route === 'auth/login') {
         getAttendanceFilterOptions($pdo, $user);
     } elseif ($method === "GET" && $action === "audit-logs") {
         getAttendanceAuditLogs($pdo, $user, $subAction);
+    } elseif ($action === "leave-requests" && $method === "GET") {
+        getStaffLeaveRequests($pdo, $user);
+    } elseif ($action === "leave-requests" && $method === "POST" && $subAction === null) {
+        submitStaffLeaveRequest($pdo, $user, is_array($body) ? $body : []);
+    } elseif ($action === "leave-requests" && $method === "POST" && is_numeric($subAction) && ($parts[3] ?? null) === "review") {
+        reviewStaffLeaveRequest($pdo, $user, $subAction, is_array($body) ? $body : []);
     } elseif ($method === "GET") {
         getAttendance($pdo, $user);
     } elseif ($method === "POST" && $action === "clock-in") {
@@ -332,6 +338,20 @@ if ($route === 'auth/login') {
     elseif ($method === "POST") createCourse($pdo, $body, $user);
     elseif ($method === "PUT" || $method === "PATCH") updateCourse($pdo, $id, $body);
     elseif ($method === "DELETE") deleteCourse($pdo, $id);
+} elseif (strpos($route, "course-resources") === 0) {
+    require "controllers/CourseContentController.php";
+    $user = requireAuth($authSecret);
+    requireMenuPermission($user, 'course_content', $pdo);
+    $parts = array_values(array_filter(explode("/", trim($route, "/")), 'strlen'));
+    $resourceId = isset($parts[1]) && is_numeric($parts[1]) ? (int)$parts[1] : null;
+    if ($method === "GET" && !$resourceId) getCourseResources($pdo);
+    elseif ($method === "POST" && ($parts[1] ?? null) === "upload") uploadCourseResource($pdo, $user);
+    elseif ($method === "GET" && $resourceId && ($parts[2] ?? null) === "file") getCourseResourceFile($pdo, $resourceId);
+    elseif ($method === "DELETE" && $resourceId) deleteCourseResource($pdo, $user, $resourceId);
+    else {
+        http_response_code(404);
+        echo json_encode(["message" => "Course material endpoint not found."]);
+    }
 } elseif (strpos($route, "course-content") === 0) {
     require "controllers/CourseContentController.php";
     $user = requireAuth($authSecret);
