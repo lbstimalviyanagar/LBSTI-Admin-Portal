@@ -90,6 +90,8 @@ export default function CourseContentPage({ user, onToast }) {
   // Modals state
   const [showCourseModal, setShowCourseModal] = useState(false);
   const [courseFormData, setCourseFormData] = useState({ id: null, name: '', code: '', category: 'General', duration: '3 Months', description: '', is_active: 1 });
+  const [courseUploadFile, setCourseUploadFile] = useState(null);
+  const [savingCourse, setSavingCourse] = useState(false);
 
   const [showModuleModal, setShowModuleModal] = useState(false);
   const [moduleFormData, setModuleFormData] = useState({ id: null, module_no: 1, title: '', topic: '', content: '', order_index: 1 });
@@ -287,19 +289,45 @@ export default function CourseContentPage({ user, onToast }) {
       if (onToast) onToast('Course name is required', true);
       return;
     }
+    if (courseUploadFile && courseUploadFile.size > 20 * 1024 * 1024) {
+      if (onToast) onToast('Course materials must not exceed 20 MB.', true);
+      return;
+    }
+    setSavingCourse(true);
+    let savedCourse = null;
     try {
       if (courseFormData.id) {
-        await api.updateCourse(courseFormData.id, courseFormData);
-        if (onToast) onToast('Course updated successfully');
+        savedCourse = await api.updateCourse(courseFormData.id, courseFormData);
       } else {
-        const created = await api.createCourse(courseFormData);
-        if (onToast) onToast('Course added successfully');
-        if (created?.id) setSelectedCourseId(created.id);
+        savedCourse = await api.createCourse(courseFormData);
       }
+
+      if (savedCourse?.id) {
+        setSelectedCourseId(savedCourse.id);
+        if (courseUploadFile) {
+          await api.uploadCourseResource({
+            courseId: savedCourse.id,
+            file: courseUploadFile
+          });
+        }
+      }
+
+      setCourseUploadFile(null);
       setShowCourseModal(false);
       await loadCourses();
+      if (savedCourse?.id) await loadCourseData(savedCourse.id);
+      if (onToast) onToast(courseUploadFile ? 'Course and material saved successfully' : 'Course saved successfully');
     } catch (err) {
-      if (onToast) onToast(err.message || 'Failed to save course', true);
+      if (savedCourse?.id && courseUploadFile) {
+        setCourseFormData(current => ({ ...current, id: savedCourse.id }));
+        setSelectedCourseId(savedCourse.id);
+        await loadCourses();
+        if (onToast) onToast(`Course saved, but material upload failed: ${err.message || 'Please retry the upload.'}`, true);
+      } else if (onToast) {
+        onToast(err.message || 'Failed to save course', true);
+      }
+    } finally {
+      setSavingCourse(false);
     }
   };
 
@@ -459,6 +487,7 @@ export default function CourseContentPage({ user, onToast }) {
             type="button"
             onClick={() => {
               setCourseFormData({ id: null, name: '', code: '', category: 'IT & Software', duration: '3 Months', description: '', is_active: 1 });
+              setCourseUploadFile(null);
               setShowCourseModal(true);
             }}
           >
@@ -597,6 +626,7 @@ export default function CourseContentPage({ user, onToast }) {
                     style={{ fontSize: '0.85rem', padding: '0.4rem 0.75rem' }}
                     onClick={() => {
                       setCourseFormData({ ...selectedCourse });
+                      setCourseUploadFile(null);
                       setShowCourseModal(true);
                     }}
                   >
@@ -1243,11 +1273,16 @@ export default function CourseContentPage({ user, onToast }) {
 
       {/* Modal: Add/Edit Course */}
       {showCourseModal && (
-        <div className="modal-backdrop" onClick={() => setShowCourseModal(false)}>
+        <div className="modal-backdrop" onClick={(event) => {
+          if (event.target === event.currentTarget && !savingCourse) {
+            setCourseUploadFile(null);
+            setShowCourseModal(false);
+          }
+        }}>
           <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '520px' }}>
             <div className="modal-head">
               <h3>{courseFormData.id ? 'Edit Course' : 'Add New Course'}</h3>
-              <button className="btn close-btn" onClick={() => setShowCourseModal(false)}>×</button>
+              <button className="btn close-btn" type="button" onClick={() => { setCourseUploadFile(null); setShowCourseModal(false); }} disabled={savingCourse}>×</button>
             </div>
             <form onSubmit={handleSaveCourse}>
               <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
@@ -1310,10 +1345,25 @@ export default function CourseContentPage({ user, onToast }) {
                     placeholder="Brief description of the course, target audience, and key skills taught."
                   />
                 </div>
+                {isAdmin && (
+                  <div>
+                    <label className="label" htmlFor="new-course-material">Upload course material (optional)</label>
+                    <input
+                      id="new-course-material"
+                      type="file"
+                      className="input"
+                      accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.webp,.txt,.csv,.zip,.mp4"
+                      onChange={(event) => setCourseUploadFile(event.target.files?.[0] || null)}
+                    />
+                    <small style={{ color: '#64748b', fontSize: '0.78rem', display: 'block', marginTop: '0.25rem' }}>
+                      PDF, Office documents, images, TXT, CSV, ZIP, or MP4 · Maximum 20 MB
+                    </small>
+                  </div>
+                )}
               </div>
               <div className="modal-footer">
-                <button type="button" className="btn" onClick={() => setShowCourseModal(false)}>Cancel</button>
-                <button type="submit" className="btn primary">Save Course</button>
+                <button type="button" className="btn" onClick={() => { setCourseUploadFile(null); setShowCourseModal(false); }} disabled={savingCourse}>Cancel</button>
+                <button type="submit" className="btn primary" disabled={savingCourse}>{savingCourse ? 'Saving...' : 'Save Course'}</button>
               </div>
             </form>
           </div>

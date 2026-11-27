@@ -657,30 +657,32 @@ export default function BatchesPage({ user, users = [], enrollments = [], enquir
                 </div>
               ))}
             </div>
-            <div aria-label="Students per batch bar chart" role="img" style={{ width: '100%', height: 300 }}>
-              <ResponsiveContainer>
-                <BarChart data={batchEnrollmentStats.data} margin={{ top: 8, right: 12, left: 0, bottom: 56 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis
-                    dataKey="batch"
-                    interval={0}
-                    angle={-30}
-                    textAnchor="end"
-                    height={70}
-                    tick={{ fontSize: 11 }}
-                    tickFormatter={value => String(value).length > 18 ? `${String(value).slice(0, 17)}…` : value}
-                  />
-                  <YAxis allowDecimals={false} width={36} />
-                  <Tooltip
-                    formatter={(value, _name, item) => [value, 'Students']}
-                    labelFormatter={(label, items) => {
-                      const course = items?.[0]?.payload?.course;
-                      return course ? `${label} · ${course}` : label;
-                    }}
-                  />
-                  <Bar dataKey="students" name="Students" fill="#2563eb" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+            <div aria-label="Students per batch bar chart" role="img" style={{ width: '100%', overflowX: 'auto', overflowY: 'hidden' }}>
+              <div style={{ width: `max(100%, ${batchEnrollmentStats.data.length * 120}px)`, height: 380 }}>
+                <ResponsiveContainer>
+                  <BarChart data={batchEnrollmentStats.data} margin={{ top: 12, right: 20, left: 4, bottom: 76 }} barCategoryGap="24%">
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis
+                      dataKey="batch"
+                      interval={0}
+                      angle={-25}
+                      textAnchor="end"
+                      height={90}
+                      tick={{ fontSize: 12 }}
+                      tickFormatter={value => String(value).length > 18 ? `${String(value).slice(0, 17)}…` : value}
+                    />
+                    <YAxis allowDecimals={false} width={44} />
+                    <Tooltip
+                      formatter={(value, _name, item) => [value, 'Students']}
+                      labelFormatter={(label, items) => {
+                        const course = items?.[0]?.payload?.course;
+                        return course ? `${label} · ${course}` : label;
+                      }}
+                    />
+                    <Bar dataKey="students" name="Students" fill="#2563eb" radius={[4, 4, 0, 0]} maxBarSize={56} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             </div>
           </>
         )}

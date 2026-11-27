@@ -433,9 +433,12 @@ function submitStaffLeaveRequest($pdo, $user, $body) {
     ensureStaffAttendanceTables($pdo);
     try {
         $isAdmin = strtolower($user['role'] ?? '') === 'admin';
-        $staffId = $isAdmin && !empty($body['staff_id'])
-            ? (int)$body['staff_id']
-            : (int)($user['sub'] ?? 0);
+        if ($isAdmin) {
+            http_response_code(403);
+            echo json_encode(["message" => "Administrators cannot submit staff leave requests."]);
+            return;
+        }
+        $staffId = (int)($user['sub'] ?? 0);
         $startDate = trim($body['start_date'] ?? '');
         $endDate = trim($body['end_date'] ?? '');
         $leaveType = trim($body['leave_type'] ?? '');

@@ -147,7 +147,6 @@ export default function AttendancePage({ user, users = [], onToast }) {
   const [loadingLeaveRequests, setLoadingLeaveRequests] = useState(true);
   const [reviewingLeaveId, setReviewingLeaveId] = useState(null);
   const [leaveForm, setLeaveForm] = useState({
-    staff_id: '',
     leave_type: 'Sick',
     start_date: getTodayIST(),
     end_date: getTodayIST(),
@@ -500,12 +499,8 @@ export default function AttendancePage({ user, users = [], onToast }) {
   };
 
   const handleOpenLeave = () => {
-    const currentStaffId = String(user?.id || user?.sub || '');
-    const defaultStaff = isAdmin
-      ? (staffOptions[0]?.id || '')
-      : (staffOptions.find(s => s.id === currentStaffId)?.id || currentStaffId);
+    if (isAdmin) return;
     setLeaveForm({
-      staff_id: defaultStaff,
       leave_type: 'Sick',
       start_date: getTodayIST(),
       end_date: getTodayIST(),
@@ -516,7 +511,11 @@ export default function AttendancePage({ user, users = [], onToast }) {
 
   const handleSubmitLeave = async (e) => {
     e.preventDefault();
-    if ((isAdmin && !leaveForm.staff_id) || !leaveForm.start_date || !leaveForm.end_date || leaveForm.end_date < leaveForm.start_date || !leaveForm.leave_type || !leaveForm.reason.trim()) {
+    if (isAdmin) {
+      onToast('Only staff members can submit leave requests.', true);
+      return;
+    }
+    if (!leaveForm.start_date || !leaveForm.end_date || leaveForm.end_date < leaveForm.start_date || !leaveForm.leave_type || !leaveForm.reason.trim()) {
       onToast('Please complete all leave details.', true);
       return;
     }
@@ -524,7 +523,6 @@ export default function AttendancePage({ user, users = [], onToast }) {
     setSavingLeave(true);
     try {
       await api.submitLeaveRequest({
-        ...(isAdmin ? { staff_id: leaveForm.staff_id } : {}),
         leave_type: leaveForm.leave_type,
         start_date: leaveForm.start_date,
         end_date: leaveForm.end_date,
@@ -827,16 +825,18 @@ export default function AttendancePage({ user, users = [], onToast }) {
             <span className="ic"><Icon name="clock" size={16} /></span>
             {clockingOut ? 'Clocking Out...' : 'Clock Out'}
           </button>
-          <button
-            className="btn"
-            type="button"
-            onClick={handleOpenLeave}
-            style={{ color: '#6d28d9', borderColor: '#c4b5fd' }}
-            title="Submit a staff leave request for approval"
-          >
-            <span className="ic"><Icon name="calendar" size={16} /></span>
-            Request Leave
-          </button>
+          {!isAdmin && (
+            <button
+              className="btn"
+              type="button"
+              onClick={handleOpenLeave}
+              style={{ color: '#6d28d9', borderColor: '#c4b5fd' }}
+              title="Submit a leave request for approval"
+            >
+              <span className="ic"><Icon name="calendar" size={16} /></span>
+              Request Leave
+            </button>
+          )}
         </div>
       </div>
 
@@ -1447,7 +1447,7 @@ export default function AttendancePage({ user, users = [], onToast }) {
         </div>
       )}
 
-      {showLeaveModal && (
+      {showLeaveModal && !isAdmin && (
         <div
           className="modal-backdrop"
           style={{
@@ -1491,24 +1491,6 @@ export default function AttendancePage({ user, users = [], onToast }) {
             </div>
             <form onSubmit={handleSubmitLeave}>
               <div className="modal-body" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                {isAdmin && <div>
-                  <label className="label" style={{ fontWeight: 600, fontSize: '0.85rem', display: 'block', marginBottom: '4px' }}>
-                    Staff Member *
-                  </label>
-                  <select
-                    className="select"
-                    value={leaveForm.staff_id}
-                    onChange={(e) => setLeaveForm({ ...leaveForm, staff_id: e.target.value })}
-                    required
-                    disabled={!isAdmin}
-                    style={{ width: '100%' }}
-                  >
-                    <option value="" disabled>-- Select Staff Member --</option>
-                    {staffOptions.map(s => (
-                      <option key={s.id} value={s.id}>{s.name}</option>
-                    ))}
-                  </select>
-                </div>}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <div>
                     <label className="label" style={{ fontWeight: 600, fontSize: '0.85rem', display: 'block', marginBottom: '4px' }}>
